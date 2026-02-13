@@ -169,6 +169,10 @@ def init_session_state():
         st.session_state.status_messages = []
     if "running" not in st.session_state:
         st.session_state.running = False
+    if "analysis_state" not in st.session_state:
+        st.session_state.analysis_state = "initial"  # initial, ranking, complete
+    if "current_config" not in st.session_state:
+        st.session_state.current_config = None
 
 
 def add_status(message: str):
@@ -332,6 +336,14 @@ def render_issue_ranking(results: dict):
             st.markdown("#### Why This Issue?")
             for reason in issue.why:
                 st.markdown(f"- {reason}")
+            
+            # Analysis button (only show if valid phase)
+            if st.session_state.get("analysis_state") == "ranking":
+                st.markdown("---")
+                if st.button(f"🔍 Analyze Issue #{issue.number}", key=f"analyze_{issue.number}", use_container_width=True):
+                    st.session_state.selected_issue_number = issue.number
+                    st.session_state.trigger_deep_dive = True
+                    st.rerun()
 
 
 def render_code_locator(results: dict):
@@ -489,10 +501,11 @@ Title: {pr.pr_title}
             st.warning(note)
 
 
-def run_analysis(config: dict):
-    """Run the analysis pipeline."""
+def run_discovery(config: dict):
+    """Run phase 1: Issue ranking."""
     st.session_state.status_messages = []
     st.session_state.running = True
+    st.session_state.current_config = config
     
     status_container = st.empty()
     
@@ -518,19 +531,105 @@ def run_analysis(config: dict):
         
         orchestrator.set_status_callback(update_status)
         
-        # Run the pipeline
-        results = orchestrator.run(
+        # Run Phase 1
+        results = orchestrator.run_phase1(
             repo_url=config["repo_url"],
             beginner_only=config["beginner_only"]
         )
         
         st.session_state.results = results
         
+        if results.get("success"):
+            st.session_state.analysis_state = "ranking"
+        
     except Exception as e:
         st.session_state.results = {
             "success": False,
             "error": str(e)
         }
+    
+    finally:
+        st.session_state.running = False
+
+
+def run_deep_dive():
+    """Run phase 2 & 3: Deep dive on selected issue."""
+    if not st.session_state.results or not st.session_state.get("selected_issue_number"):
+        return
+        
+    st.session_state.running = True
+    config = st.session_state.current_config
+    status_container = st.empty()
+    
+    try:
+        groq_client = GroqClient()
+        github_client = GitHubClient()
+        cache_manager = CacheManager()
+        
+        orchestrator = ScoutOrchestrator(
+            github_client=github_client,
+            groq_client=groq_client,
+            cache_manager=cache_manager,
+            fast_model=config["fast_model"],
+            powerful_model=config["powerful_model"]
+        )
+        
+        # Status callback
+        def update_status(msg):
+            st.session_state.status_messages.append(msg)
+            with status_container:
+                for m in st.session_state.status_messages[-5:]:
+                    st.info(m)
+        
+        orchestrator.set_status_callback(update_status)
+        
+        # Get necessary data from session state
+        repo = st.session_state.results["repo"]
+        issues = st.session_state.results["issues"]
+        agent1_output = st.session_state.results["agent1_output"]
+        target_issue_number = st.session_state.selected_issue_number
+        
+        # Find the full issue object
+        target_issue = next((i for i in issues if i.number == target_issue_number), None)
+        
+        if not target_issue:
+            raise ValueError(f"Issue #{target_issue_number} not found in results")
+            
+        update_status(f"🚀 Starting deep dive for Issue #{target_issue.number}...")
+        
+        # Run Phase 2
+        p2_results = orchestrator.run_phase2(
+            repo_url=config["repo_url"],
+            issue=target_issue
+        )
+        
+        if not p2_results["success"]:
+            raise Exception(p2_results.get("error"))
+            
+        # Run Phase 3
+        p3_results = orchestrator.run_phase3(
+            repo=repo,
+            issue=target_issue,
+            agent1_output=agent1_output,
+            agent2_output=p2_results["agent2_output"]
+        )
+        
+        if not p3_results["success"]:
+            raise Exception(p3_results.get("error"))
+            
+        # Update results with deep dive data
+        st.session_state.results.update({
+            "agent2_output": p2_results["agent2_output"],
+            "agent3_output": p3_results["agent3_output"],
+            "repo_path": p2_results.get("repo_path") # Optional if needed
+        })
+        
+        st.session_state.analysis_state = "complete"
+        update_status("✅ Deep dive complete!")
+        
+    except Exception as e:
+        st.error(f"Deep dive failed: {e}")
+        # Keep partial results but show error
     
     finally:
         st.session_state.running = False
@@ -545,7 +644,16 @@ def main():
     action = render_sidebar()
     
     if action and action["action"] == "generate":
-        run_analysis(action)
+        # Reset state for new analysis
+        st.session_state.analysis_state = "initial"
+        st.session_state.results = None
+        run_discovery(action)
+        st.rerun()
+    
+    if st.session_state.get("trigger_deep_dive"):
+        st.session_state.trigger_deep_dive = False
+        run_deep_dive()
+        st.rerun()
     
     # Main content area
     if st.session_state.results:
