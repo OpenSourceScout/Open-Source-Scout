@@ -3,6 +3,7 @@ GitHub API Client - Fetches issues, repo metadata, and clones repositories.
 """
 import os
 import re
+import base64
 import hashlib
 from typing import List, Optional, Tuple
 from pathlib import Path
@@ -261,7 +262,42 @@ class GitHubClient:
             raise RuntimeError(f"Failed to clone repository: {e}")
         
         return repo_dir
-    
+
+    def get_file_content(
+        self,
+        owner: str,
+        repo: str,
+        path: str,
+        ref: str = "main"
+    ) -> str:
+        """
+        Fetch raw file content from a repository via the GitHub Contents API.
+
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            path: File path relative to repo root
+            ref: Branch, tag, or commit SHA (default: main)
+
+        Returns:
+            Decoded file content as string
+
+        Raises:
+            requests.HTTPError: On API errors (e.g. 404)
+            ValueError: If the path is not a file (e.g. directory)
+        """
+        url = f"{self.BASE_URL}/repos/{owner}/{repo}/contents/{path}"
+        resp = self.session.get(url, params={"ref": ref})
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("type") != "file":
+            raise ValueError(f"Expected file, got {data.get('type')}")
+        content = data.get("content", "")
+        encoding = data.get("encoding")
+        if encoding == "base64":
+            return base64.b64decode(content).decode("utf-8", errors="replace")
+        return content
+
     def get_file_tree(self, repo_path: Path, max_depth: int = 5) -> List[str]:
         """
         Get list of files in repository (excluding common non-code directories).
@@ -308,6 +344,6 @@ class GitHubClient:
                         walk_dir(item, depth + 1)
             except PermissionError:
                 pass
-        
+
         walk_dir(repo_path)
         return files
