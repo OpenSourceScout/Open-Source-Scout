@@ -361,7 +361,13 @@ def render_code_locator(results: dict):
     
     st.markdown("---")
     st.markdown("### 📁 Relevant Files")
-    
+
+    repo = results.get("repo")
+    if "code_locator_full_path" not in st.session_state:
+        st.session_state["code_locator_full_path"] = None
+    if "code_locator_full_content" not in st.session_state:
+        st.session_state["code_locator_full_content"] = None
+
     for i, hit in enumerate(agent2.hits, 1):
         with st.expander(f"{i}. `{hit.path}`", expanded=(i <= 3)):
             if hit.symbols:
@@ -372,6 +378,30 @@ def render_code_locator(results: dict):
             if hit.snippet:
                 st.markdown("**Code Snippet:**")
                 st.code(hit.snippet[:1500], language="python")
+
+            if repo:
+                if st.button("Load full file", key=f"load_full_file_{i}_{hit.path.replace('/', '_')}"):
+                    owner, repo_name = repo.full_name.split("/", 1)
+                    try:
+                        client = GitHubClient()
+                        content = client.get_file_content(
+                            owner, repo_name, hit.path, ref=repo.default_branch
+                        )
+                        st.session_state["code_locator_full_path"] = hit.path
+                        st.session_state["code_locator_full_content"] = content
+                    except Exception as e:
+                        st.error(f"Failed to load file: {e}")
+
+            if (
+                st.session_state.get("code_locator_full_path") == hit.path
+                and st.session_state.get("code_locator_full_content") is not None
+            ):
+                st.markdown("**Full file:**")
+                st.code(
+                    st.session_state["code_locator_full_content"],
+                    language="python",
+                    line_numbers=True,
+                )
     
     # Additional files
     if agent2.next_files_to_check:
