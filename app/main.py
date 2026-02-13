@@ -363,10 +363,17 @@ def render_code_locator(results: dict):
     st.markdown("### 📁 Relevant Files")
 
     repo = results.get("repo")
-    if "code_locator_full_path" not in st.session_state:
-        st.session_state["code_locator_full_path"] = None
-    if "code_locator_full_content" not in st.session_state:
-        st.session_state["code_locator_full_content"] = None
+
+    # Editor session state (persists across reruns)
+    for key, default in [
+        ("code_locator_editor_content", ""),
+        ("code_locator_editor_file_path", None),
+        ("code_locator_editor_repo_owner", None),
+        ("code_locator_editor_repo_name", None),
+        ("code_locator_editor_ref", None),
+    ]:
+        if key not in st.session_state:
+            st.session_state[key] = default
 
     for i, hit in enumerate(agent2.hits, 1):
         with st.expander(f"{i}. `{hit.path}`", expanded=(i <= 3)):
@@ -387,21 +394,41 @@ def render_code_locator(results: dict):
                         content = client.get_file_content(
                             owner, repo_name, hit.path, ref=repo.default_branch
                         )
-                        st.session_state["code_locator_full_path"] = hit.path
-                        st.session_state["code_locator_full_content"] = content
+                        st.session_state["code_locator_editor_content"] = content
+                        st.session_state["code_locator_editor_file_path"] = hit.path
+                        st.session_state["code_locator_editor_repo_owner"] = owner
+                        st.session_state["code_locator_editor_repo_name"] = repo_name
+                        st.session_state["code_locator_editor_ref"] = repo.default_branch
+                        st.session_state["code_locator_editor_ta"] = content
                     except Exception as e:
                         st.error(f"Failed to load file: {e}")
 
-            if (
-                st.session_state.get("code_locator_full_path") == hit.path
-                and st.session_state.get("code_locator_full_content") is not None
-            ):
-                st.markdown("**Full file:**")
-                st.code(
-                    st.session_state["code_locator_full_content"],
-                    language="python",
-                    line_numbers=True,
-                )
+    # Editor section: show when a file is loaded
+    if st.session_state.get("code_locator_editor_file_path"):
+        st.markdown("---")
+        st.markdown(f"### ✏️ Editing: `{st.session_state['code_locator_editor_file_path']}`")
+        editor_key = "code_locator_editor_ta"
+        if editor_key not in st.session_state:
+            st.session_state[editor_key] = st.session_state.get("code_locator_editor_content", "")
+        new_val = st.text_area(
+            "Edit file",
+            value=st.session_state.get(editor_key, ""),
+            height=400,
+            key=editor_key,
+        )
+        st.session_state["code_locator_editor_content"] = new_val
+        if st.button("Clear editor"):
+            for key in [
+                "code_locator_editor_content",
+                "code_locator_editor_file_path",
+                "code_locator_editor_repo_owner",
+                "code_locator_editor_repo_name",
+                "code_locator_editor_ref",
+                "code_locator_editor_ta",
+            ]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
     
     # Additional files
     if agent2.next_files_to_check:
