@@ -417,18 +417,84 @@ def render_code_locator(results: dict):
             key=editor_key,
         )
         st.session_state["code_locator_editor_content"] = new_val
-        if st.button("Clear editor"):
-            for key in [
-                "code_locator_editor_content",
-                "code_locator_editor_file_path",
-                "code_locator_editor_repo_owner",
-                "code_locator_editor_repo_name",
-                "code_locator_editor_ref",
-                "code_locator_editor_ta",
-            ]:
-                if key in st.session_state:
-                    del st.session_state[key]
-            st.rerun()
+
+        # --- Save and push / Clear buttons ---
+        # Derive branch name & commit message from the briefing if available
+        agent3 = results.get("agent3_output")
+        if agent3 and agent3.pr_draft:
+            default_branch_name = agent3.pr_draft.branch_name
+            default_commit_msg = agent3.pr_draft.commit_message
+        else:
+            issue_num = results.get("agent2_output", None)
+            issue_num = getattr(issue_num, "issue_number", "edit") if issue_num else "edit"
+            default_branch_name = f"scout-edit-{issue_num}"
+            default_commit_msg = "Update file via Open Source Scout"
+
+        col_save, col_clear = st.columns(2)
+
+        with col_save:
+            if st.button("💾 Save and push", type="primary"):
+                owner = st.session_state["code_locator_editor_repo_owner"]
+                repo_name = st.session_state["code_locator_editor_repo_name"]
+                file_path = st.session_state["code_locator_editor_file_path"]
+                content = st.session_state["code_locator_editor_content"]
+                base_ref = st.session_state["code_locator_editor_ref"]
+                try:
+                    client = GitHubClient()
+                    with st.spinner("Forking (if needed) and pushing..."):
+                        result = client.push_file_content(
+                            owner=owner,
+                            repo=repo_name,
+                            branch_name=default_branch_name,
+                            file_path=file_path,
+                            content=content,
+                            commit_message=default_commit_msg,
+                            base_branch=base_ref,
+                        )
+                    forked = result["fork_owner"] != result["upstream_owner"]
+                    target_label = (
+                        f"{result['fork_owner']}/{result['fork_repo']}"
+                        if forked
+                        else f"{result['upstream_owner']}/{result['upstream_repo']}"
+                    )
+                    st.success(
+                        f"Pushed to "
+                        f"[`{target_label}:{result['branch']}`]"
+                        f"({result['branch_url']}) "
+                        f"(commit `{result['commit_sha'][:8]}`)"
+                    )
+                    if forked:
+                        st.info(
+                            f"The repo was forked to **{result['fork_owner']}/{result['fork_repo']}**. "
+                            f"[Open a Pull Request]({result['pr_url']})"
+                        )
+                    # Clear editor state after successful push
+                    for key in [
+                        "code_locator_editor_content",
+                        "code_locator_editor_file_path",
+                        "code_locator_editor_repo_owner",
+                        "code_locator_editor_repo_name",
+                        "code_locator_editor_ref",
+                        "code_locator_editor_ta",
+                    ]:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                except Exception as e:
+                    st.error(f"Push failed: {e}")
+
+        with col_clear:
+            if st.button("🗑️ Clear editor"):
+                for key in [
+                    "code_locator_editor_content",
+                    "code_locator_editor_file_path",
+                    "code_locator_editor_repo_owner",
+                    "code_locator_editor_repo_name",
+                    "code_locator_editor_ref",
+                    "code_locator_editor_ta",
+                ]:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
     
     # Additional files
     if agent2.next_files_to_check:

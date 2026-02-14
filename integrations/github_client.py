@@ -3,9 +3,10 @@ GitHub API Client - Fetches issues, repo metadata, and clones repositories.
 """
 import os
 import re
+import time
 import base64
 import hashlib
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 import requests
 from git import Repo as GitRepo
@@ -297,6 +298,285 @@ class GitHubClient:
         if encoding == "base64":
             return base64.b64decode(content).decode("utf-8", errors="replace")
         return content
+
+    # ==================== Git Data API (no-clone push) ====================
+
+    def _get_ref_sha(self, owner: str, repo: str, branch: str) -> str:
+        """
+        Get the latest commit SHA for a branch.
+
+        GET /repos/{owner}/{repo}/git/ref/heads/{branch}
+
+        Returns:
+            Commit SHA string.
+        """
+        resp = self.session.get(
+            f"{self.BASE_URL}/repos/{owner}/{repo}/git/ref/heads/{branch}"
+        )
+        resp.raise_for_status()
+        return resp.json()["object"]["sha"]
+
+    def create_blob(self, owner: str, repo: str, content: str) -> str:
+        """
+        Create a blob with base64-encoded file content.
+
+        POST /repos/{owner}/{repo}/git/blobs
+
+        Returns:
+            SHA of the created blob.
+        """
+        encoded = base64.b64encode(content.encode("utf-8")).decode("ascii")
+        resp = self.session.post(
+            f"{self.BASE_URL}/repos/{owner}/{repo}/git/blobs",
+            json={"content": encoded, "encoding": "base64"},
+        )
+        resp.raise_for_status()
+        return resp.json()["sha"]
+
+    def _get_commit_tree_sha(self, owner: str, repo: str, commit_sha: str) -> str:
+        """
+        Get the tree SHA that belongs to a commit.
+
+        GET /repos/{owner}/{repo}/git/commits/{commit_sha}
+
+        Returns:
+            Tree SHA string.
+        """
+        resp = self.session.get(
+            f"{self.BASE_URL}/repos/{owner}/{repo}/git/commits/{commit_sha}"
+        )
+        resp.raise_for_status()
+        return resp.json()["tree"]["sha"]
+
+    def create_tree(
+        self,
+        owner: str,
+        repo: str,
+        base_tree_sha: str,
+        file_path: str,
+        blob_sha: str,
+    ) -> str:
+        """
+        Create a new tree that replaces one file with a new blob.
+
+        POST /repos/{owner}/{repo}/git/trees
+
+        Returns:
+            SHA of the new tree.
+        """
+        resp = self.session.post(
+            f"{self.BASE_URL}/repos/{owner}/{repo}/git/trees",
+            json={
+                "base_tree": base_tree_sha,
+                "tree": [
+                    {
+                        "path": file_path,
+                        "mode": "100644",
+                        "type": "blob",
+                        "sha": blob_sha,
+                    }
+                ],
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["sha"]
+
+    def create_commit(
+        self,
+        owner: str,
+        repo: str,
+        tree_sha: str,
+        parent_sha: str,
+        message: str,
+    ) -> str:
+        """
+        Create a commit pointing at the given tree.
+
+        POST /repos/{owner}/{repo}/git/commits
+
+        Returns:
+            SHA of the new commit.
+        """
+        resp = self.session.post(
+            f"{self.BASE_URL}/repos/{owner}/{repo}/git/commits",
+            json={
+                "tree": tree_sha,
+                "parents": [parent_sha],
+                "message": message,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["sha"]
+
+    def create_or_update_ref(
+        self, owner: str, repo: str, branch_name: str, commit_sha: str
+    ) -> str:
+        """
+        Create a new branch ref, or force-update it if it already exists.
+
+        Returns:
+            The ref string (e.g. refs/heads/branch-name).
+        """
+        ref = f"refs/heads/{branch_name}"
+
+        # Try to create the ref first
+        resp = self.session.post(
+            f"{self.BASE_URL}/repos/{owner}/{repo}/git/refs",
+            json={"ref": ref, "sha": commit_sha},
+        )
+        if resp.status_code == 422:
+            # Branch already exists — update it
+            resp = self.session.patch(
+                f"{self.BASE_URL}/repos/{owner}/{repo}/git/refs/heads/{branch_name}",
+                json={"sha": commit_sha, "force": True},
+            )
+        resp.raise_for_status()
+        return ref
+
+    def fork_repo(
+        self,
+        owner: str,
+        repo: str,
+        poll_timeout: int = 30,
+    ) -> Dict[str, str]:
+        """
+        Fork a repository into the authenticated user's account.
+
+        If the fork already exists the GitHub API simply returns it.
+        After the initial POST the fork may not be ready yet (202 Accepted),
+        so we poll until the fork is queryable or the timeout is reached.
+
+        Args:
+            owner: Upstream repo owner.
+            repo: Upstream repo name.
+            poll_timeout: Max seconds to wait for the fork to be ready.
+
+        Returns:
+            dict with keys: fork_owner, fork_repo
+        """
+        resp = self.session.post(
+            f"{self.BASE_URL}/repos/{owner}/{repo}/forks",
+            json={},
+        )
+        # 202 = fork is being created; 200 = fork already exists
+        if resp.status_code not in (200, 202):
+            resp.raise_for_status()
+        data = resp.json()
+        fork_owner = data["owner"]["login"]
+        fork_repo = data["name"]
+
+        # Poll until the fork is accessible (GET returns 200)
+        deadline = time.time() + poll_timeout
+        while time.time() < deadline:
+            check = self.session.get(
+                f"{self.BASE_URL}/repos/{fork_owner}/{fork_repo}"
+            )
+            if check.status_code == 200:
+                return {"fork_owner": fork_owner, "fork_repo": fork_repo}
+            time.sleep(2)
+
+        raise TimeoutError(
+            f"Fork {fork_owner}/{fork_repo} not ready after {poll_timeout}s"
+        )
+
+    def push_file_content(
+        self,
+        owner: str,
+        repo: str,
+        branch_name: str,
+        file_path: str,
+        content: str,
+        commit_message: str,
+        base_branch: str = "main",
+    ) -> dict:
+        """
+        Push a single-file edit as a new commit on *branch_name* without
+        cloning the repository.  Uses the GitHub Git Data API.
+
+        If the authenticated user does not have write access to the
+        target repository, the repo is **forked first** and all writes
+        go to the fork.
+
+        Args:
+            owner: Repository owner (upstream).
+            repo: Repository name (upstream).
+            branch_name: Target branch to create / update.
+            file_path: Path of the file inside the repo.
+            content: Full new file content (UTF-8 string).
+            commit_message: Commit message.
+            base_branch: Branch to branch off from (default: main).
+
+        Returns:
+            dict with keys: commit_sha, branch, branch_url,
+                            fork_owner, fork_repo, upstream_owner,
+                            upstream_repo, pr_url (compare URL for opening a PR)
+        """
+        upstream_owner = owner
+        upstream_repo = repo
+
+        # Check if we have push access by probing the repo permissions
+        perm_resp = self.session.get(
+            f"{self.BASE_URL}/repos/{owner}/{repo}"
+        )
+        perm_resp.raise_for_status()
+        permissions = perm_resp.json().get("permissions", {})
+        can_push = permissions.get("push", False)
+
+        target_owner = owner
+        target_repo = repo
+
+        if not can_push:
+            # Fork the repository first
+            fork_info = self.fork_repo(owner, repo)
+            target_owner = fork_info["fork_owner"]
+            target_repo = fork_info["fork_repo"]
+
+        # 1. Latest commit on the base branch (read from upstream so the
+        #    fork's branch is based on the freshest upstream state)
+        base_commit_sha = self._get_ref_sha(upstream_owner, upstream_repo, base_branch)
+
+        # 2. Create blob with the new content (on the target we can write to)
+        blob_sha = self.create_blob(target_owner, target_repo, content)
+
+        # 3. Get tree of the base commit (readable from upstream)
+        base_tree_sha = self._get_commit_tree_sha(
+            upstream_owner, upstream_repo, base_commit_sha
+        )
+
+        # 4. New tree replacing the single file
+        new_tree_sha = self.create_tree(
+            target_owner, target_repo, base_tree_sha, file_path, blob_sha
+        )
+
+        # 5. New commit
+        new_commit_sha = self.create_commit(
+            target_owner, target_repo, new_tree_sha, base_commit_sha, commit_message
+        )
+
+        # 6. Create or update the branch ref
+        self.create_or_update_ref(
+            target_owner, target_repo, branch_name, new_commit_sha
+        )
+
+        branch_url = (
+            f"https://github.com/{target_owner}/{target_repo}/tree/{branch_name}"
+        )
+        # Compare URL that can be used to open a PR back to upstream
+        pr_url = (
+            f"https://github.com/{upstream_owner}/{upstream_repo}"
+            f"/compare/{base_branch}...{target_owner}:{branch_name}"
+        )
+
+        return {
+            "commit_sha": new_commit_sha,
+            "branch": branch_name,
+            "branch_url": branch_url,
+            "fork_owner": target_owner,
+            "fork_repo": target_repo,
+            "upstream_owner": upstream_owner,
+            "upstream_repo": upstream_repo,
+            "pr_url": pr_url,
+        }
 
     def get_file_tree(self, repo_path: Path, max_depth: int = 5) -> List[str]:
         """
