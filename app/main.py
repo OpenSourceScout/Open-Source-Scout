@@ -552,6 +552,7 @@ def render_briefing_document(results: dict):
             )
         except Exception as e:
             st.button("📑 PDF Error", disabled=True, use_container_width=True)
+            st.error(f"PDF generation failed: {e}")
     
     with col3:
         if st.button("📋 Copy PR Draft", use_container_width=True):

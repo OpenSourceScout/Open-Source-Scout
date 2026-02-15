@@ -74,7 +74,7 @@ class PDFGenerator:
         
         # Code style
         self.styles.add(ParagraphStyle(
-            name='Code',
+            name='CustomCode',
             parent=self.styles['Code'],
             fontName='Courier',
             fontSize=9,
@@ -95,6 +95,25 @@ class PDFGenerator:
             leading=14
         ))
     
+    def _sanitize_for_pdf(self, text: str) -> str:
+        """Remove characters that ReportLab's default fonts cannot render."""
+        # Strip emoji and non-BMP characters (surrogate pairs) that cause font errors
+        sanitized = []
+        for ch in text:
+            cp = ord(ch)
+            # Keep basic Latin, Latin-1 Supplement, and common punctuation
+            # Skip emoji ranges and non-BMP characters
+            if cp > 0xFFFF:
+                continue  # non-BMP (most emoji)
+            if 0x2600 <= cp <= 0x27BF:
+                continue  # misc symbols & dingbats
+            if 0x1F000 <= cp <= 0x1FFFF:
+                continue  # emoji block (shouldn't reach here due to > 0xFFFF check)
+            if 0xFE00 <= cp <= 0xFE0F:
+                continue  # variation selectors
+            sanitized.append(ch)
+        return ''.join(sanitized)
+    
     def markdown_to_pdf(
         self,
         markdown_content: str,
@@ -112,6 +131,9 @@ class PDFGenerator:
         Returns:
             PDF content as bytes
         """
+        # Sanitize content to remove characters that ReportLab can't render
+        markdown_content = self._sanitize_for_pdf(markdown_content)
+        
         buffer = BytesIO()
         
         doc = SimpleDocTemplate(
@@ -162,7 +184,7 @@ class PDFGenerator:
                 if in_code_block:
                     # End code block
                     code_text = '\n'.join(code_lines)
-                    story.append(Preformatted(code_text, self.styles['Code']))
+                    story.append(Preformatted(code_text, self.styles['CustomCode']))
                     story.append(Spacer(1, 8))
                     code_lines = []
                     in_code_block = False
@@ -263,16 +285,28 @@ class PDFGenerator:
         # Escape HTML first
         text = self._escape_html(text)
         
+        # Step 1: Extract inline code spans and replace with placeholders
+        # This prevents underscores/asterisks inside code from being
+        # treated as bold/italic markers.
+        code_spans = []
+        def _replace_code(m):
+            code_spans.append(f'<font name="Courier" size="9">{m.group(1)}</font>')
+            return f'\x00CODE{len(code_spans) - 1}\x00'
+        
+        text = re.sub(r'`(.+?)`', _replace_code, text)
+        
+        # Step 2: Apply bold/italic formatting (safe now, no code spans to interfere)
         # Bold: **text** or __text__
         text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
         text = re.sub(r'__(.+?)__', r'<b>\1</b>', text)
         
-        # Italic: *text* or _text_
-        text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
-        text = re.sub(r'_(.+?)_', r'<i>\1</i>', text)
+        # Italic: *text* or _text_  (only match standalone, not inside words)
+        text = re.sub(r'(?<!\w)\*(.+?)\*(?!\w)', r'<i>\1</i>', text)
+        text = re.sub(r'(?<!\w)_(.+?)_(?!\w)', r'<i>\1</i>', text)
         
-        # Inline code: `text`
-        text = re.sub(r'`(.+?)`', r'<font name="Courier" size="9">\1</font>', text)
+        # Step 3: Restore code spans
+        for i, span in enumerate(code_spans):
+            text = text.replace(f'\x00CODE{i}\x00', span)
         
         # Links: [text](url) - just show text
         text = re.sub(r'\[(.+?)\]\(.+?\)', r'\1', text)
