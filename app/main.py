@@ -197,22 +197,25 @@ def render_sidebar():
         
         repo_url = st.text_input(
             "GitHub Repository URL",
-            placeholder="https://github.com/owner/repo",
+            placeholder="https://github.com/[owner]/[repo]",
             help="Enter any public GitHub repository URL"
         )
+
+        if not repo_url.startswith("https://github.com/"): 
+            repo_url = "https://github.com/" + repo_url
         
         st.markdown("---")
         st.markdown("### ⚙️ Options")
         
         beginner_only = st.checkbox(
             "🌱 Beginner-only mode",
-            value=True,
+            value=False,    # Let the default not be a begineer only mode
             help="Filter for 'good first issue', 'help wanted', and similar labels"
         )
         
         # Model selection
         model_options = {
-            "Recommended": ("qwen-qwq-32b", "llama-3.3-70b"),
+            "Recommended": ("openai/gpt-oss-120b", "llama-3.3-70b"),
             "Fast": ("llama-3.1-8b", "llama-3.3-70b"),
             "Balanced": ("llama-3.3-70b", "llama-3.3-70b"),
         }
@@ -349,12 +352,13 @@ def render_issue_ranking(results: dict):
 def render_code_locator(results: dict):
     """Render the code locator tab."""
     if not results or not results.get("success"):
-        st.info("Run an analysis to see code locations")
+        st.info("Run an analysis to see code locations.")
         return
     
     agent2 = results.get("agent2_output")
     if not agent2:
-        st.warning("Code locator results not available")
+        # st.warning("Code locator results not available.")
+        st.info("Run an analysis to see code locations.")
         return
     
     st.markdown(f"### 🔍 Code Analysis for Issue #{agent2.issue_number}")
