@@ -1,0 +1,86 @@
+.issue-ranking h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+.empty-state {
+  color: #666;
+  padding: 2rem;
+  text-align: center;
+}
+
+.issue-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.issue-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: #fafafa;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  text-align: left;
+}
+
+.issue-header:hover {
+  background: #f0f0f0;
+}
+
+.score-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.score-badge.high {
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  color: white;
+}
+
+.score-badge.medium {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+}
+
+.score-badge.low {
+  background: linear-gradient(135deg, #ff6a00 0%, #ee0979 100%);
+  color: white;
+}
+
+.issue-body {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #e0e0e0;
+}
+
+.issue-body h4 {
+  margin: 1rem 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.issue-body h4:first-of-type {
+  margin-top: 0;
+}
+
+.issue-body a {
+  color: #667eea;
+}
+
+.breakdown {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.9rem;
+}
+
+.issue-body ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
