@@ -104,3 +104,23 @@
 .welcome li {
   margin-bottom: 0.5rem;
 }
+
+.link-btn {
+  background: none;
+  border: none;
+  color: #667eea;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+  padding: 0;
+}
+
+.link-btn:hover {
+  color: #764ba2;
+}
+
+.empty-state {
+  color: #666;
+  padding: 2rem;
+  text-align: center;
+}
