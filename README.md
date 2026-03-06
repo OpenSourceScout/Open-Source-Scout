@@ -60,6 +60,22 @@ streamlit run app/main.py
 
 The app will open in your browser at `http://localhost:8501`
 
+### Running the API (for React / Monaco editor)
+
+The FastAPI backend exposes REST endpoints for the editor flow:
+
+```bash
+uv run uvicorn app.api:app --reload --port 8000
+```
+
+API docs: `http://localhost:8000/docs`
+
+| Endpoint | Method | Description |
+|---------|--------|-------------|
+| `/api/health` | GET | Health check |
+| `/api/repos/{owner}/{repo}/files/{path}` | GET | Fetch file content (`?ref=main`) |
+| `/api/repos/{owner}/{repo}/push` | POST | Push edited file (forks if needed) |
+
 ## 📖 How to Use
 
 1. **Enter a Repository URL**: Paste any public GitHub repository URL
@@ -114,7 +130,8 @@ A modern HTTP client with good documentation and clear issues.
 ```
 Open-Source-Scout/
 ├── app/
-│   └── main.py              # Streamlit UI
+│   ├── main.py              # Streamlit UI
+│   └── api.py               # FastAPI backend (REST)
 ├── core/
 │   ├── agents/
 │   │   ├── triage_nurse.py  # Issue ranking
