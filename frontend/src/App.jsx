@@ -45,63 +45,68 @@ function App() {
               ❌ {error}
             </div>
           )}
-          {results?.success ? (
-            <>
-              {results.repo && (
-                <div className="repo-info">
-                  <strong>Repository:</strong>{' '}
-                  <a href={results.repo.html_url} target="_blank" rel="noreferrer">
-                    {results.repo.full_name}
-                  </a>
-                  {' | '}
-                  <strong>Language:</strong> {results.repo.language || 'Unknown'}
-                  {' | '}
-                  <strong>Stars:</strong> ⭐ {results.repo.stargazers_count}
-                  {' | '}
-                  <strong>Open Issues:</strong> 📋 {results.repo.open_issues_count}
-                  {results.duration_seconds && (
-                    <span className="duration">
-                      {' | '}Analysis completed in {results.duration_seconds.toFixed(1)}s
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className="tabs">
-                {TABS.map(({ id, label }) => (
-                  <button
-                    key={id}
-                    className={`tab ${activeTab === id ? 'active' : ''}`}
-                    onClick={() => setActiveTab(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
+          <>
+            {results?.success && results.repo && (
+              <div className="repo-info">
+                <strong>Repository:</strong>{' '}
+                <a href={results.repo.html_url} target="_blank" rel="noreferrer">
+                  {results.repo.full_name}
+                </a>
+                {' | '}
+                <strong>Language:</strong> {results.repo.language || 'Unknown'}
+                {' | '}
+                <strong>Stars:</strong> ⭐ {results.repo.stargazers_count}
+                {' | '}
+                <strong>Open Issues:</strong> 📋 {results.repo.open_issues_count}
+                {results.duration_seconds && (
+                  <span className="duration">
+                    {' | '}Analysis completed in {results.duration_seconds.toFixed(1)}s
+                  </span>
+                )}
               </div>
-              <div className="tab-content">
-                {activeTab === 'issues' && <IssueRanking results={results} />}
-                {activeTab === 'code' && <CodeLocator results={results} />}
-                {activeTab === 'briefing' && <Briefing results={results} />}
-              </div>
-            </>
-          ) : (
-            <div className="welcome">
-              <h2>Welcome to Open Source Scout! 🎉</h2>
-              <p>This tool helps you find and contribute to open-source projects by:</p>
-              <ol>
-                <li><strong>🔍 Finding beginner-friendly issues</strong> – We analyze and rank issues</li>
-                <li><strong>📍 Locating relevant code</strong> – We search the codebase to find where to make changes</li>
-                <li><strong>📝 Generating a contribution guide</strong> – We create a detailed briefing with fix plans and PR drafts</li>
-              </ol>
-              <h3>Getting Started</h3>
-              <ol>
-                <li>Enter a GitHub repository URL in the sidebar</li>
-                <li>Choose your options (beginner mode, model selection)</li>
-                <li>Click &quot;Generate Analysis&quot;</li>
-                <li>Explore the results across the three tabs</li>
-              </ol>
-              <p>Use one of the demo repos in the sidebar, or paste any public GitHub repository URL.</p>
+            )}
+            <div className="tabs">
+              {TABS.map(({ id, label }) => (
+                <button
+                  key={id}
+                  className={`tab ${activeTab === id ? 'active' : ''}`}
+                  onClick={() => setActiveTab(id)}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-          )}
+            <div className="tab-content">
+              {activeTab === 'issues' && (results?.success ? (
+                <IssueRanking results={results} />
+              ) : (
+                <div className="welcome">
+                  <h2>Welcome to Open Source Scout! 🎉</h2>
+                  <p>This tool helps you find and contribute to open-source projects by:</p>
+                  <ol>
+                    <li><strong>🔍 Finding beginner-friendly issues</strong> – We analyze and rank issues</li>
+                    <li><strong>📍 Locating relevant code</strong> – We search the codebase to find where to make changes</li>
+                    <li><strong>📝 Generating a contribution guide</strong> – We create a detailed briefing with fix plans and PR drafts</li>
+                  </ol>
+                  <h3>Getting Started</h3>
+                  <ol>
+                    <li>Enter a GitHub repository URL in the sidebar</li>
+                    <li>Choose your options (beginner mode, model selection)</li>
+                    <li>Click &quot;Generate Analysis&quot;</li>
+                    <li>Explore the results across the three tabs</li>
+                  </ol>
+                  <p>Use one of the demo repos in the sidebar, or paste any public GitHub repository URL.</p>
+                  <p>Click &quot;Load full file&quot; in Code Locator to open files in a new tab for editing.</p>
+                </div>
+              ))}
+              {activeTab === 'code' && (results?.success ? <CodeLocator results={results} /> : (
+                <div className="empty-state">Run an analysis to see code locations</div>
+              ))}
+              {activeTab === 'briefing' && (results?.success ? <Briefing results={results} /> : (
+                <div className="empty-state">Run an analysis to see the briefing document</div>
+              ))}
+            </div>
+          </>
         </main>
       </div>
     </div>
