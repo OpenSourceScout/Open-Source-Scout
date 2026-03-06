@@ -60,19 +60,37 @@ streamlit run app/main.py
 
 The app will open in your browser at `http://localhost:8501`
 
-### Running the API (for React / Monaco editor)
+### Running the React app (recommended)
 
-The FastAPI backend exposes REST endpoints for the editor flow:
+1. **Start the API backend:**
+   ```bash
+   uv run uvicorn app.api:app --reload --port 8000
+   ```
+
+2. **Start the React frontend:**
+   ```bash
+   cd frontend && npm install && npm run dev
+   ```
+
+3. Open `http://localhost:5173` in your browser.
+
+The React app includes a Monaco editor for editing files (no more small text box).
+
+### Running the Streamlit app (legacy)
 
 ```bash
-uv run uvicorn app.api:app --reload --port 8000
+streamlit run app/main.py
 ```
 
-API docs: `http://localhost:8000/docs`
+The app will open at `http://localhost:8501`
+
+### API endpoints
 
 | Endpoint | Method | Description |
 |---------|--------|-------------|
 | `/api/health` | GET | Health check |
+| `/api/analyze` | POST | Run full 3-agent analysis pipeline |
+| `/api/export/pdf` | POST | Export markdown to PDF |
 | `/api/repos/{owner}/{repo}/files/{path}` | GET | Fetch file content (`?ref=main`) |
 | `/api/repos/{owner}/{repo}/push` | POST | Push edited file (forks if needed) |
 
@@ -130,8 +148,14 @@ A modern HTTP client with good documentation and clear issues.
 ```
 Open-Source-Scout/
 ├── app/
-│   ├── main.py              # Streamlit UI
+│   ├── main.py              # Streamlit UI (legacy)
 │   └── api.py               # FastAPI backend (REST)
+├── frontend/                 # React + Monaco editor
+│   ├── src/
+│   │   ├── App.jsx
+│   │   ├── api.js
+│   │   └── components/
+│   └── package.json
 ├── core/
 │   ├── agents/
 │   │   ├── triage_nurse.py  # Issue ranking

@@ -17,9 +17,14 @@ load_dotenv()
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from integrations.github_client import GitHubClient
+from integrations.groq_client import GroqClient
+from core.orchestrator import ScoutOrchestrator
+from utils.cache import CacheManager
+from utils.pdf_generator import PDFGenerator
 
 app = FastAPI(
     title="Open Source Scout API",
@@ -32,8 +37,10 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:5173",
+        "http://localhost:5174",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -54,7 +61,75 @@ class PushFileRequest(BaseModel):
     base_branch: str = "main"
 
 
+class AnalyzeRequest(BaseModel):
+    """Request body for running analysis."""
+
+    repo_url: str
+    beginner_only: bool = True
+    fast_model: str = "qwen-qwq-32b"
+    powerful_model: str = "llama-3.3-70b"
+
+
+class ExportPdfRequest(BaseModel):
+    """Request body for PDF export."""
+
+    content: str
+
+
+def _to_jsonable(obj):
+    """Convert Pydantic models and nested structures to JSON-serializable dict."""
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump()
+    if isinstance(obj, dict):
+        return {k: _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_to_jsonable(item) for item in obj]
+    return obj
+
+
 # --- Endpoints ---
+
+
+@app.post("/api/analyze")
+def run_analyze(body: AnalyzeRequest):
+    """
+    Run the full 3-agent analysis pipeline.
+
+    Blocks until complete (may take 1–2 minutes). Returns analysis results.
+    """
+    try:
+        github_client = GitHubClient()
+        groq_client = GroqClient()
+        cache_manager = CacheManager()
+        orchestrator = ScoutOrchestrator(
+            github_client=github_client,
+            groq_client=groq_client,
+            cache_manager=cache_manager,
+            fast_model=body.fast_model,
+            powerful_model=body.powerful_model,
+        )
+        results = orchestrator.run(
+            repo_url=body.repo_url,
+            beginner_only=body.beginner_only,
+        )
+        return _to_jsonable(results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/export/pdf")
+def export_pdf(body: ExportPdfRequest):
+    """Generate PDF from markdown content."""
+    try:
+        pdf_gen = PDFGenerator()
+        pdf_bytes = pdf_gen.markdown_to_pdf(body.content)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": "attachment; filename=contributor_briefing.pdf"},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/health")
