@@ -15,6 +15,8 @@ An AI-powered multi-agent system that helps beginners contribute to open-source 
 ### Prerequisites
 
 - Python 3.11 or higher
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- Node.js 18+ (for React frontend)
 - Git
 - (Optional) [ripgrep](https://github.com/BurntSushi/ripgrep) for faster code search
 
@@ -26,7 +28,19 @@ An AI-powered multi-agent system that helps beginners contribute to open-source 
    cd Open-Source-Scout
    ```
 
-2. **Create a virtual environment**
+2. **Install Python dependencies**
+
+   **Option A: Using uv (recommended)**
+   ```bash
+   # Install uv if you haven't already
+   # Windows: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+   # Linux/Mac: curl -LsSf https://astral.sh/uv/install.sh | sh
+   
+   # Sync dependencies (creates venv automatically)
+   uv sync
+   ```
+
+   **Option B: Using pip**
    ```bash
    python -m venv venv
    
@@ -35,14 +49,11 @@ An AI-powered multi-agent system that helps beginners contribute to open-source 
    
    # Linux/Mac
    source venv/bin/activate
-   ```
-
-3. **Install dependencies**
-   ```bash
+   
    pip install -r requirements.txt
    ```
 
-4. **Set up environment variables**
+3. **Set up environment variables**
    ```bash
    # Copy the example file
    cp .env.example .env
@@ -52,33 +63,35 @@ An AI-powered multi-agent system that helps beginners contribute to open-source 
    # GITHUB_TOKEN=your_github_token (optional but recommended)
    ```
 
-### Running the App
+### Running the React App (Recommended)
 
+**Terminal 1 - Start the FastAPI backend:**
 ```bash
-streamlit run app/main.py
+# Using uv
+uv run uvicorn app.api:app --reload --port 8001
+
+# Or using pip (with venv activated)
+python -m uvicorn app.api:app --reload --port 8001
 ```
 
-The app will open in your browser at `http://localhost:8501`
+**Terminal 2 - Start the React frontend:**
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-### Running the React app (recommended)
+**Open the app:** Navigate to `http://localhost:5173` in your browser.
 
-1. **Start the API backend:**
-   ```bash
-   uv run uvicorn app.api:app --reload --port 8000
-   ```
+The React app includes a Monaco editor for editing files.
 
-2. **Start the React frontend:**
-   ```bash
-   cd frontend && npm install && npm run dev
-   ```
-
-3. Open `http://localhost:5173` in your browser.
-
-The React app includes a Monaco editor for editing files (no more small text box).
-
-### Running the Streamlit app (legacy)
+### Running the Streamlit App (Legacy)
 
 ```bash
+# Using uv
+uv run streamlit run app/main.py
+
+# Or using pip (with venv activated)
 streamlit run app/main.py
 ```
 
