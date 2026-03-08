@@ -202,6 +202,61 @@ class GitHubClient:
         
         return all_issues[:max_issues]
     
+    def search_repos(
+        self,
+        query: str,
+        per_page: int = 10,
+        sort: str = "stars",
+        order: str = "desc"
+    ) -> List[GitHubRepo]:
+        """
+        Search GitHub repositories.
+        
+        Args:
+            query: Search query (can include qualifiers like language:python)
+            per_page: Number of results per page
+            sort: Sort by 'stars', 'forks', 'help-wanted-issues', 'updated'
+            order: 'asc' or 'desc'
+            
+        Returns:
+            List of GitHubRepo objects
+        """
+        params = {
+            "q": query,
+            "per_page": per_page,
+            "sort": sort,
+            "order": order
+        }
+        
+        resp = self.session.get(
+            f"{self.BASE_URL}/search/repositories",
+            params=params
+        )
+        
+        if resp.status_code == 403:
+            # Rate limit exceeded
+            raise Exception("GitHub API rate limit exceeded. Please try again later or add a GITHUB_TOKEN.")
+        
+        resp.raise_for_status()
+        data = resp.json()
+        
+        repos = []
+        for item in data.get("items", []):
+            repos.append(GitHubRepo(
+                full_name=item["full_name"],
+                description=item.get("description"),
+                default_branch=item.get("default_branch", "main"),
+                html_url=item["html_url"],
+                clone_url=item["clone_url"],
+                language=item.get("language"),
+                languages={},  # Not available in search results
+                stargazers_count=item.get("stargazers_count", 0),
+                open_issues_count=item.get("open_issues_count", 0),
+                topics=item.get("topics", [])
+            ))
+        
+        return repos
+    
     def _parse_issue(self, data: dict) -> GitHubIssue:
         """Parse GitHub API issue response into GitHubIssue model."""
         return GitHubIssue(

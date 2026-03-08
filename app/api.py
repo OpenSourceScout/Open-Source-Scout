@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from integrations.github_client import GitHubClient
 from integrations.groq_client import GroqClient
 from core.orchestrator import ScoutOrchestrator
+from core.agents.pathfinder import PathfinderAgent
 from utils.cache import CacheManager
 from utils.pdf_generator import PDFGenerator
 
@@ -70,6 +71,13 @@ class AnalyzeRequest(BaseModel):
     powerful_model: str = "llama-3.3-70b"
 
 
+class SearchReposRequest(BaseModel):
+    """Request body for searching repositories by tech stack."""
+    
+    tech_stack: list[str]
+    fast_model: str = "qwen-qwq-32b"
+
+
 class ExportPdfRequest(BaseModel):
     """Request body for PDF export."""
 
@@ -113,6 +121,35 @@ def run_analyze(body: AnalyzeRequest):
             beginner_only=body.beginner_only,
         )
         return _to_jsonable(results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/search-repos")
+def search_repos_by_tech_stack(body: SearchReposRequest):
+    """
+    Search and rank GitHub repositories based on user's tech stack.
+    
+    Uses the Pathfinder agent to find beginner-friendly repos matching
+    the user's skills. Returns top 5 ranked repositories.
+    """
+    try:
+        if not body.tech_stack or len(body.tech_stack) == 0:
+            raise HTTPException(status_code=400, detail="At least one technology/skill is required")
+        
+        github_client = GitHubClient()
+        groq_client = GroqClient()
+        
+        pathfinder = PathfinderAgent(groq_client, model=body.fast_model)
+        results = pathfinder.run(
+            tech_stack=body.tech_stack,
+            github_client=github_client,
+            top_n=5
+        )
+        
+        return _to_jsonable(results)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

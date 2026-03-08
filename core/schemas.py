@@ -6,6 +6,38 @@ from typing import List, Optional, Dict
 from pydantic import BaseModel, Field
 
 
+# ==================== Agent 0: Pathfinder (Repo Discovery) ====================
+
+class RepoScoreBreakdown(BaseModel):
+    """Breakdown of score components for a repository."""
+    tech_match: int = Field(ge=0, le=40, description="Tech stack match score (0-40)")
+    beginner_friendliness: int = Field(ge=0, le=25, description="Beginner friendliness score (0-25)")
+    activity: int = Field(ge=0, le=15, description="Activity level score (0-15)")
+    community: int = Field(ge=0, le=10, description="Community health score (0-10)")
+    issue_availability: int = Field(ge=0, le=10, description="Issue availability score (0-10)")
+
+
+class RankedRepo(BaseModel):
+    """A ranked GitHub repository with score breakdown."""
+    full_name: str = Field(description="Repository full name (owner/repo)")
+    url: str = Field(description="Repository URL")
+    description: str = Field(description="Repository description")
+    language: Optional[str] = Field(default=None, description="Primary language")
+    stars: int = Field(ge=0, description="Star count")
+    open_issues: int = Field(ge=0, description="Open issue count")
+    score_total: int = Field(ge=0, le=100, description="Total score (0-100)")
+    score_breakdown: RepoScoreBreakdown = Field(description="Score breakdown by category")
+    why_match: List[str] = Field(description="Reasons why this repo matches the user")
+    topics: List[str] = Field(default_factory=list, description="Repository topics")
+
+
+class PathfinderOutput(BaseModel):
+    """Output from Agent 0: Pathfinder (Repository Discovery)"""
+    tech_stack: List[str] = Field(description="User's input tech stack")
+    ranked_repos: List[RankedRepo] = Field(description="Top ranked repositories")
+    search_queries_used: List[str] = Field(default_factory=list, description="Search queries used")
+
+
 # ==================== Agent 1: Triage Nurse ====================
 
 class ScoreBreakdown(BaseModel):
@@ -110,6 +142,7 @@ class GitHubRepo(BaseModel):
     languages: Dict[str, int] = Field(default_factory=dict)
     stargazers_count: int = 0
     open_issues_count: int = 0
+    topics: List[str] = Field(default_factory=list)
 
 
 # ==================== Run Log Model ====================

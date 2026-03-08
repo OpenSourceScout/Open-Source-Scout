@@ -102,6 +102,7 @@ The app will open at `http://localhost:8501`
 | Endpoint | Method | Description |
 |---------|--------|-------------|
 | `/api/health` | GET | Health check |
+| `/api/search-repos` | POST | Search repos by tech stack (Pathfinder agent) |
 | `/api/analyze` | POST | Run full 3-agent analysis pipeline |
 | `/api/export/pdf` | POST | Export markdown to PDF |
 | `/api/repos/{owner}/{repo}/files/{path}` | GET | Fetch file content (`?ref=main`) |
@@ -142,11 +143,27 @@ A modern HTTP client with good documentation and clear issues.
 
 | Agent | Role | Model |
 |-------|------|-------|
+| **Pathfinder** | Discovers and ranks repositories based on user's tech stack | qwen-qwq-32b |
 | **Triage Nurse** | Fetches and ranks issues by beginner-friendliness | qwen-qwq-32b |
 | **Archaeologist** | Searches codebase, identifies files/functions | qwen-qwq-32b |
 | **Senior Dev** | Creates fix plan, tests, and PR draft | llama-3.3-70b |
 
-### Scoring Algorithm (0-100)
+### Two Input Modes
+
+1. **Repository URL**: Enter a GitHub repo directly → Triage Nurse → Archaeologist → Senior Dev
+2. **Tech Stack**: Enter your skills → Pathfinder finds repos → Select repo → Full pipeline
+
+### Pathfinder Scoring (Repository Discovery, 0-100)
+
+| Component | Max Points | Description |
+|-----------|------------|-------------|
+| Tech Match | 40 | How well repo matches user's skills |
+| Beginner Friendliness | 25 | Good first issues, contributing guides |
+| Activity Level | 15 | Recent commits, active maintenance |
+| Community Health | 10 | Contributors, responsiveness |
+| Issue Availability | 10 | Number and quality of open issues |
+
+### Issue Scoring Algorithm (0-100)
 
 | Component | Max Points | Description |
 |-----------|------------|-------------|
@@ -168,9 +185,12 @@ Open-Source-Scout/
 │   │   ├── App.jsx
 │   │   ├── api.js
 │   │   └── components/
+│   │       ├── RepoRanking.jsx  # Repository selection UI
+│   │       └── ...
 │   └── package.json
 ├── core/
 │   ├── agents/
+│   │   ├── pathfinder.py    # Repository discovery
 │   │   ├── triage_nurse.py  # Issue ranking
 │   │   ├── archaeologist.py # Code location
 │   │   └── senior_dev.py    # Fix planning

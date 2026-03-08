@@ -1,5 +1,21 @@
 const API_BASE = '/api';
 
+export async function searchReposByTechStack({ tech_stack, fast_model }) {
+  const res = await fetch(`${API_BASE}/search-repos`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      tech_stack,
+      fast_model: fast_model || 'qwen-qwq-32b',
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Repository search failed');
+  }
+  return res.json();
+}
+
 export async function runAnalyze({ repo_url, beginner_only = true, fast_model, powerful_model }) {
   const res = await fetch(`${API_BASE}/analyze`, {
     method: 'POST',

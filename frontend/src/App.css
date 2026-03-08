@@ -124,3 +124,106 @@
   padding: 2rem;
   text-align: center;
 }
+
+/* Repo Selection View */
+.repo-selection-view {
+  max-width: 100%;
+}
+
+.view-repos-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.view-repos-note {
+  color: #888;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
+.btn-back {
+  padding: 0.5rem 1rem;
+  border: 1px solid #667eea;
+  border-radius: 6px;
+  background: white;
+  color: #667eea;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-back:hover {
+  background: #667eea;
+  color: white;
+}
+
+.back-to-repos {
+  margin-bottom: 1rem;
+}
+
+.btn-back-repos {
+  padding: 0.5rem 1rem;
+  border: 1px solid #667eea;
+  border-radius: 6px;
+  background: white;
+  color: #667eea;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-back-repos:hover {
+  background: #f0f4ff;
+}
+
+.tech-stack-info {
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, #f0f4ff 0%, #f5f0ff 100%);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  border: 1px solid #e0e0ff;
+}
+
+/* Start Options in Welcome */
+.start-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin: 1.5rem 0;
+}
+
+.start-option {
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.start-option:hover {
+  border-color: #667eea;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+}
+
+.start-option h4 {
+  margin: 0 0 0.5rem;
+  color: #333;
+  font-size: 1rem;
+}
+
+.start-option p {
+  margin: 0;
+  color: #666;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .start-options {
+    grid-template-columns: 1fr;
+  }
+}

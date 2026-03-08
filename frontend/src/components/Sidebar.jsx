@@ -7,22 +7,54 @@ const MODEL_OPTIONS = {
   Balanced: { fast: 'llama-3.3-70b', powerful: 'llama-3.3-70b' },
 }
 
-export default function Sidebar({ onAnalyze, loading }) {
+const INPUT_MODES = {
+  REPO: 'repo',
+  TECH_STACK: 'tech_stack'
+}
+
+export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
+  const [inputMode, setInputMode] = useState(INPUT_MODES.REPO)
   const [repoUrl, setRepoUrl] = useState('')
+  const [techStackInput, setTechStackInput] = useState('')
+  const [techStackTags, setTechStackTags] = useState([])
   const [beginnerOnly, setBeginnerOnly] = useState(true)
   const [modelChoice, setModelChoice] = useState('Recommended')
 
+  const handleAddTechStack = (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault()
+      const value = techStackInput.trim().replace(',', '')
+      if (value && !techStackTags.includes(value.toLowerCase())) {
+        setTechStackTags([...techStackTags, value.toLowerCase()])
+        setTechStackInput('')
+      }
+    }
+  }
+
+  const handleRemoveTag = (tagToRemove) => {
+    setTechStackTags(techStackTags.filter(tag => tag !== tagToRemove))
+  }
+
   const handleGenerate = () => {
     const { fast, powerful } = MODEL_OPTIONS[modelChoice]
-    onAnalyze({
-      repo_url: repoUrl,
-      beginner_only: beginnerOnly,
-      fast_model: fast,
-      powerful_model: powerful,
-    })
+    
+    if (inputMode === INPUT_MODES.REPO) {
+      onAnalyze({
+        repo_url: repoUrl,
+        beginner_only: beginnerOnly,
+        fast_model: fast,
+        powerful_model: powerful,
+      })
+    } else {
+      onSearchRepos({
+        tech_stack: techStackTags,
+        fast_model: fast,
+      })
+    }
   }
 
   const handleDemo = (url) => {
+    setInputMode(INPUT_MODES.REPO)
     setRepoUrl(url)
     const { fast, powerful } = MODEL_OPTIONS[modelChoice]
     onAnalyze({
@@ -33,29 +65,105 @@ export default function Sidebar({ onAnalyze, loading }) {
     })
   }
 
-  const canGenerate = repoUrl.trim() && !loading
+  const canGenerate = inputMode === INPUT_MODES.REPO 
+    ? repoUrl.trim() && !loading
+    : techStackTags.length > 0 && !loading
 
   return (
     <aside className="sidebar">
-      <h3>📝 Repository Input</h3>
-      <input
-        type="text"
-        placeholder="https://github.com/owner/repo"
-        value={repoUrl}
-        onChange={(e) => setRepoUrl(e.target.value)}
-        disabled={loading}
-      />
-      <hr />
-      <h3>⚙️ Options</h3>
-      <label className="checkbox">
-        <input
-          type="checkbox"
-          checked={beginnerOnly}
-          onChange={(e) => setBeginnerOnly(e.target.checked)}
+      <h3>🔀 Input Mode</h3>
+      <div className="input-mode-toggle">
+        <button 
+          className={`mode-btn ${inputMode === INPUT_MODES.REPO ? 'active' : ''}`}
+          onClick={() => setInputMode(INPUT_MODES.REPO)}
           disabled={loading}
-        />
-        🌱 Beginner-only mode
-      </label>
+        >
+          📦 Repository URL
+        </button>
+        <button 
+          className={`mode-btn ${inputMode === INPUT_MODES.TECH_STACK ? 'active' : ''}`}
+          onClick={() => setInputMode(INPUT_MODES.TECH_STACK)}
+          disabled={loading}
+        >
+          🛠️ Tech Stack
+        </button>
+      </div>
+      
+      <hr />
+      
+      {inputMode === INPUT_MODES.REPO ? (
+        <>
+          <h3>📝 Repository Input</h3>
+          <input
+            type="text"
+            placeholder="https://github.com/owner/repo"
+            value={repoUrl}
+            onChange={(e) => setRepoUrl(e.target.value)}
+            disabled={loading}
+          />
+        </>
+      ) : (
+        <>
+          <h3>🛠️ Your Tech Stack</h3>
+          <p className="input-hint">Enter technologies/skills you know (press Enter to add)</p>
+          <input
+            type="text"
+            placeholder="e.g., Python, React, Node.js"
+            value={techStackInput}
+            onChange={(e) => setTechStackInput(e.target.value)}
+            onKeyDown={handleAddTechStack}
+            disabled={loading}
+          />
+          {techStackTags.length > 0 && (
+            <div className="tech-tags">
+              {techStackTags.map(tag => (
+                <span key={tag} className="tech-tag">
+                  {tag}
+                  <button 
+                    className="tag-remove" 
+                    onClick={() => handleRemoveTag(tag)}
+                    disabled={loading}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="quick-add">
+            <span className="quick-add-label">Quick add:</span>
+            {['Python', 'JavaScript', 'React', 'TypeScript', 'Go', 'Rust'].map(tech => (
+              <button 
+                key={tech}
+                className="quick-add-btn"
+                onClick={() => {
+                  if (!techStackTags.includes(tech.toLowerCase())) {
+                    setTechStackTags([...techStackTags, tech.toLowerCase()])
+                  }
+                }}
+                disabled={loading || techStackTags.includes(tech.toLowerCase())}
+              >
+                {tech}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      
+      <hr />
+      
+      <h3>⚙️ Options</h3>
+      {inputMode === INPUT_MODES.REPO && (
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={beginnerOnly}
+            onChange={(e) => setBeginnerOnly(e.target.checked)}
+            disabled={loading}
+          />
+          🌱 Beginner-only mode
+        </label>
+      )}
       <label className="select-label">
         🤖 Model Selection
         <select
@@ -68,20 +176,31 @@ export default function Sidebar({ onAnalyze, loading }) {
           ))}
         </select>
       </label>
+      
       <hr />
+      
       <h3>📊 API Status</h3>
       <p className="api-status">
         API keys are configured on the server. Ensure GROQ_API_KEY and GITHUB_TOKEN are set in .env.
       </p>
+      
       <hr />
+      
       <button
         className="btn-generate"
         onClick={handleGenerate}
         disabled={!canGenerate}
       >
-        {loading ? '⏳ Running...' : '🚀 Generate Analysis'}
+        {loading 
+          ? '⏳ Running...' 
+          : inputMode === INPUT_MODES.REPO 
+            ? '🚀 Generate Analysis' 
+            : '🔍 Find Repositories'
+        }
       </button>
+      
       <hr />
+      
       <h3>🎯 Try Demo Repos</h3>
       <div className="demo-buttons">
         <button onClick={() => handleDemo('https://github.com/tiangolo/fastapi')} disabled={loading}>
