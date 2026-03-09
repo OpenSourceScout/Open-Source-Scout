@@ -4,7 +4,8 @@ An AI-powered multi-agent system that helps beginners contribute to open-source 
 
 ## 🌟 Features
 
-- **Smart Issue Ranking**: Automatically finds and ranks beginner-friendly issues using a scoring algorithm
+- **Tech Stack Discovery**: Find repositories matching your skills using the Pathfinder agent
+- **Smart Issue Ranking**: Automatically finds and ranks beginner-friendly issues
 - **Code Location**: Searches the codebase to find exactly where changes are needed
 - **Contributor Briefing**: Generates comprehensive fix plans with step-by-step instructions
 - **PR Draft Generation**: Creates ready-to-use branch names, commit messages, and PR descriptions
@@ -28,19 +29,20 @@ An AI-powered multi-agent system that helps beginners contribute to open-source 
    cd Open-Source-Scout
    ```
 
-2. **Install Python dependencies**
-
-   **Option A: Using uv (recommended)**
+2. **Install Python dependencies using uv (recommended)**
    ```bash
    # Install uv if you haven't already
-   # Windows: powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-   # Linux/Mac: curl -LsSf https://astral.sh/uv/install.sh | sh
+   # Windows PowerShell:
+   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
    
-   # Sync dependencies (creates venv automatically)
+   # Linux/Mac:
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   
+   # Sync dependencies (creates .venv automatically)
    uv sync
    ```
 
-   **Option B: Using pip**
+   **Alternative: Using pip**
    ```bash
    python -m venv venv
    
@@ -53,21 +55,31 @@ An AI-powered multi-agent system that helps beginners contribute to open-source 
    pip install -r requirements.txt
    ```
 
-3. **Set up environment variables**
+3. **Install frontend dependencies**
    ```bash
-   # Copy the example file
-   cp .env.example .env
-   
-   # Edit .env and add your API keys
-   # GROQ_API_KEY=your_groq_key
-   # GITHUB_TOKEN=your_github_token (optional but recommended)
+   cd frontend
+   npm install
+   cd ..
    ```
 
-### Running the React App (Recommended)
+4. **Set up environment variables**
+   ```bash
+   # Copy the example file
+   cp .env.example .env    # Linux/Mac
+   copy .env.example .env  # Windows
+   
+   # Edit .env and add your API keys:
+   # GROQ_API_KEY=your_groq_key          (Required - get from https://console.groq.com/keys)
+   # GITHUB_TOKEN=your_github_token      (Optional but recommended for higher rate limits)
+   ```
+
+### Running the App
+
+You need **two terminals** - one for the backend, one for the frontend.
 
 **Terminal 1 - Start the FastAPI backend:**
 ```bash
-# Using uv
+# Using uv (recommended)
 uv run uvicorn app.api:app --reload --port 8001
 
 # Or using pip (with venv activated)
@@ -77,13 +89,32 @@ python -m uvicorn app.api:app --reload --port 8001
 **Terminal 2 - Start the React frontend:**
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
 
-**Open the app:** Navigate to `http://localhost:5173` in your browser.
+**Open the app:** Navigate to **http://localhost:5173** in your browser.
 
-The React app includes a Monaco editor for editing files.
+### Quick Start Summary (TL;DR)
+
+```bash
+# Clone and setup
+git clone https://github.com/SamarthPyati/Open-Source-Scout.git
+cd Open-Source-Scout
+
+# Backend setup
+uv sync
+cp .env.example .env
+# Edit .env and add GROQ_API_KEY
+
+# Frontend setup
+cd frontend && npm install && cd ..
+
+# Run (in separate terminals)
+# Terminal 1: uv run uvicorn app.api:app --reload --port 8001
+# Terminal 2: cd frontend && npm run dev
+
+# Open http://localhost:5173
+```
 
 ### Running the Streamlit App (Legacy)
 
@@ -97,7 +128,7 @@ streamlit run app/main.py
 
 The app will open at `http://localhost:8501`
 
-### API endpoints
+### API Endpoints
 
 | Endpoint | Method | Description |
 |---------|--------|-------------|
@@ -110,16 +141,26 @@ The app will open at `http://localhost:8501`
 
 ## 📖 How to Use
 
-1. **Enter a Repository URL**: Paste any public GitHub repository URL
-2. **Choose Options**:
-   - **Beginner-only mode** (default): Filters for `good first issue`, `help wanted`, etc.
-   - **Any issue mode**: Analyzes all open issues
-3. **Click Generate**: The 3-agent pipeline will analyze the repo
-4. **Explore Results**:
-   - **Issue Ranking Tab**: See top 3 issues with score breakdowns
-   - **Code Locator Tab**: Find relevant files and functions
-   - **Contributor Briefing Tab**: Get the full fix plan and PR draft
-5. **Export**: Download as Markdown or PDF
+### Option 1: Tech Stack Discovery (Recommended for Beginners)
+1. Click **"Find by Tech Stack"** on the landing page
+2. Add your technologies (e.g., Python, React, TypeScript)
+3. Click **"Find Repositories"** - the Pathfinder agent discovers matching repos
+4. Select a repository from the ranked results
+5. The system analyzes and displays:
+   - **Issue Ranking**: Top beginner-friendly issues
+   - **Code Locator**: Where to make changes
+   - **Contributor Briefing**: Step-by-step fix plan + PR draft
+
+### Option 2: Direct Repository Analysis
+1. Click **"Analyze Repository"** on the landing page
+2. Paste a GitHub repository URL (e.g., `https://github.com/tiangolo/fastapi`)
+3. Click **"Analyze"** to run the 3-agent pipeline
+4. Explore the results in the sidebar views
+
+### Exporting Results
+- **Markdown**: Download the briefing as a `.md` file
+- **PDF**: Generate a formatted PDF document
+- **Create PR**: Opens GitHub with pre-filled PR title and body
 
 ## 🎯 Demo Examples
 
@@ -180,20 +221,27 @@ Open-Source-Scout/
 ├── app/
 │   ├── main.py              # Streamlit UI (legacy)
 │   └── api.py               # FastAPI backend (REST)
-├── frontend/                 # React + Monaco editor
+├── frontend/                 # React + Vite + Tailwind CSS
 │   ├── src/
-│   │   ├── App.jsx
-│   │   ├── api.js
-│   │   └── components/
-│   │       ├── RepoRanking.jsx  # Repository selection UI
-│   │       └── ...
+│   │   ├── main.jsx         # App entry, routes
+│   │   ├── api.js           # API client functions
+│   │   ├── components/
+│   │   │   ├── LandingPage.jsx    # Home page
+│   │   │   ├── Dashboard.jsx      # Tech stack / repo input
+│   │   │   ├── AnalysisLayout.jsx # Analysis view wrapper
+│   │   │   └── AnalysisSidebar.jsx
+│   │   └── pages/
+│   │       ├── IssueRanking.jsx       # Ranked issues view
+│   │       ├── CodeLocator.jsx        # Code location view
+│   │       ├── ContributorBriefing.jsx # Briefing + PR draft
+│   │       └── EditorWindow.jsx       # Monaco editor
 │   └── package.json
 ├── core/
 │   ├── agents/
-│   │   ├── pathfinder.py    # Repository discovery
-│   │   ├── triage_nurse.py  # Issue ranking
-│   │   ├── archaeologist.py # Code location
-│   │   └── senior_dev.py    # Fix planning
+│   │   ├── pathfinder.py    # Repository discovery (Agent 0)
+│   │   ├── triage_nurse.py  # Issue ranking (Agent 1)
+│   │   ├── archaeologist.py # Code location (Agent 2)
+│   │   └── senior_dev.py    # Fix planning (Agent 3)
 │   ├── scoring.py           # Scoring algorithm
 │   ├── orchestrator.py      # Pipeline coordination
 │   └── schemas.py           # Pydantic models
@@ -208,10 +256,11 @@ Open-Source-Scout/
 ├── tests/
 │   ├── test_scoring.py      # Scoring tests
 │   └── test_schemas.py      # Schema tests
-├── .cache/                   # Runtime cache (gitignored)
-├── .env                      # API keys (gitignored)
-├── .env.example              # Template
-└── requirements.txt          # Dependencies
+├── pyproject.toml            # Python dependencies (uv)
+├── uv.lock                   # Locked dependencies
+├── requirements.txt          # Dependencies (pip fallback)
+├── .env.example              # Environment template
+└── README.md
 ```
 
 ## 🔧 Configuration
