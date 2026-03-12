@@ -37,7 +37,7 @@ class GroqClient:
     # Available models on Groq
     MODELS = {
         # Fast models for agent 1 and 2
-        "qwen-qwq-32b": "qwen-qwq-32b",
+        "openai/gpt-oss-120b": "openai/gpt-oss-120b",
         "llama-3.3-70b": "llama-3.3-70b-versatile",
         "llama-3.1-8b": "llama-3.1-8b-instant",
         "gemma2-9b": "gemma2-9b-it",
@@ -48,7 +48,7 @@ class GroqClient:
     }
     
     # Default model assignments
-    DEFAULT_FAST_MODEL = "qwen-qwq-32b"
+    DEFAULT_FAST_MODEL = "openai/gpt-oss-120b"
     DEFAULT_POWERFUL_MODEL = "llama-3.3-70b"
     
     def __init__(self, api_key: Optional[str] = None):

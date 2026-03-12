@@ -77,7 +77,7 @@ function App() {
       const data = await runAnalyze({
         repo_url: repo.url,
         beginner_only: true,
-        fast_model: 'qwen-qwq-32b',
+        fast_model: 'openai/gpt-oss-120b',
         powerful_model: 'llama-3.3-70b'
       })
       setResults(data)
@@ -111,8 +111,8 @@ function App() {
               {repoSearchResults.tech_stack.join(', ')}
             </div>
           )}
-          <RepoRanking 
-            repos={repoSearchResults.ranked_repos} 
+          <RepoRanking
+            repos={repoSearchResults.ranked_repos}
             onSelectRepo={handleSelectRepo}
             loading={loading}
             readOnly={false}
@@ -139,9 +139,9 @@ function App() {
               {repoSearchResults.tech_stack.join(', ')}
             </div>
           )}
-          <RepoRanking 
-            repos={repoSearchResults.ranked_repos} 
-            onSelectRepo={() => {}}
+          <RepoRanking
+            repos={repoSearchResults.ranked_repos}
+            onSelectRepo={() => { }}
             loading={false}
             readOnly={true}
             selectedRepoName={selectedRepo?.full_name}
@@ -221,7 +221,7 @@ function App() {
           <li><strong>📍 Locating relevant code</strong> – We search the codebase to find where to make changes</li>
           <li><strong>📝 Generating a contribution guide</strong> – We create a detailed briefing with fix plans and PR drafts</li>
         </ol>
-        
+
         <h3>Two Ways to Start</h3>
         <div className="start-options">
           <div className="start-option">
@@ -233,7 +233,7 @@ function App() {
             <p>Tell us your skills (Python, React, etc.) and we&apos;ll find the best matching repositories for you!</p>
           </div>
         </div>
-        
+
         <h3>Getting Started</h3>
         <ol>
           <li>Choose your input mode in the sidebar (Repository URL or Tech Stack)</li>
@@ -250,10 +250,10 @@ function App() {
     <div className="app">
       <Header />
       <div className="app-body">
-        <Sidebar 
-          onAnalyze={handleAnalyze} 
+        <Sidebar
+          onAnalyze={handleAnalyze}
           onSearchRepos={handleSearchRepos}
-          loading={loading} 
+          loading={loading}
         />
         <main className="main">
           {error && (

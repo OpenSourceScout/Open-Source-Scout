@@ -34,7 +34,7 @@ class ScoutOrchestrator:
         github_client: GitHubClient,
         groq_client: GroqClient,
         cache_manager: Optional[CacheManager] = None,
-        fast_model: str = "qwen-qwq-32b",
+        fast_model: str = "openai/gpt-oss-120b",
         powerful_model: str = "llama-3.3-70b"
     ):
         """

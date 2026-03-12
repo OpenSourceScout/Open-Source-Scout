@@ -28,7 +28,7 @@ class ArchaeologistAgent(BaseAgent):
         groq_client: GroqClient,
         model: Optional[str] = None
     ):
-        super().__init__(groq_client, model or "qwen-qwq-32b")
+        super().__init__(groq_client, model or "openai/gpt-oss-120b")
     
     @property
     def name(self) -> str:

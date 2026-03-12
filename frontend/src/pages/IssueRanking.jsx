@@ -1,5 +1,6 @@
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
+import { reAnalyzeIssue } from '../api'
 
 function getDifficultyFromLabels(labels) {
   if (!labels || labels.length === 0) return null
@@ -39,32 +40,49 @@ function getScoreColor(score) {
 }
 
 export default function IssueRanking() {
-  const { analysisResult, repoInfo } = useOutletContext()
+  const { analysisResult, setAnalysisResult, repoUrl } = useOutletContext()
   const navigate = useNavigate()
   const [selectedIssue, setSelectedIssue] = useState(null)
   const [filterDifficulty, setFilterDifficulty] = useState('all')
+  const [analyzingIssue, setAnalyzingIssue] = useState(null)   // issue number being re-analyzed
+  const [analyzeError, setAnalyzeError] = useState(null)
 
-  // Use agent1_output.ranked_issues from API response
   const issues = analysisResult?.agent1_output?.ranked_issues || []
-  
-  const filteredIssues = filterDifficulty === 'all' 
-    ? issues 
+
+  const filteredIssues = filterDifficulty === 'all'
+    ? issues
     : issues.filter(i => {
-        const diff = getDifficultyFromLabels(i.labels)
-        return diff === filterDifficulty
-      })
+      const diff = getDifficultyFromLabels(i.labels)
+      return diff === filterDifficulty
+    })
 
   const handleIssueSelect = (issue) => {
     setSelectedIssue(issue)
+    setAnalyzeError(null)
   }
 
-  const handleViewCode = (issue) => {
-    navigate('/analysis/code', { 
-      state: { 
-        ...useOutletContext,
-        selectedIssue: issue 
-      } 
-    })
+  const handleViewCode = async (issue) => {
+    if (!repoUrl) {
+      setAnalyzeError('Repository URL not found. Please re-run the analysis from the Dashboard.')
+      return
+    }
+    setAnalyzingIssue(issue.number)
+    setAnalyzeError(null)
+    try {
+      const result = await reAnalyzeIssue({ repo_url: repoUrl, issue_number: issue.number })
+      // Merge new agent2/agent3 outputs into the shared analysisResult
+      setAnalysisResult({
+        ...analysisResult,
+        target_issue: result.target_issue,
+        agent2_output: result.agent2_output,
+        agent3_output: result.agent3_output,
+      })
+      navigate('/analysis/code')
+    } catch (err) {
+      setAnalyzeError(err.message || 'Re-analysis failed. Please try again.')
+    } finally {
+      setAnalyzingIssue(null)
+    }
   }
 
   if (!analysisResult) {
@@ -121,51 +139,51 @@ export default function IssueRanking() {
             {filteredIssues.map((issue, index) => {
               const difficulty = getDifficultyFromLabels(issue.labels)
               return (
-              <div
-                key={issue.number || index}
-                onClick={() => handleIssueSelect(issue)}
-                className={`bg-white border rounded-xl p-4 cursor-pointer transition-all ${
-                  selectedIssue?.number === issue.number
+                <div
+                  key={issue.number || index}
+                  onClick={() => handleIssueSelect(issue)}
+                  className={`bg-white border rounded-xl p-4 cursor-pointer transition-all ${selectedIssue?.number === issue.number
                     ? 'border-primary-300 ring-2 ring-primary-100'
                     : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400">#{issue.number}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getDifficultyColor(difficulty)}`}>
-                      {difficulty || 'Standard'}
+                    }`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-400">#{issue.number}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getDifficultyColor(difficulty)}`}>
+                        {difficulty || 'Standard'}
+                      </span>
+                    </div>
+                    <span className={`font-semibold ${getScoreColor(issue.score_total)}`}>
+                      {issue.score_total}/100
                     </span>
                   </div>
-                  <span className={`font-semibold ${getScoreColor(issue.score_total)}`}>
-                    {issue.score_total}/100
-                  </span>
+                  <h3 className="font-medium text-gray-900 mb-1 line-clamp-2">
+                    {issue.title}
+                  </h3>
+                  <p className="text-sm text-gray-500 line-clamp-2">
+                    {issue.why?.join(' ') || ''}
+                  </p>
+
+                  {/* Labels */}
+                  {issue.labels && issue.labels.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {issue.labels.slice(0, 3).map((label, i) => (
+                        <span
+                          key={i}
+                          className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs"
+                        >
+                          {label}
+                        </span>
+                      ))}
+                      {issue.labels.length > 3 && (
+                        <span className="text-xs text-gray-400">+{issue.labels.length - 3}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <h3 className="font-medium text-gray-900 mb-1 line-clamp-2">
-                  {issue.title}
-                </h3>
-                <p className="text-sm text-gray-500 line-clamp-2">
-                  {issue.why?.join(' ') || ''}
-                </p>
-                
-                {/* Labels */}
-                {issue.labels && issue.labels.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
-                    {issue.labels.slice(0, 3).map((label, i) => (
-                      <span
-                        key={i}
-                        className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs"
-                      >
-                        {label}
-                      </span>
-                    ))}
-                    {issue.labels.length > 3 && (
-                      <span className="text-xs text-gray-400">+{issue.labels.length - 3}</span>
-                    )}
-                  </div>
-                )}
-              </div>
-            )})}
+              )
+            })}
 
             {filteredIssues.length === 0 && (
               <div className="text-center py-8 text-gray-500">
@@ -188,11 +206,11 @@ export default function IssueRanking() {
                     {selectedIssue.score_total}/100
                   </span>
                 </div>
-                
+
                 <h2 className="text-xl font-semibold text-gray-900 mb-3">
                   {selectedIssue.title}
                 </h2>
-                
+
                 {/* Why selected */}
                 {selectedIssue.why && selectedIssue.why.length > 0 && (
                   <div className="mb-6">
@@ -231,7 +249,7 @@ export default function IssueRanking() {
                     <h3 className="text-sm font-medium text-gray-700 mb-3">Relevant Files</h3>
                     <div className="space-y-2">
                       {selectedIssue.relevant_files.map((file, i) => (
-                        <div 
+                        <div
                           key={i}
                           className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg text-sm font-mono text-gray-600"
                         >
@@ -244,22 +262,40 @@ export default function IssueRanking() {
                 )}
 
                 {/* Actions */}
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => handleViewCode(selectedIssue)}
-                    className="flex-1 bg-primary-500 text-white py-2 rounded-lg font-medium hover:bg-primary-600 transition-colors"
-                  >
-                    View Code Location
-                  </button>
-                  {selectedIssue.url && (
-                    <a
-                      href={selectedIssue.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+                <div className="space-y-3">
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => handleViewCode(selectedIssue)}
+                      disabled={analyzingIssue === selectedIssue.number}
+                      className="flex-1 bg-primary-500 text-white py-2 rounded-lg font-medium hover:bg-primary-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                      View on GitHub
-                    </a>
+                      {analyzingIssue === selectedIssue.number ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          Analyzing...
+                        </>
+                      ) : (
+                        '🔍 Analyze This Issue'
+                      )}
+                    </button>
+                    {selectedIssue.url && (
+                      <a
+                        href={selectedIssue.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+                      >
+                        GitHub
+                      </a>
+                    )}
+                  </div>
+                  {analyzeError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+                      {analyzeError}
+                    </div>
                   )}
                 </div>
               </div>

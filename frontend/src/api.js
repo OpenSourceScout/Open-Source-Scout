@@ -6,7 +6,7 @@ export async function searchReposByTechStack({ tech_stack, fast_model }) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       tech_stack,
-      fast_model: fast_model || 'qwen-qwq-32b',
+      fast_model: fast_model || 'openai/gpt-oss-120b',
     }),
   });
   if (!res.ok) {
@@ -23,13 +23,31 @@ export async function runAnalyze({ repo_url, beginner_only = true, fast_model, p
     body: JSON.stringify({
       repo_url,
       beginner_only,
-      fast_model: fast_model || 'qwen-qwq-32b',
+      fast_model: fast_model || 'openai/gpt-oss-120b',
       powerful_model: powerful_model || 'llama-3.3-70b',
     }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || 'Analysis failed');
+  }
+  return res.json();
+}
+
+export async function reAnalyzeIssue({ repo_url, issue_number, fast_model, powerful_model }) {
+  const res = await fetch(`${API_BASE}/re-analyze-issue`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      repo_url,
+      issue_number,
+      fast_model: fast_model || 'openai/gpt-oss-120b',
+      powerful_model: powerful_model || 'llama-3.3-70b',
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail || 'Re-analysis failed');
   }
   return res.json();
 }

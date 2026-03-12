@@ -2,7 +2,7 @@ import { useState } from 'react'
 import './Sidebar.css'
 
 const MODEL_OPTIONS = {
-  Recommended: { fast: 'qwen-qwq-32b', powerful: 'llama-3.3-70b' },
+  Recommended: { fast: 'openai/gpt-oss-120b', powerful: 'llama-3.3-70b' },
   Fast: { fast: 'llama-3.1-8b', powerful: 'llama-3.3-70b' },
   Balanced: { fast: 'llama-3.3-70b', powerful: 'llama-3.3-70b' },
 }
@@ -37,7 +37,7 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
 
   const handleGenerate = () => {
     const { fast, powerful } = MODEL_OPTIONS[modelChoice]
-    
+
     if (inputMode === INPUT_MODES.REPO) {
       onAnalyze({
         repo_url: repoUrl,
@@ -65,7 +65,7 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
     })
   }
 
-  const canGenerate = inputMode === INPUT_MODES.REPO 
+  const canGenerate = inputMode === INPUT_MODES.REPO
     ? repoUrl.trim() && !loading
     : techStackTags.length > 0 && !loading
 
@@ -73,14 +73,14 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
     <aside className="sidebar">
       <h3>🔀 Input Mode</h3>
       <div className="input-mode-toggle">
-        <button 
+        <button
           className={`mode-btn ${inputMode === INPUT_MODES.REPO ? 'active' : ''}`}
           onClick={() => setInputMode(INPUT_MODES.REPO)}
           disabled={loading}
         >
           📦 Repository URL
         </button>
-        <button 
+        <button
           className={`mode-btn ${inputMode === INPUT_MODES.TECH_STACK ? 'active' : ''}`}
           onClick={() => setInputMode(INPUT_MODES.TECH_STACK)}
           disabled={loading}
@@ -88,9 +88,9 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
           🛠️ Tech Stack
         </button>
       </div>
-      
+
       <hr />
-      
+
       {inputMode === INPUT_MODES.REPO ? (
         <>
           <h3>📝 Repository Input</h3>
@@ -119,8 +119,8 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
               {techStackTags.map(tag => (
                 <span key={tag} className="tech-tag">
                   {tag}
-                  <button 
-                    className="tag-remove" 
+                  <button
+                    className="tag-remove"
                     onClick={() => handleRemoveTag(tag)}
                     disabled={loading}
                   >
@@ -133,7 +133,7 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
           <div className="quick-add">
             <span className="quick-add-label">Quick add:</span>
             {['Python', 'JavaScript', 'React', 'TypeScript', 'Go', 'Rust'].map(tech => (
-              <button 
+              <button
                 key={tech}
                 className="quick-add-btn"
                 onClick={() => {
@@ -149,9 +149,9 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
           </div>
         </>
       )}
-      
+
       <hr />
-      
+
       <h3>⚙️ Options</h3>
       {inputMode === INPUT_MODES.REPO && (
         <label className="checkbox">
@@ -176,31 +176,31 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
           ))}
         </select>
       </label>
-      
+
       <hr />
-      
+
       <h3>📊 API Status</h3>
       <p className="api-status">
         API keys are configured on the server. Ensure GROQ_API_KEY and GITHUB_TOKEN are set in .env.
       </p>
-      
+
       <hr />
-      
+
       <button
         className="btn-generate"
         onClick={handleGenerate}
         disabled={!canGenerate}
       >
-        {loading 
-          ? '⏳ Running...' 
-          : inputMode === INPUT_MODES.REPO 
-            ? '🚀 Generate Analysis' 
+        {loading
+          ? '⏳ Running...'
+          : inputMode === INPUT_MODES.REPO
+            ? '🚀 Generate Analysis'
             : '🔍 Find Repositories'
         }
       </button>
-      
+
       <hr />
-      
+
       <h3>🎯 Try Demo Repos</h3>
       <div className="demo-buttons">
         <button onClick={() => handleDemo('https://github.com/tiangolo/fastapi')} disabled={loading}>

@@ -6,11 +6,23 @@ export default function AnalysisLayout() {
   const location = useLocation()
   const navigate = useNavigate()
   const [repoInfo, setRepoInfo] = useState(() => {
-    // Try to restore from sessionStorage
     const saved = sessionStorage.getItem('scout_repoInfo')
     return saved ? JSON.parse(saved) : null
   })
-  const [analysisResult, setAnalysisResult] = useState(() => {
+  const [repoUrl, setRepoUrl] = useState(() => {
+    const saved = sessionStorage.getItem('scout_repoUrl')
+    if (saved) return saved
+    // Fallback: reconstruct from repoInfo (owner/name) that was already stored
+    const repoInfoSaved = sessionStorage.getItem('scout_repoInfo')
+    if (repoInfoSaved) {
+      try {
+        const info = JSON.parse(repoInfoSaved)
+        if (info.owner && info.name) return `https://github.com/${info.owner}/${info.name}`
+      } catch (_) { }
+    }
+    return null
+  })
+  const [analysisResult, setAnalysisResultRaw] = useState(() => {
     const saved = sessionStorage.getItem('scout_analysisResult')
     return saved ? JSON.parse(saved) : null
   })
@@ -19,15 +31,24 @@ export default function AnalysisLayout() {
     return saved ? JSON.parse(saved) : null
   })
 
+  // Persist analysisResult to sessionStorage whenever it changes
+  const setAnalysisResult = (result) => {
+    setAnalysisResultRaw(result)
+    if (result) {
+      sessionStorage.setItem('scout_analysisResult', JSON.stringify(result))
+    } else {
+      sessionStorage.removeItem('scout_analysisResult')
+    }
+  }
+
   useEffect(() => {
-    // Get data from navigation state (when coming from Dashboard)
     if (location.state) {
       if (location.state.result) {
         setAnalysisResult(location.state.result)
-        sessionStorage.setItem('scout_analysisResult', JSON.stringify(location.state.result))
       }
       if (location.state.repoUrl) {
-        // Extract repo info from URL
+        setRepoUrl(location.state.repoUrl)
+        sessionStorage.setItem('scout_repoUrl', location.state.repoUrl)
         const match = location.state.repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/)
         if (match) {
           const info = { owner: match[1], name: match[2] }
@@ -53,21 +74,23 @@ export default function AnalysisLayout() {
   const clearAnalysis = () => {
     sessionStorage.removeItem('scout_analysisResult')
     sessionStorage.removeItem('scout_repoInfo')
+    sessionStorage.removeItem('scout_repoUrl')
     sessionStorage.removeItem('scout_rankedRepos')
-    setAnalysisResult(null)
+    setAnalysisResultRaw(null)
     setRepoInfo(null)
+    setRepoUrl(null)
     setRankedRepos(null)
   }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
-      <AnalysisSidebar 
-        repoInfo={repoInfo} 
+      <AnalysisSidebar
+        repoInfo={repoInfo}
         onBackToRepos={rankedRepos ? handleBackToRepos : null}
         onClearAnalysis={clearAnalysis}
       />
       <main className="flex-1 overflow-y-auto">
-        <Outlet context={{ analysisResult, repoInfo, rankedRepos }} />
+        <Outlet context={{ analysisResult, setAnalysisResult, repoInfo, repoUrl, rankedRepos }} />
       </main>
     </div>
   )

@@ -86,6 +86,15 @@ class ExportPdfRequest(BaseModel):
     content: str
 
 
+class ReAnalyzeRequest(BaseModel):
+    """Request body for re-running phases 2+3 for a specific issue."""
+
+    repo_url: str
+    issue_number: int
+    fast_model: str = "llama-3.3-70b"
+    powerful_model: str = "llama-3.3-70b"
+
+
 def _to_jsonable(obj):
     """Convert Pydantic models and nested structures to JSON-serializable dict."""
     if hasattr(obj, "model_dump"):
@@ -123,6 +132,90 @@ def run_analyze(body: AnalyzeRequest):
             beginner_only=body.beginner_only,
         )
         return _to_jsonable(results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/re-analyze-issue")
+def re_analyze_issue(body: ReAnalyzeRequest):
+    """
+    Re-run phases 2 (Archaeologist) + 3 (Senior Dev) for a specific issue.
+
+    Called when the user selects a different issue from the ranked list.
+    Re-uses already-fetched repo/issue data so only the LLM-heavy steps
+    (code search + briefing generation) are repeated.
+    """
+    try:
+        github_client = GitHubClient()
+        groq_client = GroqClient()
+        orchestrator = ScoutOrchestrator(
+            github_client=github_client,
+            groq_client=groq_client,
+            fast_model=body.fast_model,
+            powerful_model=body.powerful_model,
+        )
+
+        # Fetch repo & issues (fast, no LLM involved)
+        repo = github_client.get_repo(body.repo_url)
+        issues = github_client.get_issues(body.repo_url, beginner_only=False, max_issues=50)
+
+        # Find the requested issue
+        target_issue = next((i for i in issues if i.number == body.issue_number), None)
+        if target_issue is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Issue #{body.issue_number} not found in the repository."
+            )
+
+        # Phase 2 — Archaeologist
+        phase2 = orchestrator.run_phase2(body.repo_url, target_issue)
+        if not phase2.get("success"):
+            raise HTTPException(status_code=500, detail=phase2.get("error", "Phase 2 failed"))
+
+        agent2_output = phase2["agent2_output"]
+
+        # Fetch agent1_output from a fresh issue ranking (needed for phase 3 context)
+        from core.schemas import Agent1Output, RepoInfo, RankedIssue, ScoreBreakdown
+        from core.scoring import IssueScorer
+        scorer = IssueScorer()
+        ranked = scorer.rank_issues(issues, top_n=3)
+        ranked_issues = [
+            RankedIssue(
+                number=iss.number,
+                title=iss.title,
+                url=iss.html_url,
+                labels=iss.labels,
+                score_total=sr.total,
+                score_breakdown=sr.breakdown,
+                why=sr.reasons[:4],
+            )
+            for iss, sr in ranked
+        ]
+        agent1_output = Agent1Output(
+            repo=RepoInfo(
+                url=repo.html_url,
+                default_branch=repo.default_branch,
+                description=repo.description,
+                languages=list(repo.languages.keys())[:5] if repo.languages else None,
+            ),
+            ranked_issues=ranked_issues,
+            selected_issue_number=target_issue.number,
+        )
+
+        # Phase 3 — Senior Dev
+        phase3 = orchestrator.run_phase3(repo, target_issue, agent1_output, agent2_output)
+        if not phase3.get("success"):
+            raise HTTPException(status_code=500, detail=phase3.get("error", "Phase 3 failed"))
+
+        return _to_jsonable({
+            "success": True,
+            "target_issue": target_issue,
+            "agent2_output": agent2_output,
+            "agent3_output": phase3["agent3_output"],
+        })
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
