@@ -69,8 +69,8 @@ class AnalyzeRequest(BaseModel):
 
     repo_url: str
     beginner_only: bool = True
-    fast_model: str = "qwen-qwq-32b"
-    powerful_model: str = "llama-3.3-70b"
+    fast_model: str = "llama-3.3-70b"
+    powerful_model: str = "openai/gpt-oss-120b"
 
 
 class SearchReposRequest(BaseModel):
