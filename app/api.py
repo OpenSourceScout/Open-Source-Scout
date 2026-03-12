@@ -155,17 +155,21 @@ def re_analyze_issue(body: ReAnalyzeRequest):
             powerful_model=body.powerful_model,
         )
 
-        # Fetch repo & issues (fast, no LLM involved)
+        # Fetch repo metadata
         repo = github_client.get_repo(body.repo_url)
-        issues = github_client.get_issues(body.repo_url, beginner_only=False, max_issues=50)
 
-        # Find the requested issue
-        target_issue = next((i for i in issues if i.number == body.issue_number), None)
-        if target_issue is None:
+        # Fetch the specific issue directly by number — works for any issue
+        # regardless of how recently it was updated (avoids the "top 50" limit).
+        try:
+            target_issue = github_client.get_issue(body.repo_url, body.issue_number)
+        except Exception:
             raise HTTPException(
                 status_code=404,
                 detail=f"Issue #{body.issue_number} not found in the repository."
             )
+
+        # Also fetch a batch of issues for scoring/ranking context (phase 3)
+        issues = github_client.get_issues(body.repo_url, beginner_only=False, max_issues=50)
 
         # Phase 2 — Archaeologist
         phase2 = orchestrator.run_phase2(body.repo_url, target_issue)

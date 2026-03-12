@@ -273,6 +273,32 @@ class GitHubClient:
             user=data.get("user", {}).get("login")
         )
     
+    def get_issue(self, url: str, issue_number: int) -> "GitHubIssue":
+        """
+        Fetch a single issue by number.
+
+        Uses ``GET /repos/{owner}/{repo}/issues/{issue_number}`` — a direct,
+        O(1) lookup that works for any issue number regardless of how recently
+        it was updated.
+
+        Args:
+            url: GitHub repository URL.
+            issue_number: The issue number to fetch.
+
+        Returns:
+            GitHubIssue object.
+
+        Raises:
+            requests.HTTPError: If the issue doesn't exist (404) or another
+                API error occurs.
+        """
+        owner, repo = self.parse_repo_url(url)
+        resp = self.session.get(
+            f"{self.BASE_URL}/repos/{owner}/{repo}/issues/{issue_number}"
+        )
+        resp.raise_for_status()
+        return self._parse_issue(resp.json())
+
     def clone_repo(self, url: str, force_fresh: bool = False) -> Path:
         """
         Clone repository to local cache.
