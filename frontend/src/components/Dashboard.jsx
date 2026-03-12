@@ -8,14 +8,15 @@ export default function Dashboard() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const initialMode = searchParams.get('mode') || 'tech'
-  
+
   const [inputMode, setInputMode] = useState(initialMode) // 'tech' or 'repo'
   const [techTags, setTechTags] = useState([])
   const [tagInput, setTagInput] = useState('')
   const [repoUrl, setRepoUrl] = useState('')
+  const [beginnerOnly, setBeginnerOnly] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  
+
   // Results
   const [rankedRepos, setRankedRepos] = useState(null)
   const [selectedRepo, setSelectedRepo] = useState(null)
@@ -58,7 +59,7 @@ export default function Dashboard() {
     setLoading(true)
     setError(null)
     try {
-      const result = await runAnalyze({ repo_url: repoUrl })
+      const result = await runAnalyze({ repo_url: repoUrl, beginner_only: beginnerOnly })
       setAnalysisResult(result)
       // Navigate to analysis view with results
       navigate('/analysis', { state: { result, repoUrl } })
@@ -91,7 +92,7 @@ export default function Dashboard() {
       </div>
       <h2 className="text-2xl font-semibold text-gray-900 mb-2">Waiting for input...</h2>
       <p className="text-gray-500 text-center max-w-md">
-        {inputMode === 'tech' 
+        {inputMode === 'tech'
           ? 'Add your tech stack tags in the sidebar to discover matching repositories.'
           : 'Enter a GitHub repository URL in the sidebar to begin analysis.'
         }
@@ -116,7 +117,7 @@ export default function Dashboard() {
           ← Back to search
         </button>
       </div>
-      
+
       <div className="space-y-4">
         {rankedRepos.ranked_repos.map((repo, index) => (
           <div
@@ -139,9 +140,9 @@ export default function Dashboard() {
                 </span>
               </div>
             </div>
-            
+
             <p className="text-gray-600 text-sm mb-4">{repo.why_match?.join(' • ') || repo.description}</p>
-            
+
             {/* Score breakdown */}
             <div className="grid grid-cols-5 gap-2 mb-4">
               <div className="text-center p-2 bg-gray-50 rounded-lg">
@@ -165,7 +166,7 @@ export default function Dashboard() {
                 <div className="font-semibold text-gray-900">{repo.score_breakdown.issue_availability}</div>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3">
               <button
                 onClick={() => selectRepoForAnalysis(repo)}
@@ -207,21 +208,19 @@ export default function Dashboard() {
           <div className="flex bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setInputMode('tech')}
-              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                inputMode === 'tech'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
+              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${inputMode === 'tech'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+                }`}
             >
               Tech Stack
             </button>
             <button
               onClick={() => setInputMode('repo')}
-              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                inputMode === 'repo'
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
+              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${inputMode === 'repo'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+                }`}
             >
               Repository
             </button>
@@ -259,7 +258,7 @@ export default function Dashboard() {
                 placeholder="Add technology..."
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
-              
+
               {/* Quick Add */}
               <div className="mt-4">
                 <span className="text-xs text-gray-500 mb-2 block">Quick add:</span>
@@ -288,6 +287,18 @@ export default function Dashboard() {
                 placeholder="https://github.com/owner/repo"
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               />
+              <div className="mt-4 flex items-center">
+                <input
+                  type="checkbox"
+                  id="beginnerOnly"
+                  checked={beginnerOnly}
+                  onChange={(e) => setBeginnerOnly(e.target.checked)}
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                />
+                <label htmlFor="beginnerOnly" className="ml-2 block text-sm text-gray-700">
+                  Beginner-only mode
+                </label>
+              </div>
               <p className="text-xs text-gray-500 mt-2">
                 Enter a GitHub repository URL to analyze its issues and codebase.
               </p>
