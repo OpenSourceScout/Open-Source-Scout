@@ -86,13 +86,35 @@ export default function ContributorBriefing() {
     )
   }
 
+  if (!analysisResult.target_issue) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl">📝</span>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">No Issue Selected</h2>
+          <p className="text-gray-500 mb-4">
+            Select an issue and click <strong>"Analyse This Issue"</strong> to see the contributor briefing.
+          </p>
+          <button
+            onClick={() => navigate('/analysis/issues')}
+            className="bg-primary-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-600"
+          >
+            Go to Issue Ranking
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   // Parse briefing markdown into sections - improved parsing
   const parseImplementationPlan = (markdown) => {
     if (!markdown) return []
     const lines = markdown.split('\n')
     const steps = []
     let currentStep = null
-    
+
     for (const line of lines) {
       // Match numbered steps like "1. Step Title" or "**1. Step Title**"
       const match = line.match(/^\*?\*?(\d+)\.\s*\*?\*?\s*(.+)/)
@@ -105,10 +127,10 @@ export default function ContributorBriefing() {
           }
           steps.push(currentStep)
         }
-        currentStep = { 
-          number: match[1], 
+        currentStep = {
+          number: match[1],
           title: match[2].replace(/\*\*/g, '').replace(/`/g, '').trim().substring(0, 80),
-          description: '' 
+          description: ''
         }
       } else if (currentStep && line.trim() && !line.startsWith('#') && !line.startsWith('*') && !line.startsWith('-')) {
         // Only add non-list content as description, limit accumulation
@@ -177,7 +199,7 @@ export default function ContributorBriefing() {
         {/* Left Column - Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-3xl space-y-6">
-            
+
             {/* Overview Section */}
             <section>
               <h2 className="text-lg font-semibold text-gray-900 mb-3">Overview</h2>
@@ -216,7 +238,7 @@ export default function ContributorBriefing() {
               <p className="text-sm text-gray-600 mb-4">
                 Clone the repository and install dependencies.
               </p>
-              
+
               {/* Clone Commands */}
               <div className="bg-gray-900 rounded-lg overflow-hidden mb-4">
                 <div className="p-4 font-mono text-sm text-gray-300 space-y-1">
@@ -287,7 +309,7 @@ export default function ContributorBriefing() {
         <div className="w-96 border-l border-gray-200 bg-white flex-shrink-0 overflow-y-auto">
           <div className="p-6">
             <div className="space-y-6">
-              
+
               {/* PR Draft Card */}
               {briefing.pr_draft && (
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -300,7 +322,7 @@ export default function ContributorBriefing() {
                       EDITABLE
                     </span>
                   </div>
-                  
+
                   <div className="p-4 space-y-4">
                     <div>
                       <label className="text-xs font-medium text-gray-400 uppercase tracking-wide">Branch Name</label>
@@ -308,7 +330,7 @@ export default function ContributorBriefing() {
                         {briefing.pr_draft.branch_name || 'feature/fix-issue'}
                       </div>
                     </div>
-                    
+
                     <div>
                       <label className="text-xs font-medium text-gray-400 uppercase tracking-wide flex items-center gap-1">
                         Commit Message
@@ -321,7 +343,7 @@ export default function ContributorBriefing() {
                         className="mt-1 w-full p-2 bg-white border border-gray-200 rounded-lg font-mono text-sm text-gray-700 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
                       />
                     </div>
-                    
+
                     <div>
                       <label className="text-xs font-medium text-gray-400 uppercase tracking-wide flex items-center gap-1">
                         PR Title
@@ -334,7 +356,7 @@ export default function ContributorBriefing() {
                         className="mt-1 w-full p-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 font-medium focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
                       />
                     </div>
-                    
+
                     <div>
                       <label className="text-xs font-medium text-gray-400 uppercase tracking-wide flex items-center gap-1">
                         PR Body
@@ -353,13 +375,13 @@ export default function ContributorBriefing() {
                         {showFullPrBody ? 'Show less' : 'Expand to edit full body'}
                       </button>
                     </div>
-                    
+
                     <button
                       onClick={handleCreatePR}
                       className="w-full bg-green-500 hover:bg-green-600 text-white py-2.5 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
                     >
                       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
                       </svg>
                       Create PR on GitHub
                     </button>

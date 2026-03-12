@@ -15,10 +15,10 @@ export default function CodeLocator() {
   const context = useOutletContext()
   const analysisResult = context?.analysisResult
   const repoInfo = context?.repoInfo
-  
+
   const location = useLocation()
   const navigate = useNavigate()
-  
+
   const [selectedFile, setSelectedFile] = useState(null)
   const [fileContent, setFileContent] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -39,7 +39,7 @@ export default function CodeLocator() {
   const handleFileSelect = async (loc) => {
     setSelectedFile(loc)
     setError(null)
-    
+
     // Check if it's a binary file
     if (isBinaryFile(loc?.path)) {
       setFileContent(null)
@@ -47,9 +47,9 @@ export default function CodeLocator() {
       setLoading(false)
       return
     }
-    
+
     setLoading(true)
-    
+
     try {
       if (repoInfo && loc?.path) {
         const response = await getFileContent(repoInfo.owner, repoInfo.name, loc.path)
@@ -101,6 +101,28 @@ export default function CodeLocator() {
     )
   }
 
+  if (!analysisResult.target_issue) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <span className="text-2xl">📍</span>
+          </div>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">No Issue Selected</h2>
+          <p className="text-gray-500 mb-4">
+            Select an issue and click <strong>"Analyse This Issue"</strong> to see relevant code locations.
+          </p>
+          <button
+            onClick={() => navigate('/analysis/issues')}
+            className="bg-primary-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-600"
+          >
+            Go to Issue Ranking
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -138,11 +160,10 @@ export default function CodeLocator() {
                 <div
                   key={index}
                   onClick={() => handleFileSelect(loc)}
-                  className={`p-3 rounded-lg cursor-pointer transition-all ${
-                    selectedFile === loc
+                  className={`p-3 rounded-lg cursor-pointer transition-all ${selectedFile === loc
                       ? 'bg-primary-50 border border-primary-200'
                       : 'bg-gray-50 border border-transparent hover:bg-gray-100'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-sm">📄</span>
@@ -222,7 +243,7 @@ export default function CodeLocator() {
                         className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm transition-colors"
                       >
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+                          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
                         </svg>
                         View on GitHub
                       </a>

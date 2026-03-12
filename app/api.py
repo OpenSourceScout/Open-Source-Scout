@@ -127,7 +127,7 @@ def run_analyze(body: AnalyzeRequest):
             fast_model=body.fast_model,
             powerful_model=body.powerful_model,
         )
-        results = orchestrator.run(
+        results = orchestrator.run_phase1(
             repo_url=body.repo_url,
             beginner_only=body.beginner_only,
         )
