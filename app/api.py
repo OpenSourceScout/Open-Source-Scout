@@ -77,7 +77,7 @@ class SearchReposRequest(BaseModel):
     """Request body for searching repositories by tech stack."""
     
     tech_stack: list[str]
-    fast_model: str = "qwen-qwq-32b"
+    fast_model: str = "openai/gpt-oss-120b"
 
 
 class ExportPdfRequest(BaseModel):
