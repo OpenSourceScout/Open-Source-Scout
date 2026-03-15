@@ -1,3 +1,4 @@
+import { Search, FolderOpen, ClipboardList, Circle } from 'lucide-react'
 import './CodeLocator.css'
 
 export default function CodeLocator({ results }) {
@@ -30,12 +31,15 @@ export default function CodeLocator({ results }) {
     )
   }
 
-  const confidenceColor = { High: '🟢', Medium: '🟡', Low: '🔴' }
+  const ConfidenceDot = ({ level }) => {
+    const colors = { High: 'text-green-500', Medium: 'text-yellow-500', Low: 'text-red-500' }
+    return <Circle className={`w-3 h-3 inline fill-current ${colors[level] || 'text-gray-400'}`} />
+  }
 
   return (
     <div className="code-locator">
-      <h3>🔍 Code Analysis for Issue #{agent2.issue_number}</h3>
-      <p><strong>Confidence:</strong> {confidenceColor[agent2.confidence] || '⚪'} {agent2.confidence}</p>
+      <h3><Search className="w-4 h-4 inline mr-1" /> Code Analysis for Issue #{agent2.issue_number}</h3>
+      <p><strong>Confidence:</strong> <ConfidenceDot level={agent2.confidence} /> {agent2.confidence}</p>
       {agent2.keywords?.length > 0 && (
         <p><strong>Search Keywords:</strong> {agent2.keywords.map((k) => `\`${k}\``).join(', ')}</p>
       )}
@@ -69,7 +73,7 @@ export default function CodeLocator({ results }) {
       {agent2.next_files_to_check?.length > 0 && (
         <>
           <hr />
-          <h4>📋 Additional Files to Check</h4>
+          <h4><ClipboardList className="w-4 h-4 inline mr-1" /> Additional Files to Check</h4>
           <ul>
             {agent2.next_files_to_check.map((f, i) => (
               <li key={i}><code>{f}</code></li>

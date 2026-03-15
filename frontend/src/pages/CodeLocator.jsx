@@ -1,5 +1,6 @@
 import { useOutletContext, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect } from 'react'
+import { MapPin, FileCode, Package, AlertTriangle, Pencil } from 'lucide-react'
 import { getFileContent } from '../api'
 
 // Binary file extensions that shouldn't be loaded as text
@@ -86,7 +87,7 @@ export default function CodeLocator() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">📍</span>
+            <MapPin className="w-8 h-8 text-gray-500" />
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">No Analysis Data</h2>
           <p className="text-gray-500 mb-4">Run an analysis first to see code locations.</p>
@@ -106,7 +107,7 @@ export default function CodeLocator() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">📍</span>
+            <MapPin className="w-8 h-8 text-gray-500" />
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">No Issue Selected</h2>
           <p className="text-gray-500 mb-4">
@@ -142,7 +143,7 @@ export default function CodeLocator() {
             disabled={!selectedFile}
             className="bg-primary-500 text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            <span>✏️</span> Open in Editor
+            <Pencil className="w-4 h-4" /> Open in Editor
           </button>
         </div>
       </header>
@@ -166,7 +167,7 @@ export default function CodeLocator() {
                     }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="text-sm">📄</span>
+                    <FileCode className="w-4 h-4 text-gray-600 shrink-0" />
                     <span className="font-mono text-sm text-gray-900 truncate">
                       {loc.path?.split('/').pop() || loc.path || 'Unknown file'}
                     </span>
@@ -199,7 +200,7 @@ export default function CodeLocator() {
               {/* File Header */}
               <div className="bg-gray-800 px-4 py-2 flex items-center justify-between border-b border-gray-700">
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-400">📄</span>
+                  <FileCode className="w-4 h-4 text-gray-400 shrink-0" />
                   <span className="font-mono text-sm text-gray-300">
                     {selectedFile.path}
                   </span>
@@ -230,7 +231,7 @@ export default function CodeLocator() {
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center px-8">
                       <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                        <span className="text-2xl">{isBinaryFile(selectedFile?.path) ? '📦' : '⚠️'}</span>
+                        {isBinaryFile(selectedFile?.path) ? <Package className="w-8 h-8 text-gray-400" /> : <AlertTriangle className="w-8 h-8 text-amber-400" />}
                       </div>
                       <p className="text-amber-400 mb-2 font-medium">
                         {isBinaryFile(selectedFile?.path) ? 'Binary File' : 'Failed to load file'}
@@ -280,7 +281,7 @@ export default function CodeLocator() {
           ) : (
             <div className="flex items-center justify-center h-full text-gray-500">
               <div className="text-center">
-                <span className="text-4xl mb-3 block">📍</span>
+                <MapPin className="w-12 h-12 text-gray-400 mb-3 mx-auto block" />
                 <p>Select a file to view code</p>
               </div>
             </div>

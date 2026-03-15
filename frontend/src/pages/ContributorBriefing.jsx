@@ -1,5 +1,6 @@
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
+import { FileText, Download, FileDown, Package, ClipboardList, Rocket, Clock, MapPin, AlertTriangle, Github } from 'lucide-react'
 import { exportPdf } from '../api'
 
 export default function ContributorBriefing() {
@@ -80,7 +81,7 @@ export default function ContributorBriefing() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">📝</span>
+            <FileText className="w-8 h-8 text-gray-500" />
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">No Analysis Data</h2>
           <p className="text-gray-500 mb-4">Run an analysis first to see the contributor briefing.</p>
@@ -100,7 +101,7 @@ export default function ContributorBriefing() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">📝</span>
+            <FileText className="w-8 h-8 text-gray-500" />
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">No Issue Selected</h2>
           <p className="text-gray-500 mb-4">
@@ -178,7 +179,7 @@ export default function ContributorBriefing() {
               disabled={!briefing.briefing_markdown}
               className="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2"
             >
-              <span>📥</span> Markdown
+              <Download className="w-4 h-4" /> Markdown
             </button>
             <button
               onClick={handleExportPdf}
@@ -195,7 +196,7 @@ export default function ContributorBriefing() {
                 </>
               ) : (
                 <>
-                  <span>📄</span> Export to PDF
+                  <FileDown className="w-4 h-4" /> Export to PDF
                 </>
               )}
             </button>
@@ -225,7 +226,7 @@ export default function ContributorBriefing() {
             {briefing.risk_notes && briefing.risk_notes.length > 0 && (
               <div className="bg-amber-50 border-l-4 border-amber-400 rounded-r-lg p-4">
                 <div className="flex items-start gap-3">
-                  <span className="text-amber-500 text-xl flex-shrink-0">⚠️</span>
+                  <AlertTriangle className="text-amber-500 w-5 h-5 flex-shrink-0" />
                   <div>
                     <h3 className="font-semibold text-amber-800 mb-2">Risk Note</h3>
                     <div className="text-sm text-amber-700 space-y-1">
@@ -241,7 +242,7 @@ export default function ContributorBriefing() {
             {/* Setup Instructions */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <span className="text-gray-400">📦</span>
+                <Package className="w-5 h-5 text-gray-400" />
                 <h2 className="text-lg font-semibold text-gray-900">Setup Instructions</h2>
               </div>
               <p className="text-sm text-gray-600 mb-4">
@@ -276,7 +277,7 @@ export default function ContributorBriefing() {
             {implementationSteps.length > 0 && (
               <section>
                 <div className="flex items-center gap-2 mb-4">
-                  <span className="text-gray-400">📋</span>
+                  <ClipboardList className="w-5 h-5 text-gray-400" />
                   <h2 className="text-lg font-semibold text-gray-900">Implementation Plan</h2>
                 </div>
                 <div className="space-y-4">
@@ -324,7 +325,7 @@ export default function ContributorBriefing() {
                 <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50">
                     <div className="flex items-center gap-2">
-                      <span className="text-green-500">🚀</span>
+                      <Rocket className="w-5 h-5 text-green-500" />
                       <span className="font-medium text-gray-900">PR Draft</span>
                     </div>
                     <span className="text-xs bg-primary-100 text-primary-700 px-2 py-1 rounded-full font-medium">
@@ -392,9 +393,7 @@ export default function ContributorBriefing() {
                         rel="noreferrer"
                         className="w-full bg-green-500 hover:bg-green-600 text-white py-2.5 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
                       >
-                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-                        </svg>
+                        <Github className="w-5 h-5" />
                         Create PR on GitHub
                       </a>
                     ) : (
@@ -418,7 +417,7 @@ export default function ContributorBriefing() {
                 <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-200">
                   <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Est. Time</div>
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-primary-500">⏱</span>
+                    <Clock className="w-5 h-5 text-primary-500" />
                     <span className="font-semibold text-gray-900">2-3 hrs</span>
                   </div>
                 </div>
@@ -430,13 +429,13 @@ export default function ContributorBriefing() {
                   onClick={() => navigate('/analysis/code')}
                   className="w-full border border-gray-200 rounded-lg py-2.5 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
                 >
-                  <span>📍</span> View Code Locations
+                  <MapPin className="w-4 h-4" /> View Code Locations
                 </button>
                 <button
                   onClick={() => navigate('/analysis/issues')}
                   className="w-full border border-gray-200 rounded-lg py-2.5 px-3 text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2 transition-colors"
                 >
-                  <span>📋</span> View Related Issues
+                  <ClipboardList className="w-4 h-4" /> View Related Issues
                 </button>
               </div>
             </div>

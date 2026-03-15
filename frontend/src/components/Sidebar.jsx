@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Shuffle, Package, Wrench, FileText, Settings, Leaf, Bot, BarChart2, Loader2, Rocket, Search, Target } from 'lucide-react'
 import './Sidebar.css'
 
 const MODEL_OPTIONS = {
@@ -71,21 +72,21 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
 
   return (
     <aside className="sidebar">
-      <h3>🔀 Input Mode</h3>
+      <h3><Shuffle className="inline w-4 h-4 mr-1 -mt-0.5 align-middle" /> Input Mode</h3>
       <div className="input-mode-toggle">
         <button
           className={`mode-btn ${inputMode === INPUT_MODES.REPO ? 'active' : ''}`}
           onClick={() => setInputMode(INPUT_MODES.REPO)}
           disabled={loading}
         >
-          📦 Repository URL
+          <Package className="inline w-4 h-4 mr-1 -mt-0.5 align-middle" /> Repository URL
         </button>
         <button
           className={`mode-btn ${inputMode === INPUT_MODES.TECH_STACK ? 'active' : ''}`}
           onClick={() => setInputMode(INPUT_MODES.TECH_STACK)}
           disabled={loading}
         >
-          🛠️ Tech Stack
+          <Wrench className="inline w-4 h-4 mr-1 -mt-0.5 align-middle" /> Tech Stack
         </button>
       </div>
 
@@ -93,7 +94,7 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
 
       {inputMode === INPUT_MODES.REPO ? (
         <>
-          <h3>📝 Repository Input</h3>
+          <h3><FileText className="inline w-4 h-4 mr-1 -mt-0.5 align-middle" /> Repository Input</h3>
           <input
             type="text"
             placeholder="https://github.com/owner/repo"
@@ -104,7 +105,7 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
         </>
       ) : (
         <>
-          <h3>🛠️ Your Tech Stack</h3>
+          <h3><Wrench className="inline w-4 h-4 mr-1 -mt-0.5 align-middle" /> Your Tech Stack</h3>
           <p className="input-hint">Enter technologies/skills you know (press Enter to add)</p>
           <input
             type="text"
@@ -152,7 +153,7 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
 
       <hr />
 
-      <h3>⚙️ Options</h3>
+      <h3><Settings className="inline w-4 h-4 mr-1 -mt-0.5 align-middle" /> Options</h3>
       {inputMode === INPUT_MODES.REPO && (
         <label className="checkbox">
           <input
@@ -161,11 +162,11 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
             onChange={(e) => setBeginnerOnly(e.target.checked)}
             disabled={loading}
           />
-          🌱 Beginner-only mode
+          <Leaf className="inline w-4 h-4 mr-1 -mt-0.5 align-middle" /> Beginner-only mode
         </label>
       )}
       <label className="select-label">
-        🤖 Model Selection
+        <Bot className="inline w-4 h-4 mr-1 -mt-0.5 align-middle" /> Model Selection
         <select
           value={modelChoice}
           onChange={(e) => setModelChoice(e.target.value)}
@@ -179,7 +180,7 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
 
       <hr />
 
-      <h3>📊 API Status</h3>
+      <h3><BarChart2 className="inline w-4 h-4 mr-1 -mt-0.5 align-middle" /> API Status</h3>
       <p className="api-status">
         API keys are configured on the server. Ensure GROQ_API_KEY and GITHUB_TOKEN are set in .env.
       </p>
@@ -192,16 +193,16 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
         disabled={!canGenerate}
       >
         {loading
-          ? '⏳ Running...'
+          ? <><Loader2 className="inline w-4 h-4 mr-1 animate-spin" /> Running...</>
           : inputMode === INPUT_MODES.REPO
-            ? '🚀 Generate Analysis'
-            : '🔍 Find Repositories'
+            ? <><Rocket className="inline w-4 h-4 mr-1" /> Generate Analysis</>
+            : <><Search className="inline w-4 h-4 mr-1" /> Find Repositories</>
         }
       </button>
 
       <hr />
 
-      <h3>🎯 Try Demo Repos</h3>
+      <h3><Target className="inline w-4 h-4 mr-1 -mt-0.5 align-middle" /> Try Demo Repos</h3>
       <div className="demo-buttons">
         <button onClick={() => handleDemo('https://github.com/tiangolo/fastapi')} disabled={loading}>
           FastAPI

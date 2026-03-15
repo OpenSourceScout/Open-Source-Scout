@@ -1,3 +1,4 @@
+import { Target, Monitor, Star, ClipboardList, Check, Loader2, Rocket } from 'lucide-react'
 import './RepoRanking.css'
 
 /**
@@ -24,7 +25,7 @@ export default function RepoRanking({ repos, onSelectRepo, loading, readOnly = f
   return (
     <div className="repo-ranking">
       <div className="repo-ranking-header">
-        <h2>🎯 Top Matching Repositories</h2>
+        <h2><Target className="w-5 h-5 inline mr-1" /> Top Matching Repositories</h2>
         <p>Based on your tech stack, we found these beginner-friendly projects:</p>
       </div>
 
@@ -41,7 +42,7 @@ export default function RepoRanking({ repos, onSelectRepo, loading, readOnly = f
                     <a href={repo.url} target="_blank" rel="noreferrer">
                       {repo.full_name}
                     </a>
-                    {isSelected && <span className="selected-badge">✓ Selected</span>}
+                    {isSelected && <span className="selected-badge"><Check className="w-3 h-3 inline" /> Selected</span>}
                   </h3>
                   <div 
                     className="repo-score"
@@ -56,14 +57,14 @@ export default function RepoRanking({ repos, onSelectRepo, loading, readOnly = f
                 <div className="repo-meta">
                   {repo.language && (
                     <span className="meta-item language">
-                      💻 {repo.language}
+                      <Monitor className="w-4 h-4 inline" /> {repo.language}
                     </span>
                   )}
                   <span className="meta-item stars">
-                    ⭐ {repo.stars.toLocaleString()}
+                    <Star className="w-4 h-4 inline" /> {repo.stars.toLocaleString()}
                   </span>
                   <span className="meta-item issues">
-                    📋 {repo.open_issues} issues
+                    <ClipboardList className="w-4 h-4 inline" /> {repo.open_issues} issues
                   </span>
                 </div>
 
@@ -123,7 +124,7 @@ export default function RepoRanking({ repos, onSelectRepo, loading, readOnly = f
                 {readOnly ? (
                   isSelected ? (
                     <div className="selected-indicator">
-                      ✓ Analyzed
+                      <Check className="w-4 h-4 inline" /> Analyzed
                     </div>
                   ) : (
                     <div className="disabled-indicator">
@@ -136,7 +137,7 @@ export default function RepoRanking({ repos, onSelectRepo, loading, readOnly = f
                     onClick={() => onSelectRepo(repo)}
                     disabled={loading}
                   >
-                    {loading ? '⏳ Loading...' : '🚀 Select & Analyze'}
+                    {loading ? <><Loader2 className="w-4 h-4 inline animate-spin mr-1" /> Loading...</> : <><Rocket className="w-4 h-4 inline mr-1" /> Select & Analyze</>}
                   </button>
                 )}
               </div>

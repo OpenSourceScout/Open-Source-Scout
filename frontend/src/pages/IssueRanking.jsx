@@ -1,5 +1,6 @@
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
+import { ClipboardList, FileText, Search, ArrowLeft } from 'lucide-react'
 import { reAnalyzeIssue } from '../api'
 
 function getDifficultyFromLabels(labels) {
@@ -90,7 +91,7 @@ export default function IssueRanking() {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl">📋</span>
+            <ClipboardList className="w-8 h-8 text-gray-600" />
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">No Analysis Data</h2>
           <p className="text-gray-500 mb-4">Run an analysis first to see issue rankings.</p>
@@ -253,7 +254,7 @@ export default function IssueRanking() {
                           key={i}
                           className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg text-sm font-mono text-gray-600"
                         >
-                          <span>📄</span>
+                          <FileText className="w-4 h-4 shrink-0" />
                           {file}
                         </div>
                       ))}
@@ -278,7 +279,7 @@ export default function IssueRanking() {
                           Analyzing...
                         </>
                       ) : (
-                        '🔍 Analyze This Issue'
+                        'Analyze This Issue'
                       )}
                     </button>
                     {selectedIssue.url && (
@@ -303,7 +304,7 @@ export default function IssueRanking() {
           ) : (
             <div className="flex items-center justify-center h-full text-gray-500">
               <div className="text-center">
-                <span className="text-4xl mb-3 block">👈</span>
+                <ArrowLeft className="w-12 h-12 text-gray-400 mx-auto mb-3 block" />
                 <p>Select an issue to view details</p>
               </div>
             </div>

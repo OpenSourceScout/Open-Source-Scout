@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { FileDown, FileText, ClipboardList, FlaskConical, AlertTriangle } from 'lucide-react'
 import { exportPdf } from '../api'
 import './Briefing.css'
 
@@ -55,10 +56,10 @@ ${pr.pr_body}`
   return (
     <div className="briefing">
       <div className="briefing-actions">
-        <button className="btn" onClick={handleDownloadMd}>📄 Download Markdown</button>
-        <button className="btn" onClick={handleDownloadPdf}>📑 Download PDF</button>
+        <button className="btn" onClick={handleDownloadMd}><FileDown className="w-4 h-4 inline mr-1" /> Download Markdown</button>
+        <button className="btn" onClick={handleDownloadPdf}><FileText className="w-4 h-4 inline mr-1" /> Download PDF</button>
         <button className="btn" onClick={handleCopyPR}>
-          📋 Copy PR Draft {copyMsg && `(${copyMsg})`}
+          <ClipboardList className="w-4 h-4 inline mr-1" /> Copy PR Draft {copyMsg && `(${copyMsg})`}
         </button>
       </div>
       <hr />
@@ -66,7 +67,7 @@ ${pr.pr_body}`
         <ReactMarkdown>{agent3.briefing_markdown}</ReactMarkdown>
       </div>
       <hr />
-      <h4>📝 PR Draft</h4>
+      <h4><FileText className="w-4 h-4 inline mr-1" /> PR Draft</h4>
       <pre className="pr-commands">
         <code>git checkout -b {pr.branch_name}</code>
         <code>git commit -m {JSON.stringify(pr.commit_message)}</code>
@@ -80,7 +81,7 @@ ${pr.pr_body}`
       </details>
       {agent3.test_commands?.length > 0 && (
         <>
-          <h4>🧪 Test Commands</h4>
+          <h4><FlaskConical className="w-4 h-4 inline mr-1" /> Test Commands</h4>
           {agent3.test_commands.map((cmd, i) => (
             <pre key={i} className="pr-commands"><code>{cmd}</code></pre>
           ))}
@@ -88,7 +89,7 @@ ${pr.pr_body}`
       )}
       {agent3.risk_notes?.length > 0 && (
         <>
-          <h4>⚠️ Risk Notes</h4>
+          <h4><AlertTriangle className="w-4 h-4 inline mr-1" /> Risk Notes</h4>
           <ul className="risk-notes">
             {agent3.risk_notes.map((note, i) => (
               <li key={i}>{note}</li>

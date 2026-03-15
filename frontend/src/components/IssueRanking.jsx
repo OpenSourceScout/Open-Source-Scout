@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Trophy } from 'lucide-react'
 import './IssueRanking.css'
 
 export default function IssueRanking({ results }) {
@@ -17,7 +18,7 @@ export default function IssueRanking({ results }) {
 
   return (
     <div className="issue-ranking">
-      <h3>🏆 Top Ranked Issues</h3>
+      <h3><Trophy className="w-5 h-5 inline mr-1" /> Top Ranked Issues</h3>
       {rankedIssues.map((issue, i) => {
         const isExpanded = expanded === i + 1
         const scoreClass = issue.score_total >= 70 ? 'high' : issue.score_total >= 50 ? 'medium' : 'low'

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { Search, Rocket, ChevronLeft, Settings } from 'lucide-react'
 import { searchReposByTechStack, runAnalyze } from '../api'
 
 const QUICK_ADD_TAGS = ['Python', 'JavaScript', 'React', 'Node.js', 'TypeScript', 'Go', 'Java', 'Rust']
@@ -328,7 +329,7 @@ export default function Dashboard() {
               </>
             ) : (
               <>
-                {inputMode === 'tech' ? '🔍 Find Repositories' : '🚀 Analyze Repository'}
+                {inputMode === 'tech' ? <><Search className="w-4 h-4" /> Find Repositories</> : <><Rocket className="w-4 h-4" /> Analyze Repository</>}
               </>
             )}
           </button>
@@ -347,7 +348,7 @@ export default function Dashboard() {
           </div>
           <div className="flex items-center gap-4">
             <button className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
-              <span>⚙️</span>
+              <Settings className="w-5 h-5" />
             </button>
             <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
           </div>

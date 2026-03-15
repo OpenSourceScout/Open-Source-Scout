@@ -1,16 +1,27 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import {
+  LayoutDashboard,
+  FolderOpen,
+  ClipboardList,
+  MapPin,
+  FileText,
+  Settings,
+  User,
+  Package,
+  ChevronLeft,
+} from 'lucide-react'
 
 const NAV_ITEMS = [
-  { path: '/analysis', label: 'Dashboard', icon: '📊' },
-  { path: '/analysis/repositories', label: 'Repositories', icon: '📁' },
-  { path: '/analysis/issues', label: 'Issue Ranking', icon: '📋' },
-  { path: '/analysis/code', label: 'Code Locator', icon: '📍' },
-  { path: '/analysis/briefing', label: 'Contributor Briefing', icon: '📝' },
+  { path: '/analysis', label: 'Dashboard', Icon: LayoutDashboard },
+  { path: '/analysis/repositories', label: 'Repositories', Icon: FolderOpen },
+  { path: '/analysis/issues', label: 'Issue Ranking', Icon: ClipboardList },
+  { path: '/analysis/code', label: 'Code Locator', Icon: MapPin },
+  { path: '/analysis/briefing', label: 'Contributor Briefing', Icon: FileText },
 ]
 
 const BOTTOM_NAV = [
-  { path: '/settings', label: 'Settings', icon: '⚙️' },
-  { path: '/profile', label: 'Profile', icon: '👤' },
+  { path: '/settings', label: 'Settings', Icon: Settings },
+  { path: '/profile', label: 'Profile', Icon: User },
 ]
 
 export default function AnalysisSidebar({ repoInfo, onBackToRepos }) {
@@ -37,7 +48,7 @@ export default function AnalysisSidebar({ repoInfo, onBackToRepos }) {
         <div className="p-4 border-b border-gray-100 bg-gray-50">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
-              <span className="text-gray-500">📦</span>
+              <Package className="w-5 h-5 text-gray-500" />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="font-medium text-gray-900 truncate">{repoInfo.name}</h3>
@@ -70,7 +81,7 @@ export default function AnalysisSidebar({ repoInfo, onBackToRepos }) {
                 }`
               }
             >
-              <span>{item.icon}</span>
+              <item.Icon className="w-4 h-4 shrink-0" />
               <span>{item.label}</span>
             </NavLink>
           ))}
@@ -92,7 +103,7 @@ export default function AnalysisSidebar({ repoInfo, onBackToRepos }) {
                 }`
               }
             >
-              <span>{item.icon}</span>
+              <item.Icon className="w-4 h-4 shrink-0" />
               <span>{item.label}</span>
             </NavLink>
           ))}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import MonacoEditor from '@monaco-editor/react'
+import { FileCode, Pencil } from 'lucide-react'
 import { getFileContent, pushFile } from '../api'
 
 const EXT_TO_LANG = {
@@ -216,7 +217,7 @@ export default function EditorWindow() {
       {/* Current file indicator */}
       {pathParam && (
         <div className="bg-gray-800 border-b border-gray-700 px-6 py-2 flex items-center gap-2">
-          <span className="text-gray-400">📄</span>
+          <FileCode className="w-4 h-4 text-gray-400" />
           <span className="font-mono text-sm text-gray-300">{ownerParam}/{repoParam}/{pathParam}</span>
           <span className="text-gray-500 text-xs ml-2">on {refParam}</span>
         </div>
@@ -277,7 +278,7 @@ export default function EditorWindow() {
           <div className="flex items-center justify-center h-full text-gray-500">
             <div className="text-center">
               <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">✏️</span>
+                <Pencil className="w-8 h-8 text-gray-400" />
               </div>
               <h2 className="text-xl font-semibold text-gray-300 mb-2">
                 {loading ? 'Loading file...' : 'No file loaded'}

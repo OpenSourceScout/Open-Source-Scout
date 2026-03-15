@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { Rocket, ClipboardList, Search, BarChart2, MapPin, FileText, File, Sparkles, Star, ChevronRight } from 'lucide-react'
 
 export default function LandingPage() {
   const navigate = useNavigate()
@@ -34,7 +35,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto flex items-center gap-12">
           <div className="flex-1">
             <div className="inline-flex items-center gap-2 bg-primary-100 text-primary-700 px-3 py-1 rounded-full text-sm mb-6">
-              <span>✨</span>
+              <Sparkles className="w-4 h-4" />
               <span>NEW: AI-POWERED PR DRAFTS</span>
             </div>
             <h1 className="text-5xl font-bold text-gray-900 leading-tight mb-6">
@@ -51,10 +52,10 @@ export default function LandingPage() {
                 onClick={() => navigate('/dashboard')}
                 className="bg-primary-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-primary-600 transition-colors flex items-center gap-2"
               >
-                Get Started Free <span>🚀</span>
+                Get Started Free <Rocket className="w-4 h-4 inline" />
               </button>
               <button className="flex items-center gap-2 text-gray-700 px-6 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors">
-                Watch Demo <span>▶</span>
+                Watch Demo <ChevronRight className="w-4 h-4 inline" />
               </button>
             </div>
           </div>
@@ -89,7 +90,7 @@ export default function LandingPage() {
             >
               <div className="h-40 bg-primary-100 rounded-lg mb-6"></div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                I have a repository <span>📋</span>
+                I have a repository <ClipboardList className="w-5 h-5" />
               </h3>
               <p className="text-gray-600 mb-4">
                 Index your codebase to provide AI-powered onboarding, auto-categorized issues, and visual contribution paths for new developers.
@@ -105,7 +106,7 @@ export default function LandingPage() {
             >
               <div className="h-40 bg-purple-100 rounded-lg mb-6"></div>
               <h3 className="text-xl font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                Find repos matching my skills <span>🔍</span>
+                Find repos matching my skills <Search className="w-5 h-5" />
               </h3>
               <p className="text-gray-600 mb-4">
                 Connect your GitHub profile and we'll match your tech stack with high-impact issues across thousands of vetted open source projects.
@@ -129,7 +130,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-4 gap-6">
             <div className="bg-white rounded-xl p-6 text-left">
               <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center mb-4">
-                <span className="text-primary-500">📊</span>
+                <BarChart2 className="w-5 h-5 text-primary-500" />
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">Smart Issue Ranking</h3>
               <p className="text-gray-600 text-sm">
@@ -139,7 +140,7 @@ export default function LandingPage() {
             
             <div className="bg-white rounded-xl p-6 text-left">
               <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center mb-4">
-                <span className="text-primary-500">📍</span>
+                <MapPin className="w-5 h-5 text-primary-500" />
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">Code Location</h3>
               <p className="text-gray-600 text-sm">
@@ -149,7 +150,7 @@ export default function LandingPage() {
             
             <div className="bg-white rounded-xl p-6 text-left">
               <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center mb-4">
-                <span className="text-primary-500">📝</span>
+                <FileText className="w-5 h-5 text-primary-500" />
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">PR Draft Generation</h3>
               <p className="text-gray-600 text-sm">
@@ -159,7 +160,7 @@ export default function LandingPage() {
             
             <div className="bg-white rounded-xl p-6 text-left">
               <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center mb-4">
-                <span className="text-primary-500">📄</span>
+                <File className="w-5 h-5 text-primary-500" />
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">Export to PDF</h3>
               <p className="text-gray-600 text-sm">
@@ -189,7 +190,7 @@ export default function LandingPage() {
               rel="noreferrer"
               className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-800"
             >
-              <span>⭐</span> View GitHub
+              <Star className="w-4 h-4" /> View GitHub
             </a>
           </div>
         </div>

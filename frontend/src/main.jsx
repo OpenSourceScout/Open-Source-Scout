@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, useOutletContext } from 'react-router-dom'
+import { LayoutDashboard, FolderOpen, Check, Star, Wrench, Monitor } from 'lucide-react'
 import LandingPage from './components/LandingPage.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import AnalysisLayout from './components/AnalysisLayout.jsx'
@@ -16,7 +17,7 @@ function AnalysisDashboard() {
     <div className="flex items-center justify-center h-full bg-gray-50">
       <div className="text-center">
         <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <span className="text-4xl">📊</span>
+          <LayoutDashboard className="w-10 h-10 text-primary-600" />
         </div>
         <h2 className="text-2xl font-semibold text-gray-900 mb-2">Analysis Dashboard</h2>
         <p className="text-gray-500">Select a view from the sidebar to explore your analysis results.</p>
@@ -36,7 +37,7 @@ function RepositoriesView() {
       <div className="flex items-center justify-center h-full bg-gray-50">
         <div className="text-center">
           <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <span className="text-4xl">📁</span>
+            <FolderOpen className="w-10 h-10 text-primary-600" />
           </div>
           <h2 className="text-2xl font-semibold text-gray-900 mb-2">No Repositories</h2>
           <p className="text-gray-500">No ranked repositories available. Use tech stack search from the Dashboard.</p>
@@ -98,10 +99,10 @@ function RepositoriesView() {
                   <p className="text-xs text-gray-500 mb-1">Why it matches:</p>
                   <ul className="text-sm text-gray-600 space-y-1">
                     {repo.why_match.slice(0, 3).map((reason, i) => (
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="text-green-500">✓</span>
-                        <span>{reason}</span>
-                      </li>
+<li key={i} className="flex items-start gap-2">
+                      <Check className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
+                      <span>{reason}</span>
+                    </li>
                     ))}
                   </ul>
                 </div>
@@ -133,9 +134,9 @@ function RepositoriesView() {
 
               {/* Stats */}
               <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
-                <span>⭐ {repo.stars?.toLocaleString() ?? 0}</span>
-                <span>🔧 {repo.open_issues ?? 0} open issues</span>
-                {repo.language && <span>💻 {repo.language}</span>}
+                <span className="flex items-center gap-1"><Star className="w-4 h-4" /> {repo.stars?.toLocaleString() ?? 0}</span>
+                <span className="flex items-center gap-1"><Wrench className="w-4 h-4" /> {repo.open_issues ?? 0} open issues</span>
+                {repo.language && <span className="flex items-center gap-1"><Monitor className="w-4 h-4" /> {repo.language}</span>}
               </div>
 
               <a
