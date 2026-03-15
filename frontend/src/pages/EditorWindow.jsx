@@ -91,6 +91,9 @@ export default function EditorWindow() {
         base_branch: branch.trim() || 'main',
       })
       setSuccess(result)
+      // Store for ContributorBriefing to show PR button
+      const key = `scout-push-${result.upstream_owner}-${result.upstream_repo}`
+      sessionStorage.setItem(key, JSON.stringify(result))
     } catch (err) {
       setError(err.message)
     } finally {

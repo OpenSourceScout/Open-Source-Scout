@@ -160,7 +160,7 @@ The app will open at `http://localhost:8501`
 ### Exporting Results
 - **Markdown**: Download the briefing as a `.md` file
 - **PDF**: Generate a formatted PDF document
-- **Create PR**: Opens GitHub with pre-filled PR title and body
+- **PR Draft**: Use the suggested branch name, commit message, and PR title/body when creating your PR from the editor (after Save & Push)
 
 ## 🎯 Demo Examples
 

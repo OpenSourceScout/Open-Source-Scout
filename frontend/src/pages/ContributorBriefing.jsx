@@ -16,6 +16,7 @@ export default function ContributorBriefing() {
   const [prTitle, setPrTitle] = useState('')
   const [prBody, setPrBody] = useState('')
   const [showFullPrBody, setShowFullPrBody] = useState(false)
+  const [pushResult, setPushResult] = useState(null)
 
   // Initialize editable fields from briefing
   useEffect(() => {
@@ -25,6 +26,22 @@ export default function ContributorBriefing() {
       setPrBody(briefing.pr_draft.pr_body || '')
     }
   }, [briefing.pr_draft])
+
+  // Load push result from sessionStorage (set by Editor after Save & Push)
+  useEffect(() => {
+    if (!repoInfo?.owner || !repoInfo?.name) {
+      setPushResult(null)
+      return
+    }
+    const key = `scout-push-${repoInfo.owner}-${repoInfo.name}`
+    try {
+      const stored = sessionStorage.getItem(key)
+      const parsed = stored ? JSON.parse(stored) : null
+      setPushResult(parsed?.pr_url ? parsed : null)
+    } catch {
+      setPushResult(null)
+    }
+  }, [repoInfo?.owner, repoInfo?.name])
 
   const handleExportPdf = async () => {
     setExporting(true)
@@ -56,14 +73,6 @@ export default function ContributorBriefing() {
     a.click()
     a.remove()
     window.URL.revokeObjectURL(url)
-  }
-
-  const handleCreatePR = () => {
-    if (repoInfo && briefing.pr_draft) {
-      const branchName = briefing.pr_draft.branch_name || 'feature-branch'
-      const prUrl = `https://github.com/${repoInfo.owner}/${repoInfo.name}/compare/main...${encodeURIComponent(branchName)}?expand=1&title=${encodeURIComponent(prTitle)}&body=${encodeURIComponent(prBody)}`
-      window.open(prUrl, '_blank')
-    }
   }
 
   if (!analysisResult) {
@@ -376,15 +385,23 @@ export default function ContributorBriefing() {
                       </button>
                     </div>
 
-                    <button
-                      onClick={handleCreatePR}
-                      className="w-full bg-green-500 hover:bg-green-600 text-white py-2.5 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
-                    >
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
-                      </svg>
-                      Create PR on GitHub
-                    </button>
+                    {pushResult?.pr_url ? (
+                      <a
+                        href={`${pushResult.pr_url}${pushResult.pr_url.includes('?') ? '&' : '?'}expand=1&title=${encodeURIComponent(prTitle)}&body=${encodeURIComponent(prBody)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="w-full bg-green-500 hover:bg-green-600 text-white py-2.5 px-4 rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+                        </svg>
+                        Create PR on GitHub
+                      </a>
+                    ) : (
+                      <p className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3 border border-gray-100">
+                        To create a PR: go to <strong>Code Locations</strong> → <strong>Open in Editor</strong> → make your changes → <strong>Save & Push</strong>. The PR button will appear here after you push.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
