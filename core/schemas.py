@@ -114,6 +114,29 @@ class Agent3Output(BaseModel):
     risk_notes: List[str] = Field(default_factory=list, description="Potential risks to watch for")
 
 
+# ==================== Agent 4: Testing Agent ====================
+
+class AgentTestResult(BaseModel):
+    """Test result for a single agent's output."""
+    agent_name: str = Field(description="Name of the agent tested")
+    passed: bool = Field(description="Whether the agent's output passed QA")
+    score: int = Field(ge=0, le=100, description="Quality score (0-100)")
+    issues_found: List[str] = Field(default_factory=list, description="Problems found in the output")
+    suggestions: List[str] = Field(default_factory=list, description="Improvement suggestions")
+    details: str = Field(default="", description="Detailed analysis")
+
+
+class TestingAgentOutput(BaseModel):
+    """Output from Agent 4: Testing Agent (QA Validator)"""
+    overall_passed: bool = Field(description="Whether the full pipeline passed QA")
+    overall_score: int = Field(ge=0, le=100, description="Overall quality score (0-100)")
+    agent_results: List[AgentTestResult] = Field(description="Per-agent test results")
+    summary: str = Field(description="Human-readable summary of QA results")
+    retry_recommended: bool = Field(description="Whether retrying failed agents is recommended")
+    retry_agents: List[str] = Field(default_factory=list, description="Names of agents that should be retried")
+    iterations_used: int = Field(default=1, description="Number of QA iterations completed")
+
+
 # ==================== GitHub API Models ====================
 
 class GitHubIssue(BaseModel):
@@ -155,5 +178,6 @@ class RunLog(BaseModel):
     agent1_output: Optional[Agent1Output] = None
     agent2_output: Optional[Agent2Output] = None
     agent3_output: Optional[Agent3Output] = None
+    testing_output: Optional[TestingAgentOutput] = None
     duration_seconds: float = 0.0
     error: Optional[str] = None
