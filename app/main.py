@@ -599,6 +599,68 @@ Title: {pr.pr_title}
             st.warning(note)
 
 
+def render_testing_report(results: dict):
+    """Render the QA Testing Agent report tab."""
+    if not results or not results.get("success"):
+        st.info("Run an analysis to see the QA report")
+        return
+
+    testing = results.get("testing_output")
+    if not testing:
+        st.info("QA testing results not available yet. Complete a full analysis to see the report.")
+        return
+
+    # Overall status banner
+    if testing.overall_passed:
+        st.success(f"✅ Pipeline QA PASSED — Overall Score: **{testing.overall_score}/100**")
+    else:
+        st.error(f"❌ Pipeline QA NEEDS IMPROVEMENT — Overall Score: **{testing.overall_score}/100**")
+
+    st.caption(f"QA iterations used: {testing.iterations_used}")
+
+    st.markdown("---")
+
+    # Per-agent results
+    st.markdown("### Per-Agent Results")
+
+    for result in testing.agent_results:
+        icon = "✅" if result.passed else "❌"
+        score_color = "green" if result.score >= 80 else ("orange" if result.score >= 60 else "red")
+
+        with st.expander(f"{icon} {result.agent_name} — Score: {result.score}/100", expanded=not result.passed):
+            # Score metric
+            cols = st.columns([1, 3])
+            with cols[0]:
+                st.metric("Score", f"{result.score}/100")
+            with cols[1]:
+                st.markdown(f"**Status:** {'Passed' if result.passed else 'Needs Improvement'}")
+
+            # Details
+            if result.details:
+                st.markdown("**Analysis:**")
+                st.markdown(result.details)
+
+            # Issues found
+            if result.issues_found:
+                st.markdown("**Issues Found:**")
+                for issue in result.issues_found:
+                    st.markdown(f"- ⚠️ {issue}")
+
+            # Suggestions
+            if result.suggestions:
+                st.markdown("**Suggestions for Improvement:**")
+                for suggestion in result.suggestions:
+                    st.markdown(f"- 💡 {suggestion}")
+
+    # Summary
+    st.markdown("---")
+    st.markdown("### Summary")
+    st.text(testing.summary)
+
+    if testing.retry_recommended and testing.retry_agents:
+        st.warning(f"Retry was recommended for: {', '.join(testing.retry_agents)}")
+
+
 def run_discovery(config: dict):
     """Run phase 1: Issue ranking."""
     st.session_state.status_messages = []
@@ -714,12 +776,24 @@ def run_deep_dive():
         
         if not p3_results["success"]:
             raise Exception(p3_results.get("error"))
+
+        # Run Phase 4 — QA Testing
+        testing_results = orchestrator.run_testing(
+            repo=repo,
+            issue=target_issue,
+            agent1_output=agent1_output,
+            agent2_output=p2_results["agent2_output"],
+            agent3_output=p3_results["agent3_output"],
+            repo_path=p2_results.get("repo_path"),
+            file_tree=p2_results.get("file_tree"),
+        )
             
         # Update results with deep dive data
         st.session_state.results.update({
             "agent2_output": p2_results["agent2_output"],
             "agent3_output": p3_results["agent3_output"],
-            "repo_path": p2_results.get("repo_path") # Optional if needed
+            "testing_output": testing_results.get("testing_output"),
+            "repo_path": p2_results.get("repo_path"),
         })
         
         st.session_state.analysis_state = "complete"
@@ -774,10 +848,11 @@ def main():
                     st.caption(f"Analysis completed in {results['duration_seconds']:.1f} seconds")
             
             # Tabs for different views
-            tab1, tab2, tab3 = st.tabs([
+            tab1, tab2, tab3, tab4 = st.tabs([
                 "🏆 Issue Ranking",
                 "🔍 Code Locator",
-                "📋 Contributor Briefing"
+                "📋 Contributor Briefing",
+                "🧪 QA Report",
             ])
             
             with tab1:
@@ -788,6 +863,9 @@ def main():
             
             with tab3:
                 render_briefing_document(results)
+            
+            with tab4:
+                render_testing_report(results)
     else:
         # Welcome message
         st.markdown("""
