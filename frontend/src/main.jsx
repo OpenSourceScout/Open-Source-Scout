@@ -8,6 +8,7 @@ import AnalysisLayout from './components/AnalysisLayout.jsx'
 import IssueRanking from './pages/IssueRanking.jsx'
 import CodeLocator from './pages/CodeLocator.jsx'
 import ContributorBriefing from './pages/ContributorBriefing.jsx'
+import QaReport from './pages/QaReport.jsx'
 import EditorWindow from './pages/EditorWindow.jsx'
 import './index.css'
 
@@ -167,6 +168,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="issues" element={<IssueRanking />} />
           <Route path="code" element={<CodeLocator />} />
           <Route path="briefing" element={<ContributorBriefing />} />
+          <Route path="qa-report" element={<QaReport />} />
         </Route>
         <Route path="/editor" element={<EditorWindow />} />
       </Routes>
