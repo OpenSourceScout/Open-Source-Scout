@@ -93,6 +93,7 @@ class ReAnalyzeRequest(BaseModel):
     issue_number: int
     fast_model: str = "llama-3.3-70b"
     powerful_model: str = "llama-3.3-70b"
+    pathfinder_output: dict | None = None
 
 
 def _to_jsonable(obj):
@@ -211,11 +212,40 @@ def re_analyze_issue(body: ReAnalyzeRequest):
         if not phase3.get("success"):
             raise HTTPException(status_code=500, detail=phase3.get("error", "Phase 3 failed"))
 
+        agent3_output = phase3["agent3_output"]
+
+        # Reconstruct PathfinderOutput if provided by frontend
+        pathfinder = None
+        if body.pathfinder_output:
+            from core.schemas import PathfinderOutput
+            try:
+                pathfinder = PathfinderOutput.model_validate(body.pathfinder_output)
+            except Exception:
+                pass
+
+        # Phase 4 — Testing Agent with QA feedback loop
+        # If any agent fails QA, they are re-run with feedback (up to 2 retries).
+        # The returned agent outputs may be improved versions after retries.
+        testing_result = orchestrator.run_testing(
+            repo=repo,
+            issue=target_issue,
+            agent1_output=agent1_output,
+            agent2_output=agent2_output,
+            agent3_output=agent3_output,
+            repo_path=phase2.get("repo_path"),
+            file_tree=phase2.get("file_tree"),
+            pathfinder_output=pathfinder,
+        )
+
+        final_agent2 = testing_result.get("agent2_output", agent2_output)
+        final_agent3 = testing_result.get("agent3_output", agent3_output)
+
         return _to_jsonable({
             "success": True,
             "target_issue": target_issue,
-            "agent2_output": agent2_output,
-            "agent3_output": phase3["agent3_output"],
+            "agent2_output": final_agent2,
+            "agent3_output": final_agent3,
+            "testing_output": testing_result.get("testing_output"),
         })
 
     except HTTPException:

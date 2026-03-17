@@ -5,6 +5,7 @@ import {
   ClipboardList,
   MapPin,
   FileText,
+  ShieldCheck,
   Settings,
   User,
   Package,
@@ -17,6 +18,7 @@ const NAV_ITEMS = [
   { path: '/analysis/issues', label: 'Issue Ranking', Icon: ClipboardList },
   { path: '/analysis/code', label: 'Code Locator', Icon: MapPin },
   { path: '/analysis/briefing', label: 'Contributor Briefing', Icon: FileText },
+  { path: '/analysis/qa-report', label: 'QA Report', Icon: ShieldCheck },
 ]
 
 const BOTTOM_NAV = [

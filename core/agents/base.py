@@ -27,6 +27,7 @@ class BaseAgent(ABC):
         """
         self.groq = groq_client
         self.model = model
+        self._feedback: Optional[str] = None
     
     @property
     @abstractmethod
@@ -44,6 +45,26 @@ class BaseAgent(ABC):
     def run(self, **kwargs) -> Any:
         """Execute agent's main task."""
         pass
+    
+    def set_feedback(self, feedback: str):
+        """Set QA feedback to incorporate in the next run."""
+        self._feedback = feedback
+    
+    def clear_feedback(self):
+        """Clear any QA feedback after a retry."""
+        self._feedback = None
+    
+    def _get_feedback_prompt(self) -> str:
+        """Build a feedback prompt section if feedback is available."""
+        if self._feedback:
+            return (
+                "\n\n--- IMPORTANT: FEEDBACK FROM QA REVIEW ---\n"
+                "A QA reviewer found issues with a previous attempt. "
+                "Please address the following feedback to improve your output:\n"
+                f"{self._feedback}\n"
+                "--- END FEEDBACK ---\n"
+            )
+        return ""
     
     def log(self, message: str, level: str = "info"):
         """Log a message with agent prefix."""

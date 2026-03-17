@@ -144,11 +144,12 @@ Explain the 'why' behind each step."""
     
     def _generate_briefing(self, context: dict) -> str:
         """Generate the contributor briefing document."""
+        feedback_ctx = self._get_feedback_prompt()
         prompt = f"""Create a comprehensive Contributor Briefing Document for this GitHub issue.
 
 CONTEXT:
 {json.dumps(context, indent=2)}
-
+{feedback_ctx}
 Generate a well-structured Markdown document with these sections:
 
 # Contributor Briefing: [Issue Title]
@@ -221,12 +222,13 @@ Write the complete document now:"""
             # Get files for commit message
             files_changed = [hit.path for hit in agent2_output.hits[:3]]
             
+            feedback_ctx = self._get_feedback_prompt()
             prompt = f"""Generate a professional PR draft for this issue.
 
 Issue #{issue.number}: {issue.title}
 Description: {(issue.body or "")[:500]}
 Files likely modified: {', '.join(files_changed)}
-
+{feedback_ctx}
 Respond with JSON:
 {{
   "commit_message": "Short commit message following conventional commits format",

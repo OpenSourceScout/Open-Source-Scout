@@ -34,16 +34,20 @@ export async function runAnalyze({ repo_url, beginner_only = true, fast_model, p
   return res.json();
 }
 
-export async function reAnalyzeIssue({ repo_url, issue_number, fast_model, powerful_model }) {
+export async function reAnalyzeIssue({ repo_url, issue_number, fast_model, powerful_model, pathfinder_output }) {
+  const payload = {
+    repo_url,
+    issue_number,
+    fast_model: fast_model || 'openai/gpt-oss-120b',
+    powerful_model: powerful_model || 'llama-3.3-70b',
+  };
+  if (pathfinder_output) {
+    payload.pathfinder_output = pathfinder_output;
+  }
   const res = await fetch(`${API_BASE}/re-analyze-issue`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      repo_url,
-      issue_number,
-      fast_model: fast_model || 'openai/gpt-oss-120b',
-      powerful_model: powerful_model || 'llama-3.3-70b',
-    }),
+    body: JSON.stringify(payload),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));

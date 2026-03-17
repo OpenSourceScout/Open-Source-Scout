@@ -57,6 +57,10 @@ def _start_backend() -> subprocess.Popen:
         sys.executable, "-m", "uvicorn",
         "app.api:app",
         "--reload",
+        "--reload-exclude", "*.cache*",
+        "--reload-exclude", "*node_modules*",
+        "--reload-exclude", ".cache",
+        "--reload-include", "*.py",
         "--port", "8001",
     ]
     print(f"{CYAN}{BOLD}Starting backend{RESET}  → http://localhost:8001")

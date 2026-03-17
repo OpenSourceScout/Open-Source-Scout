@@ -41,7 +41,7 @@ function getScoreColor(score) {
 }
 
 export default function IssueRanking() {
-  const { analysisResult, setAnalysisResult, repoUrl } = useOutletContext()
+  const { analysisResult, setAnalysisResult, repoUrl, rankedRepos } = useOutletContext()
   const navigate = useNavigate()
   const [selectedIssue, setSelectedIssue] = useState(null)
   const [filterDifficulty, setFilterDifficulty] = useState('all')
@@ -70,13 +70,18 @@ export default function IssueRanking() {
     setAnalyzingIssue(issue.number)
     setAnalyzeError(null)
     try {
-      const result = await reAnalyzeIssue({ repo_url: repoUrl, issue_number: issue.number })
+      const result = await reAnalyzeIssue({
+        repo_url: repoUrl,
+        issue_number: issue.number,
+        pathfinder_output: rankedRepos || undefined,
+      })
       // Merge new agent2/agent3 outputs into the shared analysisResult
       setAnalysisResult({
         ...analysisResult,
         target_issue: result.target_issue,
         agent2_output: result.agent2_output,
         agent3_output: result.agent3_output,
+        testing_output: result.testing_output,
       })
       navigate('/analysis/code')
     } catch (err) {
