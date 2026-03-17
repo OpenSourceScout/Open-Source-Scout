@@ -1,9 +1,52 @@
+import { getAccessToken } from './auth'
+
 const API_BASE = '/api';
 
-export async function searchReposByTechStack({ tech_stack, fast_model }) {
-  const res = await fetch(`${API_BASE}/search-repos`, {
+async function apiFetch(path, options = {}) {
+  const token = getAccessToken()
+  const headers = new Headers(options.headers || {})
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  if (!headers.has('Content-Type') && options.body) headers.set('Content-Type', 'application/json')
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
+  return res
+}
+
+export async function signup({ email, password, display_name }) {
+  const res = await apiFetch('/auth/signup', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, display_name }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Signup failed')
+  }
+  return res.json()
+}
+
+export async function login({ email, password }) {
+  const res = await apiFetch('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Login failed')
+  }
+  return res.json()
+}
+
+export async function getMe() {
+  const res = await apiFetch('/me')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Failed to load profile')
+  }
+  return res.json()
+}
+
+export async function searchReposByTechStack({ tech_stack, fast_model }) {
+  const res = await apiFetch(`/search-repos`, {
+    method: 'POST',
     body: JSON.stringify({
       tech_stack,
       fast_model: fast_model || 'openai/gpt-oss-120b',
@@ -17,9 +60,8 @@ export async function searchReposByTechStack({ tech_stack, fast_model }) {
 }
 
 export async function runAnalyze({ repo_url, beginner_only = true, fast_model, powerful_model }) {
-  const res = await fetch(`${API_BASE}/analyze`, {
+  const res = await apiFetch(`/analyze`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       repo_url,
       beginner_only,
@@ -44,9 +86,8 @@ export async function reAnalyzeIssue({ repo_url, issue_number, fast_model, power
   if (pathfinder_output) {
     payload.pathfinder_output = pathfinder_output;
   }
-  const res = await fetch(`${API_BASE}/re-analyze-issue`, {
+  const res = await apiFetch(`/re-analyze-issue`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
@@ -58,7 +99,7 @@ export async function reAnalyzeIssue({ repo_url, issue_number, fast_model, power
 
 export async function getFileContent(owner, repo, path, ref = 'main') {
   const encodedPath = path.split('/').map(encodeURIComponent).join('/');
-  const res = await fetch(`${API_BASE}/repos/${owner}/${repo}/files/${encodedPath}?ref=${encodeURIComponent(ref)}`);
+  const res = await apiFetch(`/repos/${owner}/${repo}/files/${encodedPath}?ref=${encodeURIComponent(ref)}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || 'Failed to load file');
@@ -67,9 +108,8 @@ export async function getFileContent(owner, repo, path, ref = 'main') {
 }
 
 export async function pushFile(owner, repo, { file_path, content, branch_name, commit_message, base_branch }) {
-  const res = await fetch(`${API_BASE}/repos/${owner}/${repo}/push`, {
+  const res = await apiFetch(`/repos/${owner}/${repo}/push`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       file_path,
       content,
@@ -86,9 +126,8 @@ export async function pushFile(owner, repo, { file_path, content, branch_name, c
 }
 
 export async function exportPdf(content) {
-  const res = await fetch(`${API_BASE}/export/pdf`, {
+  const res = await apiFetch(`/export/pdf`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content }),
   });
   if (!res.ok) {

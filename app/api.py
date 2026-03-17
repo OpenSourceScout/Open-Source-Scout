@@ -15,10 +15,14 @@ sys.path.insert(0, str(project_root))
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
+
+from app.auth_routes import router as auth_router
+from app.auth_service import decode_access_token
+from app.db import create_pool, init_schema
 
 from integrations.github_client import GitHubClient
 from integrations.groq_client import GroqClient
@@ -32,6 +36,28 @@ app = FastAPI(
     description="Backend API for the Open Source Scout editor and analysis tools",
     version="0.1.0",
 )
+
+@app.on_event("startup")
+def _startup():
+    # Auth is optional for the app overall, but if Neon env vars are present,
+    # initialize the pool and ensure the schema exists.
+    try:
+        app.state.db_pool = create_pool()
+        init_schema(app.state.db_pool)
+        app.state.db_init_error = None
+    except Exception as e:
+        app.state.db_pool = None
+        app.state.db_init_error = str(e)
+
+
+@app.on_event("shutdown")
+def _shutdown():
+    pool = getattr(app.state, "db_pool", None)
+    if pool is not None:
+        pool.close()
+
+
+app.include_router(auth_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -301,7 +327,42 @@ def export_pdf(body: ExportPdfRequest):
 @app.get("/api/health")
 def health():
     """Health check for load balancers / readiness probes."""
-    return {"status": "ok"}
+    db_pool = getattr(app.state, "db_pool", None)
+    db_init_error = getattr(app.state, "db_init_error", None)
+    return {
+        "status": "ok",
+        "db_initialized": db_pool is not None,
+        "db_error": db_init_error,
+    }
+
+
+@app.get("/api/me")
+def me(request: Request):
+    auth = request.headers.get("authorization") or ""
+    if not auth.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    token = auth.split(" ", 1)[1].strip()
+    try:
+        claims = decode_access_token(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+
+    user_id = int(claims.get("sub"))
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select id, email, display_name, created_at from users where id = %s",
+                (user_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="User not found")
+            cols = [d.name for d in cur.description]
+            return dict(zip(cols, row, strict=False))
 
 
 @app.get("/api/repos/{owner}/{repo}/files/{file_path:path}")

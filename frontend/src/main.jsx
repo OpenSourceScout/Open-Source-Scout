@@ -1,16 +1,19 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route, useOutletContext } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useOutletContext, Navigate } from 'react-router-dom'
 import { LayoutDashboard, FolderOpen, Check, Star, Wrench, Monitor } from 'lucide-react'
 import LandingPage from './components/LandingPage.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import AnalysisLayout from './components/AnalysisLayout.jsx'
+import Login from './pages/Login.jsx'
+import Signup from './pages/Signup.jsx'
 import IssueRanking from './pages/IssueRanking.jsx'
 import CodeLocator from './pages/CodeLocator.jsx'
 import ContributorBriefing from './pages/ContributorBriefing.jsx'
 import QaReport from './pages/QaReport.jsx'
 import EditorWindow from './pages/EditorWindow.jsx'
 import './index.css'
+import { isLoggedIn } from './auth'
 
 // Analysis Dashboard placeholder
 function AnalysisDashboard() {
@@ -156,13 +159,22 @@ function RepositoriesView() {
   )
 }
 
+function RequireAuth({ children }) {
+  if (!isLoggedIn()) {
+    return <Navigate to="/login" replace />
+  }
+  return children
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/analysis" element={<AnalysisLayout />}>
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+        <Route path="/analysis" element={<RequireAuth><AnalysisLayout /></RequireAuth>}>
           <Route index element={<AnalysisDashboard />} />
           <Route path="repositories" element={<RepositoriesView />} />
           <Route path="issues" element={<IssueRanking />} />
@@ -170,7 +182,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="briefing" element={<ContributorBriefing />} />
           <Route path="qa-report" element={<QaReport />} />
         </Route>
-        <Route path="/editor" element={<EditorWindow />} />
+        <Route path="/editor" element={<RequireAuth><EditorWindow /></RequireAuth>} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>,

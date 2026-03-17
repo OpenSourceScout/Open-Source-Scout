@@ -20,9 +20,9 @@ export default function LandingPage() {
           <a href="#ecosystem" className="text-gray-600 hover:text-gray-900 text-sm">Ecosystem</a>
         </nav>
         <div className="flex items-center gap-4">
-          <button className="text-gray-600 hover:text-gray-900 text-sm">Log In</button>
+          <button onClick={() => navigate('/login')} className="text-gray-600 hover:text-gray-900 text-sm">Log In</button>
           <button 
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/signup')}
             className="bg-primary-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-600 transition-colors"
           >
             Sign Up

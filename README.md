@@ -271,6 +271,8 @@ Open-Source-Scout/
 |----------|----------|-------------|
 | `GROQ_API_KEY` | Yes | Groq API key for LLM access |
 | `GITHUB_TOKEN` | No | GitHub token for higher rate limits (5000 vs 60 req/hr) |
+| `NEON_DATABASE_URL` | No* | Neon Postgres connection string (required for signup/login) |
+| `AUTH_JWT_SECRET` | No* | Secret used to sign JWTs (required for signup/login) |
 
 ### Model Selection
 
