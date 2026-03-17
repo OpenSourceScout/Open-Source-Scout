@@ -127,6 +127,7 @@ Be encouraging but honest about difficulty levels."""
     ) -> List[str]:
         """Use LLM to enhance scoring reasons."""
         try:
+            feedback_ctx = self._get_feedback_prompt()
             prompt = f"""Given this GitHub issue, provide 3-4 concise bullet points explaining why it's suitable for a beginner contributor.
 
 Issue #{issue.number}: {issue.title}
@@ -138,7 +139,7 @@ Labels: {', '.join(issue.labels) if issue.labels else 'None'}
 
 Base analysis notes:
 {chr(10).join('- ' + r for r in base_reasons)}
-
+{feedback_ctx}
 Respond with a JSON object containing a "reasons" array of 3-4 short, specific bullet points. Each should be one sentence. Focus on actionability and encouragement.
 
 Example format:

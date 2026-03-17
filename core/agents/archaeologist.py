@@ -153,6 +153,7 @@ When uncertain, indicate lower confidence rather than guessing."""
             # Sample file tree for context
             sample_files = file_tree[:50]
             
+            feedback_ctx = self._get_feedback_prompt()
             prompt = f"""Given this GitHub issue and repository structure, suggest 5-8 specific search queries to find relevant code.
 
 Issue #{issue.number}: {issue.title}
@@ -164,7 +165,7 @@ Keywords extracted: {', '.join(keywords)}
 
 Sample files in repo:
 {chr(10).join(sample_files[:30])}
-
+{feedback_ctx}
 Respond with a JSON object containing a "queries" array of search terms/patterns to find the relevant code.
 Include:
 - Function/class names mentioned or implied
@@ -211,6 +212,7 @@ Example: {{"queries": ["handleSubmit", "ValidationError", "user_input", "form.py
                 hits_summary += f"   Symbols: {', '.join(hit.symbols[:5])}\n"
                 hits_summary += f"   Snippet preview:\n```\n{hit.snippet[:300]}\n```\n"
             
+            feedback_ctx = self._get_feedback_prompt()
             prompt = f"""Analyze these code search results for issue #{issue.number}: "{issue.title}"
 
 Issue description:
@@ -218,7 +220,7 @@ Issue description:
 
 Code locations found:
 {hits_summary}
-
+{feedback_ctx}
 Based on this analysis, provide:
 1. For each file hit, explain WHY it's relevant (be specific)
 2. Suggest a call trace if you can infer one (A calls B calls C)
