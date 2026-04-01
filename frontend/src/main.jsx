@@ -12,6 +12,7 @@ import CodeLocator from './pages/CodeLocator.jsx'
 import ContributorBriefing from './pages/ContributorBriefing.jsx'
 import QaReport from './pages/QaReport.jsx'
 import EditorWindow from './pages/EditorWindow.jsx'
+import Profile from './pages/Profile.jsx'
 import './index.css'
 import { isLoggedIn } from './auth'
 
@@ -183,6 +184,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="qa-report" element={<QaReport />} />
         </Route>
         <Route path="/editor" element={<RequireAuth><EditorWindow /></RequireAuth>} />
+        <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>,

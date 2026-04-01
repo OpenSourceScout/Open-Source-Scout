@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { useSearchParams, useNavigate } from 'react-router-dom'
-import { Search, Rocket, ChevronLeft, Settings } from 'lucide-react'
+import { useSearchParams, useNavigate, Link } from 'react-router-dom'
+import { Search, Rocket, ChevronLeft, Settings, User } from 'lucide-react'
 import { searchReposByTechStack, runAnalyze } from '../api'
 
 const QUICK_ADD_TAGS = ['Python', 'JavaScript', 'React', 'Node.js', 'TypeScript', 'Go', 'Java', 'Rust']
@@ -350,7 +350,14 @@ export default function Dashboard() {
             <button className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
               <Settings className="w-5 h-5" />
             </button>
-            <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+            <Link
+              to="/profile"
+              title="Profile"
+              aria-label="Profile"
+              className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-300 transition-colors"
+            >
+              <User className="w-4 h-4" />
+            </Link>
           </div>
         </header>
 

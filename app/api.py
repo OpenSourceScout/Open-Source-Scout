@@ -4,6 +4,7 @@ FastAPI backend for Open Source Scout.
 Exposes REST endpoints so a React (or other) frontend can call
 the Python backend without going through Streamlit.
 """
+import logging
 import os
 import sys
 from pathlib import Path
@@ -22,7 +23,14 @@ from pydantic import BaseModel
 
 from app.auth_routes import router as auth_router
 from app.auth_service import decode_access_token
-from app.db import create_pool, init_schema
+from app.db import (
+    create_pool,
+    fetch_user_activity,
+    init_schema,
+    record_git_push,
+    record_issue_analysis,
+    record_tech_stack_search,
+)
 
 from integrations.github_client import GitHubClient
 from integrations.groq_client import GroqClient
@@ -30,6 +38,8 @@ from core.orchestrator import ScoutOrchestrator
 from core.agents.pathfinder import PathfinderAgent
 from utils.cache import CacheManager
 from utils.pdf_generator import PDFGenerator
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Open Source Scout API",
@@ -133,11 +143,56 @@ def _to_jsonable(obj):
     return obj
 
 
+def _optional_user_id(request: Request) -> int | None:
+    auth = request.headers.get("authorization") or ""
+    if not auth.lower().startswith("bearer "):
+        return None
+    token = auth.split(" ", 1)[1].strip()
+    try:
+        claims = decode_access_token(token)
+        return int(claims.get("sub"))
+    except Exception:
+        return None
+
+
+def _safe_record_activity(fn, *args, **kwargs) -> None:
+    try:
+        fn(*args, **kwargs)
+    except Exception as e:
+        logger.warning("Failed to record user activity: %s", e)
+
+
+def _record_phase1_issue_analysis(pool, user_id: int, body: AnalyzeRequest, results: dict) -> None:
+    if not results.get("success") or not results.get("agent1_output") or not results.get("repo"):
+        return
+    a1 = results["agent1_output"]
+    repo = results["repo"]
+    num = a1.selected_issue_number
+    if num == 0 and a1.ranked_issues:
+        num = a1.ranked_issues[0].number
+    title = None
+    for ri in a1.ranked_issues:
+        if ri.number == num:
+            title = ri.title
+            break
+    if title is None:
+        title = ""
+    full_name = f"{repo.owner}/{repo.name}"
+    record_issue_analysis(
+        pool,
+        user_id,
+        repo_url=body.repo_url.strip(),
+        repo_full_name=full_name,
+        issue_number=num,
+        issue_title=title,
+    )
+
+
 # --- Endpoints ---
 
 
 @app.post("/api/analyze")
-def run_analyze(body: AnalyzeRequest):
+def run_analyze(body: AnalyzeRequest, request: Request):
     """
     Run the full 3-agent analysis pipeline.
 
@@ -158,13 +213,17 @@ def run_analyze(body: AnalyzeRequest):
             repo_url=body.repo_url,
             beginner_only=body.beginner_only,
         )
+        pool = getattr(request.app.state, "db_pool", None)
+        uid = _optional_user_id(request)
+        if pool and uid:
+            _safe_record_activity(_record_phase1_issue_analysis, pool, uid, body, results)
         return _to_jsonable(results)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/re-analyze-issue")
-def re_analyze_issue(body: ReAnalyzeRequest):
+def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
     """
     Re-run phases 2 (Archaeologist) + 3 (Senior Dev) for a specific issue.
 
@@ -266,13 +325,26 @@ def re_analyze_issue(body: ReAnalyzeRequest):
         final_agent2 = testing_result.get("agent2_output", agent2_output)
         final_agent3 = testing_result.get("agent3_output", agent3_output)
 
-        return _to_jsonable({
+        payload = {
             "success": True,
             "target_issue": target_issue,
             "agent2_output": final_agent2,
             "agent3_output": final_agent3,
             "testing_output": testing_result.get("testing_output"),
-        })
+        }
+        pool = getattr(request.app.state, "db_pool", None)
+        uid = _optional_user_id(request)
+        if pool and uid:
+            _safe_record_activity(
+                record_issue_analysis,
+                pool,
+                uid,
+                repo_url=body.repo_url.strip(),
+                repo_full_name=f"{repo.owner}/{repo.name}",
+                issue_number=target_issue.number,
+                issue_title=target_issue.title,
+            )
+        return _to_jsonable(payload)
 
     except HTTPException:
         raise
@@ -281,7 +353,7 @@ def re_analyze_issue(body: ReAnalyzeRequest):
 
 
 @app.post("/api/search-repos")
-def search_repos_by_tech_stack(body: SearchReposRequest):
+def search_repos_by_tech_stack(body: SearchReposRequest, request: Request):
     """
     Search and rank GitHub repositories based on user's tech stack.
     
@@ -301,7 +373,17 @@ def search_repos_by_tech_stack(body: SearchReposRequest):
             github_client=github_client,
             top_n=5
         )
-        
+        pool = getattr(request.app.state, "db_pool", None)
+        uid = _optional_user_id(request)
+        if pool and uid:
+            names = [r.full_name for r in results.ranked_repos]
+            _safe_record_activity(
+                record_tech_stack_search,
+                pool,
+                uid,
+                list(results.tech_stack),
+                names,
+            )
         return _to_jsonable(results)
     except HTTPException:
         raise
@@ -362,7 +444,13 @@ def me(request: Request):
             if not row:
                 raise HTTPException(status_code=404, detail="User not found")
             cols = [d.name for d in cur.description]
-            return dict(zip(cols, row, strict=False))
+            user = dict(zip(cols, row, strict=False))
+            ca = user.get("created_at")
+            if ca is not None and hasattr(ca, "isoformat"):
+                user["created_at"] = ca.isoformat()
+            activity = fetch_user_activity(pool, user_id)
+            user.update(activity)
+            return user
 
 
 @app.get("/api/repos/{owner}/{repo}/files/{file_path:path}")
@@ -389,6 +477,7 @@ def get_file_content(
 
 @app.post("/api/repos/{owner}/{repo}/push")
 def push_file(
+    request: Request,
     owner: str,
     repo: str,
     body: PushFileRequest,
@@ -410,6 +499,21 @@ def push_file(
             commit_message=body.commit_message,
             base_branch=body.base_branch,
         )
+        pool = getattr(request.app.state, "db_pool", None)
+        uid = _optional_user_id(request)
+        if pool and uid:
+            _safe_record_activity(
+                record_git_push,
+                pool,
+                uid,
+                upstream_owner=result.get("upstream_owner") or owner,
+                upstream_repo=result.get("upstream_repo") or repo,
+                branch_name=result.get("branch") or body.branch_name,
+                file_path=body.file_path,
+                commit_sha=result.get("commit_sha"),
+                pr_url=result.get("pr_url"),
+                commit_message=body.commit_message,
+            )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
