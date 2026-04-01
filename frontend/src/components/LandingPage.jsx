@@ -79,21 +79,31 @@ export default function LandingPage() {
               <span className="tracking-wide text-[#E6EDF3]/90">NEW · AI-POWERED CONTRIBUTION PATHS</span>
             </div>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-[3.25rem] font-bold tracking-tight text-[#E6EDF3] leading-[1.12] sm:leading-[1.1] space-y-1 sm:space-y-2">
-              <span className="block pb-1 sm:pb-2">
-                <span className="text-[#9DA7B3] font-semibold">From</span>{' '}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#3B82F6] to-[#60A5FA]">
-                  confused
+            <div className="relative isolate">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -inset-x-6 -inset-y-8 sm:-inset-x-10 sm:-inset-y-12 -z-10"
+                style={{
+                  background:
+                    'radial-gradient(circle at 30% 50%, rgba(59,130,246,0.15), transparent 40%)',
+                }}
+              />
+              <h1 className="relative text-4xl sm:text-5xl lg:text-[3.25rem] font-bold tracking-tight text-[#E6EDF3] leading-[1.12] sm:leading-[1.1] space-y-1 sm:space-y-2">
+                <span className="block pb-1 sm:pb-2">
+                  <span className="text-[#9DA7B3] font-semibold">From</span>{' '}
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#3B82F6] to-[#60A5FA]">
+                    confused
+                  </span>
                 </span>
-              </span>
-              <span className="block pb-1 sm:pb-2">
-                <span className="text-[#9DA7B3] font-semibold">to</span>{' '}
-                <span className="text-[#E6EDF3]">contributor</span>
-              </span>
-              <span className="block pt-2 sm:pt-3 text-3xl sm:text-4xl lg:text-[2.75rem] font-extrabold text-[#22C55E] drop-shadow-[0_0_32px_rgba(34,197,94,0.25)]">
-                Ship your first real PR — faster.
-              </span>
-            </h1>
+                <span className="block pb-1 sm:pb-2">
+                  <span className="text-[#9DA7B3] font-semibold">to</span>{' '}
+                  <span className="text-[#E6EDF3]">contributor</span>
+                </span>
+                <span className="block pt-2 sm:pt-3 text-3xl sm:text-4xl lg:text-[2.75rem] font-extrabold text-[#22C55E] drop-shadow-[0_0_32px_rgba(34,197,94,0.25)]">
+                  Ship your first real PR — faster.
+                </span>
+              </h1>
+            </div>
 
             <p className="mt-8 text-lg text-[#9DA7B3] max-w-lg leading-relaxed">
               Navigate unfamiliar codebases, understand what actually matters, and go from issue to commit with{' '}

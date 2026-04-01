@@ -109,20 +109,23 @@ export default function EditorWindow() {
     setSuccess(null)
   }
 
+  const inputDark =
+    'px-3 py-1.5 bg-app-input border border-app-border rounded-lg text-sm text-app-text placeholder:text-app-muted/60 focus:outline-none focus:ring-2 focus:ring-primary-500/50'
+
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col">
-      {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-6 py-3 flex items-center justify-between">
+    <div className="min-h-screen bg-app-bg flex flex-col text-app-text">
+      <header className="bg-app-surface border-b border-app-border px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
+            type="button"
             onClick={() => navigate(-1)}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="text-app-muted hover:text-app-text transition-colors"
           >
             ← Back
           </button>
           <div className="flex items-center gap-2">
             <ScoutLogo className="h-6 w-6 rounded-md" />
-            <span className="font-semibold text-white">Open Source Scout</span>
+            <span className="font-semibold text-app-text">Open Source Scout</span>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -133,19 +136,20 @@ export default function EditorWindow() {
                 value={branchName}
                 onChange={(e) => setBranchName(e.target.value)}
                 disabled={pushing}
-                className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 w-40"
+                className={`${inputDark} w-40`}
               />
               <input
                 placeholder="Commit message"
                 value={commitMessage}
                 onChange={(e) => setCommitMessage(e.target.value)}
                 disabled={pushing}
-                className="px-3 py-1.5 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 w-64"
+                className={`${inputDark} w-64`}
               />
-              <button 
-                onClick={handlePush} 
+              <button
+                type="button"
+                onClick={handlePush}
                 disabled={pushing}
-                className="bg-primary-500 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-primary-600 disabled:opacity-50 flex items-center gap-2"
+                className="bg-accent-500 text-[#0b0f14] px-4 py-1.5 rounded-lg text-sm font-semibold hover:bg-accent-600 disabled:opacity-50 flex items-center gap-2 transition-colors"
               >
                 {pushing ? (
                   <>
@@ -159,9 +163,10 @@ export default function EditorWindow() {
                   'Save & Push'
                 )}
               </button>
-              <button 
+              <button
+                type="button"
                 onClick={handleClear}
-                className="text-gray-400 hover:text-white px-3 py-1.5 text-sm"
+                className="text-app-muted hover:text-app-text px-3 py-1.5 text-sm transition-colors"
               >
                 Clear
               </button>
@@ -172,40 +177,41 @@ export default function EditorWindow() {
 
       {/* File Path Bar */}
       {!ownerParam && (
-        <div className="bg-gray-800 border-b border-gray-700 px-6 py-3">
-          <div className="flex items-center gap-3">
+        <div className="bg-app-surface border-b border-app-border px-6 py-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <input
               placeholder="Owner (e.g. encode)"
               value={owner}
               onChange={(e) => setOwner(e.target.value)}
               disabled={loading}
-              className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="flex-1 min-w-[120px] px-3 py-2 bg-app-input border border-app-border rounded-lg text-sm text-app-text placeholder:text-app-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
             />
             <input
               placeholder="Repo (e.g. httpx)"
               value={repo}
               onChange={(e) => setRepo(e.target.value)}
               disabled={loading}
-              className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="flex-1 min-w-[120px] px-3 py-2 bg-app-input border border-app-border rounded-lg text-sm text-app-text placeholder:text-app-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
             />
             <input
               placeholder="File path (e.g. README.md)"
               value={path}
               onChange={(e) => setPath(e.target.value)}
               disabled={loading}
-              className="flex-[2] px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="flex-[2] min-w-[180px] px-3 py-2 bg-app-input border border-app-border rounded-lg text-sm text-app-text placeholder:text-app-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
             />
             <input
               placeholder="Branch (main)"
               value={branch}
               onChange={(e) => setBranch(e.target.value)}
               disabled={loading}
-              className="w-32 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-sm text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="w-32 px-3 py-2 bg-app-input border border-app-border rounded-lg text-sm text-app-text placeholder:text-app-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
             />
-            <button 
-              onClick={handleLoad} 
+            <button
+              type="button"
+              onClick={handleLoad}
               disabled={loading}
-              className="bg-primary-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-600 disabled:opacity-50"
+              className="bg-primary-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-primary-600 disabled:opacity-50 transition-colors"
             >
               {loading ? 'Loading...' : 'Load file'}
             </button>
@@ -215,10 +221,10 @@ export default function EditorWindow() {
 
       {/* Current file indicator */}
       {pathParam && (
-        <div className="bg-gray-800 border-b border-gray-700 px-6 py-2 flex items-center gap-2">
-          <FileCode className="w-4 h-4 text-gray-400" />
-          <span className="font-mono text-sm text-gray-300">{ownerParam}/{repoParam}/{pathParam}</span>
-          <span className="text-gray-500 text-xs ml-2">on {refParam}</span>
+        <div className="bg-app-surface border-b border-app-border px-6 py-2 flex items-center gap-2">
+          <FileCode className="w-4 h-4 text-app-muted" />
+          <span className="font-mono text-sm text-app-text">{ownerParam}/{repoParam}/{pathParam}</span>
+          <span className="text-app-muted text-xs ml-2">on {refParam}</span>
         </div>
       )}
 
@@ -229,14 +235,14 @@ export default function EditorWindow() {
         </div>
       )}
       {success && (
-        <div className="mx-6 mt-4 p-3 bg-green-900/50 border border-green-700 rounded-lg text-green-200 text-sm">
+        <div className="mx-6 mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-200 text-sm">
           <p>
             Pushed to{' '}
             <a 
               href={success.branch_url} 
               target="_blank" 
               rel="noreferrer"
-              className="text-green-300 underline hover:text-green-100"
+              className="text-emerald-300 underline hover:text-emerald-100"
             >
               {success.fork_owner}/{success.fork_repo}:{success.branch}
             </a>
@@ -247,7 +253,7 @@ export default function EditorWindow() {
                 href={success.pr_url} 
                 target="_blank" 
                 rel="noreferrer"
-                className="text-green-300 underline hover:text-green-100"
+                className="text-emerald-300 underline hover:text-emerald-100"
               >
                 Open a Pull Request →
               </a>
@@ -274,15 +280,15 @@ export default function EditorWindow() {
             }}
           />
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Pencil className="w-8 h-8 text-gray-400" />
+          <div className="flex items-center justify-center h-full text-app-muted bg-app-bg">
+            <div className="text-center px-4">
+              <div className="w-16 h-16 bg-app-surface border border-app-border rounded-full flex items-center justify-center mx-auto mb-4">
+                <Pencil className="w-8 h-8 text-app-muted" />
               </div>
-              <h2 className="text-xl font-semibold text-gray-300 mb-2">
+              <h2 className="text-xl font-semibold text-app-text mb-2">
                 {loading ? 'Loading file...' : 'No file loaded'}
               </h2>
-              <p className="text-gray-500">
+              <p className="text-app-muted max-w-sm mx-auto">
                 {loading 
                   ? 'Please wait while we fetch the file contents.'
                   : 'Enter repository details above and click "Load file" to start editing.'

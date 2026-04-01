@@ -2,16 +2,26 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @theme {
-  --color-primary-50: #f0f4ff;
-  --color-primary-100: #e0e7ff;
-  --color-primary-200: #c7d2fe;
-  --color-primary-300: #a5b4fc;
-  --color-primary-400: #818cf8;
-  --color-primary-500: #667eea;
-  --color-primary-600: #5a67d8;
-  --color-primary-700: #4c51bf;
-  --color-primary-800: #434190;
-  --color-primary-900: #3c366b;
+  /* App shell — dark developer UI (aligned with landing) */
+  --color-app-bg: #0b0f14;
+  --color-app-surface: #111827;
+  --color-app-elevated: #161f2e;
+  --color-app-border: #1f2937;
+  --color-app-text: #e6edf3;
+  --color-app-muted: #9da7b3;
+  --color-app-input: #0f1419;
+
+  /* Primary actions — blue */
+  --color-primary-50: #eff6ff;
+  --color-primary-100: #dbeafe;
+  --color-primary-200: #bfdbfe;
+  --color-primary-300: #93c5fd;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #3b82f6;
+  --color-primary-600: #2563eb;
+  --color-primary-700: #1d4ed8;
+  --color-primary-800: #1e40af;
+  --color-primary-900: #1e3a8a;
   
   --color-accent-50: #f0fdf4;
   --color-accent-100: #dcfce7;
@@ -37,7 +47,8 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #f8fafc;
+  background: #0b0f14;
+  color: #e6edf3;
 }
 
 #root {
@@ -84,6 +95,22 @@ body {
   from {
     opacity: 0;
     transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dashboard-repo-card-enter {
+  opacity: 0;
+  animation: dashboard-repo-card-enter 0.45s ease forwards;
+}
+
+@keyframes dashboard-repo-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
   to {
     opacity: 1;

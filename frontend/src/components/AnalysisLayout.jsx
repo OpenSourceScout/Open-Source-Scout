@@ -83,13 +83,13 @@ export default function AnalysisLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-app-bg flex text-app-text">
       <AnalysisSidebar
         repoInfo={repoInfo}
         onBackToRepos={rankedRepos ? handleBackToRepos : null}
         onClearAnalysis={clearAnalysis}
       />
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto bg-app-bg min-h-screen">
         <Outlet context={{ analysisResult, setAnalysisResult, repoInfo, repoUrl, rankedRepos }} />
       </main>
     </div>

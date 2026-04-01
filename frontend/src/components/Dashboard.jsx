@@ -1,17 +1,51 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { Search, Rocket, ChevronLeft, Settings, User } from 'lucide-react'
+import { Search, Rocket, Settings, User, Github, ExternalLink } from 'lucide-react'
 import { searchReposByTechStack, runAnalyze } from '../api'
 import ScoutLogo from './ScoutLogo'
 
 const QUICK_ADD_TAGS = ['Python', 'JavaScript', 'React', 'Node.js', 'TypeScript', 'Go', 'Java', 'Rust']
+
+const MAX_REPO_BULLETS = 4
+
+function buildRepoBullets(repo) {
+  if (Array.isArray(repo.why_match) && repo.why_match.length > 0) {
+    const fromWhy = repo.why_match
+      .map((t) => String(t).trim())
+      .filter(Boolean)
+      .slice(0, MAX_REPO_BULLETS)
+    if (fromWhy.length) return fromWhy
+  }
+  const desc = (repo.description || '').trim()
+  if (desc) {
+    const chunks = desc
+      .split(/\s*(?:[.•]|\n)\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .filter((s) => s.length < 140)
+      .slice(0, MAX_REPO_BULLETS)
+    if (chunks.length) return chunks
+  }
+  const b = repo.score_breakdown
+  const inferred = []
+  if (b) {
+    if ((b.beginner_friendliness ?? 0) >= 55) inferred.push('Beginner-friendly repository')
+    if ((b.activity_score ?? 0) >= 55) inferred.push('Healthy activity and commits')
+    if ((b.issue_availability ?? 0) >= 50) inferred.push('Issues available for contributors')
+    if ((b.community_score ?? 0) >= 55) inferred.push('Active community')
+    if ((b.tech_match ?? 0) >= 65) inferred.push('Strong tech stack alignment')
+  }
+  return inferred.slice(0, MAX_REPO_BULLETS).length
+    ? inferred.slice(0, MAX_REPO_BULLETS)
+    : ['Matches your search criteria']
+}
 
 export default function Dashboard() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const initialMode = searchParams.get('mode') || 'tech'
 
-  const [inputMode, setInputMode] = useState(initialMode) // 'tech' or 'repo'
+  const [inputMode, setInputMode] = useState(initialMode)
   const [techTags, setTechTags] = useState([])
   const [tagInput, setTagInput] = useState('')
   const [repoUrl, setRepoUrl] = useState('')
@@ -19,7 +53,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  // Results
   const [rankedRepos, setRankedRepos] = useState(null)
   const [selectedRepo, setSelectedRepo] = useState(null)
   const [analysisResult, setAnalysisResult] = useState(null)
@@ -63,7 +96,6 @@ export default function Dashboard() {
     try {
       const result = await runAnalyze({ repo_url: repoUrl, beginner_only: beginnerOnly })
       setAnalysisResult(result)
-      // Navigate to analysis view with results
       navigate('/analysis', { state: { result, repoUrl } })
     } catch (err) {
       setError(typeof err === 'object' ? (err.message || JSON.stringify(err)) : String(err))
@@ -86,165 +118,189 @@ export default function Dashboard() {
     }
   }
 
-  // Render waiting for input state
+  const inputClass =
+    'w-full px-3 py-2 border border-app-border rounded-lg text-sm bg-app-input text-app-text placeholder:text-app-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/80 focus:border-primary-500/50'
+
   const renderWaitingState = () => (
     <div className="flex flex-col items-center justify-center h-full py-20">
-      <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6 ring-1 ring-gray-200 bg-gray-50 p-2">
+      <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6 ring-1 ring-app-border bg-app-surface p-2">
         <ScoutLogo className="h-14 w-14 rounded-lg" />
       </div>
-      <h2 className="text-2xl font-semibold text-gray-900 mb-2">Waiting for input...</h2>
-      <p className="text-gray-500 text-center max-w-md">
+      <h2 className="text-2xl font-semibold text-app-text mb-2">Waiting for input...</h2>
+      <p className="text-app-muted text-center max-w-md">
         {inputMode === 'tech'
           ? 'Add your tech stack tags in the sidebar to discover matching repositories.'
-          : 'Enter a GitHub repository URL in the sidebar to begin analysis.'
-        }
+          : 'Enter a GitHub repository URL in the sidebar to begin analysis.'}
       </p>
     </div>
   )
 
-  // Render repo results
   const renderRepoResults = () => (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">Discovered Repositories</h2>
-          <p className="text-gray-500 text-sm">
+          <h2 className="text-xl font-semibold tracking-tight text-app-text">Discovered Repositories</h2>
+          <p className="text-app-muted text-sm mt-1">
             {rankedRepos.ranked_repos.length} repositories match your tech stack
           </p>
         </div>
         <button
+          type="button"
           onClick={() => setRankedRepos(null)}
-          className="text-gray-500 hover:text-gray-700 text-sm"
+          className="text-app-muted hover:text-primary-400 text-sm transition-colors duration-200 self-start sm:self-auto"
         >
           ← Back to search
         </button>
       </div>
 
       <div className="space-y-4">
-        {rankedRepos.ranked_repos.map((repo, index) => (
-          <div
-            key={repo.full_name}
-            className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow"
-          >
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center font-semibold text-gray-600">
-                  #{index + 1}
+        {rankedRepos.ranked_repos.map((repo, index) => {
+          const repoName = repo.full_name.split('/')[1] || repo.full_name
+          const owner = repo.full_name.split('/')[0] || ''
+          const avatarLetter = (repoName[0] || '?').toUpperCase()
+          const bullets = buildRepoBullets(repo)
+          const isAnalyzingThis = loading && selectedRepo?.full_name === repo.full_name
+
+          return (
+            <article
+              key={repo.full_name}
+              onClick={() => !loading && selectRepoForAnalysis(repo)}
+              style={{ animationDelay: `${index * 55}ms` }}
+              className="dashboard-repo-card-enter group cursor-pointer rounded-[10px] border border-[#1F2937] bg-[#111827] p-5 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_4px_24px_-4px_rgba(0,0,0,0.35)] transition-all duration-200 ease-out hover:-translate-y-1 hover:border-[#3B82F6] hover:shadow-[0_0_0_1px_rgba(59,130,246,0.25),0_12px_40px_-8px_rgba(59,130,246,0.18)]"
+            >
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#1F2937] bg-[#0B1220] text-sm font-semibold text-primary-400"
+                    aria-hidden
+                  >
+                    {avatarLetter}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="truncate font-semibold text-app-text">{repoName}</h3>
+                      <span className="text-[11px] font-medium uppercase tracking-wide text-app-muted/80">
+                        #{index + 1}
+                      </span>
+                    </div>
+                    <p className="text-app-muted text-sm truncate">{owner}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900">{repo.full_name.split('/')[1]}</h3>
-                  <p className="text-gray-500 text-sm">{repo.full_name.split('/')[0]}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="bg-accent-100 text-accent-700 px-3 py-1 rounded-full text-sm font-medium">
+                <span className="shrink-0 rounded-full bg-[rgba(34,197,94,0.15)] px-2.5 py-1 text-sm font-semibold text-[#22C55E]">
                   {repo.score_total}/100
                 </span>
               </div>
-            </div>
 
-            <p className="text-gray-600 text-sm mb-4">{repo.why_match?.join(' • ') || repo.description}</p>
+              <ul className="mb-4 space-y-1.5 text-sm text-app-muted">
+                {bullets.map((line, i) => (
+                  <li key={`${repo.full_name}-b-${i}`} className="flex gap-2 leading-snug">
+                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-app-muted/50" aria-hidden />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
 
-            {/* Score breakdown */}
-            <div className="grid grid-cols-5 gap-2 mb-4">
-              <div className="text-center p-2 bg-gray-50 rounded-lg">
-                <div className="text-xs text-gray-500">Tech Match</div>
-                <div className="font-semibold text-gray-900">{repo.score_breakdown.tech_match}</div>
+              <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                {[
+                  ['tech_match', 'Tech Match'],
+                  ['beginner_friendliness', 'Beginner'],
+                  ['activity_score', 'Activity'],
+                  ['community_score', 'Community'],
+                  ['issue_availability', 'Issues'],
+                ].map(([key, label]) => (
+                  <div
+                    key={key}
+                    className="rounded-lg border border-[#1F2937] bg-[#0B1220] px-2 py-2 text-center"
+                  >
+                    <div className="text-[11px] font-medium uppercase tracking-wide text-app-muted/80">{label}</div>
+                    <div className="mt-0.5 text-base font-semibold tabular-nums text-app-text">
+                      {repo.score_breakdown?.[key] ?? '—'}
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="text-center p-2 bg-gray-50 rounded-lg">
-                <div className="text-xs text-gray-500">Beginner</div>
-                <div className="font-semibold text-gray-900">{repo.score_breakdown.beginner_friendliness}</div>
-              </div>
-              <div className="text-center p-2 bg-gray-50 rounded-lg">
-                <div className="text-xs text-gray-500">Activity</div>
-                <div className="font-semibold text-gray-900">{repo.score_breakdown.activity_score}</div>
-              </div>
-              <div className="text-center p-2 bg-gray-50 rounded-lg">
-                <div className="text-xs text-gray-500">Community</div>
-                <div className="font-semibold text-gray-900">{repo.score_breakdown.community_score}</div>
-              </div>
-              <div className="text-center p-2 bg-gray-50 rounded-lg">
-                <div className="text-xs text-gray-500">Issues</div>
-                <div className="font-semibold text-gray-900">{repo.score_breakdown.issue_availability}</div>
-              </div>
-            </div>
 
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => selectRepoForAnalysis(repo)}
-                disabled={loading}
-                className="flex-1 bg-primary-500 text-white py-2 rounded-lg font-medium hover:bg-primary-600 transition-colors disabled:opacity-50"
-              >
-                {loading && selectedRepo?.full_name === repo.full_name ? 'Analyzing...' : 'Select & Analyze'}
-              </button>
-              <a
-                href={repo.url}
-                target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                View on GitHub
-              </a>
-            </div>
-          </div>
-        ))}
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    selectRepoForAnalysis(repo)
+                  }}
+                  disabled={loading}
+                  className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#22C55E] px-5 py-2 text-sm font-semibold text-[#0B0F14] shadow-sm transition-all duration-200 ease-out hover:-translate-y-px hover:shadow-[0_0_20px_-4px_rgba(34,197,94,0.55)] disabled:pointer-events-none disabled:opacity-50"
+                >
+                  <Search className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
+                  {isAnalyzingThis ? 'Analyzing…' : 'Analyze Repo'}
+                </button>
+                <a
+                  href={repo.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-flex w-fit items-center gap-2 rounded-lg border border-[#1F2937] bg-transparent px-4 py-2 text-sm font-medium text-app-muted transition-all duration-200 ease-out hover:-translate-y-px hover:border-[#3B82F6]/60 hover:text-primary-400"
+                >
+                  <Github className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+                  View on GitHub
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
+                </a>
+              </div>
+            </article>
+          )
+        })}
       </div>
     </div>
   )
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <aside className="w-80 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-4 border-b border-gray-100">
+    <div className="min-h-screen bg-app-bg flex text-app-text">
+      <aside className="w-80 bg-app-surface border-r border-app-border flex flex-col">
+        <div className="p-4 border-b border-app-border">
           <div className="flex items-center gap-2">
             <ScoutLogo className="h-8 w-8" />
-            <span className="font-semibold text-gray-900">Open Source Scout</span>
+            <span className="font-semibold text-app-text">Open Source Scout</span>
           </div>
         </div>
 
-        {/* Mode Toggle */}
-        <div className="p-4 border-b border-gray-100">
-          <div className="flex bg-gray-100 rounded-lg p-1">
+        <div className="p-4 border-b border-app-border">
+          <div className="flex bg-app-bg rounded-lg p-1 border border-app-border">
             <button
+              type="button"
               onClick={() => setInputMode('tech')}
-              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${inputMode === 'tech'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-                }`}
+              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors duration-200 ${
+                inputMode === 'tech'
+                  ? 'bg-app-elevated text-app-text shadow-sm border border-app-border'
+                  : 'text-app-muted hover:text-app-text'
+              }`}
             >
               Tech Stack
             </button>
             <button
+              type="button"
               onClick={() => setInputMode('repo')}
-              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${inputMode === 'repo'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-500 hover:text-gray-700'
-                }`}
+              className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors duration-200 ${
+                inputMode === 'repo'
+                  ? 'bg-app-elevated text-app-text shadow-sm border border-app-border'
+                  : 'text-app-muted hover:text-app-text'
+              }`}
             >
               Repository
             </button>
           </div>
         </div>
 
-        {/* Input Section */}
         <div className="flex-1 p-4 overflow-y-auto">
           {inputMode === 'tech' ? (
             <>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Your Tech Stack
-              </label>
+              <label className="block text-sm font-medium text-app-text mb-2">Your Tech Stack</label>
               <div className="flex flex-wrap gap-2 mb-3">
-                {techTags.map(tag => (
+                {techTags.map((tag) => (
                   <span
                     key={tag}
-                    className="inline-flex items-center gap-1 bg-primary-100 text-primary-700 px-3 py-1 rounded-full text-sm"
+                    className="inline-flex items-center gap-1 bg-primary-500/15 text-primary-300 border border-primary-500/25 px-3 py-1 rounded-full text-sm"
                   >
                     {tag}
-                    <button
-                      onClick={() => removeTag(tag)}
-                      className="hover:text-primary-900"
-                    >
+                    <button type="button" onClick={() => removeTag(tag)} className="hover:text-primary-200">
                       ×
                     </button>
                   </span>
@@ -256,36 +312,35 @@ export default function Dashboard() {
                 onChange={(e) => setTagInput(e.target.value)}
                 onKeyDown={handleTagKeyDown}
                 placeholder="Add technology..."
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className={inputClass}
               />
-
-              {/* Quick Add */}
               <div className="mt-4">
-                <span className="text-xs text-gray-500 mb-2 block">Quick add:</span>
+                <span className="text-xs text-app-muted mb-2 block">Quick add:</span>
                 <div className="flex flex-wrap gap-2">
-                  {QUICK_ADD_TAGS.filter(t => !techTags.includes(t)).slice(0, 6).map(tag => (
-                    <button
-                      key={tag}
-                      onClick={() => addTag(tag)}
-                      className="px-2 py-1 bg-gray-100 text-gray-600 rounded text-xs hover:bg-gray-200 transition-colors"
-                    >
-                      + {tag}
-                    </button>
-                  ))}
+                  {QUICK_ADD_TAGS.filter((t) => !techTags.includes(t))
+                    .slice(0, 6)
+                    .map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => addTag(tag)}
+                        className="px-2 py-1 bg-app-bg text-app-muted border border-app-border rounded text-xs hover:border-primary-500/40 hover:text-primary-400 transition-colors duration-200"
+                      >
+                        + {tag}
+                      </button>
+                    ))}
                 </div>
               </div>
             </>
           ) : (
             <>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Repository URL
-              </label>
+              <label className="block text-sm font-medium text-app-text mb-2">Repository URL</label>
               <input
                 type="text"
                 value={repoUrl}
                 onChange={(e) => setRepoUrl(e.target.value)}
                 placeholder="https://github.com/owner/repo"
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className={inputClass}
               />
               <div className="mt-4 flex items-center">
                 <input
@@ -293,74 +348,86 @@ export default function Dashboard() {
                   id="beginnerOnly"
                   checked={beginnerOnly}
                   onChange={(e) => setBeginnerOnly(e.target.checked)}
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  className="h-4 w-4 rounded border-app-border bg-app-input text-primary-500 focus:ring-primary-500/50"
                 />
-                <label htmlFor="beginnerOnly" className="ml-2 block text-sm text-gray-700">
+                <label htmlFor="beginnerOnly" className="ml-2 block text-sm text-app-muted">
                   Beginner-only mode
                 </label>
               </div>
-              <p className="text-xs text-gray-500 mt-2">
+              <p className="text-xs text-app-muted mt-2">
                 Enter a GitHub repository URL to analyze its issues and codebase.
               </p>
             </>
           )}
         </div>
 
-        {/* Action Button */}
-        <div className="p-4 border-t border-gray-100">
+        <div className="p-4 border-t border-app-border">
           {error && (
-            <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            <div className="mb-3 p-2 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
               {error}
             </div>
           )}
           <button
+            type="button"
             onClick={inputMode === 'tech' ? handleTechSearch : handleRepoAnalyze}
             disabled={loading || (inputMode === 'tech' ? techTags.length === 0 : !repoUrl.trim())}
-            className="w-full bg-primary-500 text-white py-3 rounded-lg font-medium hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full bg-accent-500 text-[#0b0f14] py-3 rounded-lg font-semibold hover:bg-accent-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
               <>
                 <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
                 </svg>
                 {inputMode === 'tech' ? 'Searching...' : 'Analyzing...'}
               </>
             ) : (
               <>
-                {inputMode === 'tech' ? <><Search className="w-4 h-4" /> Find Repositories</> : <><Rocket className="w-4 h-4" /> Analyze Repository</>}
+                {inputMode === 'tech' ? (
+                  <>
+                    <Search className="w-4 h-4" /> Find Repositories
+                  </>
+                ) : (
+                  <>
+                    <Rocket className="w-4 h-4" /> Analyze Repository
+                  </>
+                )}
               </>
             )}
           </button>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
-        {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+      <main className="flex-1 overflow-y-auto bg-app-bg">
+        <header className="bg-app-surface/80 backdrop-blur-sm border-b border-app-border px-6 py-4 flex items-center justify-between sticky top-0 z-10">
           <div>
-            <h1 className="text-lg font-semibold text-gray-900">Dashboard</h1>
-            <p className="text-sm text-gray-500">
+            <h1 className="text-lg font-semibold text-app-text">Dashboard</h1>
+            <p className="text-sm text-app-muted">
               {inputMode === 'tech' ? 'Discover repositories matching your skills' : 'Analyze a specific repository'}
             </p>
           </div>
           <div className="flex items-center gap-4">
-            <button className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100">
+            <button
+              type="button"
+              className="p-2 text-app-muted hover:text-app-text rounded-lg hover:bg-app-elevated transition-colors duration-200"
+            >
               <Settings className="w-5 h-5" />
             </button>
             <Link
               to="/profile"
               title="Profile"
               aria-label="Profile"
-              className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-300 transition-colors"
+              className="w-8 h-8 bg-app-elevated border border-app-border rounded-full flex items-center justify-center text-app-muted hover:border-primary-500/50 hover:text-primary-400 transition-all duration-200"
             >
               <User className="w-4 h-4" />
             </Link>
           </div>
         </header>
 
-        {/* Content */}
         {rankedRepos ? renderRepoResults() : renderWaitingState()}
       </main>
     </div>
