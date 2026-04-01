@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { setAuthSession } from '../auth'
+import ScoutLogo from '../components/ScoutLogo'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -36,9 +37,7 @@ export default function Login() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-md bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
         <div className="flex items-center gap-2 mb-6">
-          <div className="w-9 h-9 bg-primary-500 rounded-lg flex items-center justify-center">
-            <span className="text-white text-sm">🔭</span>
-          </div>
+          <ScoutLogo className="h-9 w-9" />
           <div>
             <div className="font-semibold text-gray-900 leading-tight">Open Source Scout</div>
             <div className="text-sm text-gray-500">Log in to continue</div>

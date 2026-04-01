@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import MonacoEditor from '@monaco-editor/react'
 import { FileCode, Pencil } from 'lucide-react'
 import { getFileContent, pushFile } from '../api'
+import ScoutLogo from '../components/ScoutLogo'
 
 const EXT_TO_LANG = {
   py: 'python',
@@ -120,9 +121,7 @@ export default function EditorWindow() {
             ← Back
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-primary-500 rounded flex items-center justify-center">
-              <span className="text-white text-xs">🔭</span>
-            </div>
+            <ScoutLogo className="h-6 w-6 rounded-md" />
             <span className="font-semibold text-white">Open Source Scout</span>
           </div>
         </div>

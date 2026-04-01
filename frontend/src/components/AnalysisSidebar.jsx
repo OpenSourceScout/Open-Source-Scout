@@ -11,6 +11,7 @@ import {
   Package,
   ChevronLeft,
 } from 'lucide-react'
+import ScoutLogo from './ScoutLogo'
 
 const NAV_ITEMS = [
   { path: '/analysis', label: 'Dashboard', Icon: LayoutDashboard },
@@ -38,9 +39,7 @@ export default function AnalysisSidebar({ repoInfo, onBackToRepos }) {
           className="flex items-center gap-2 cursor-pointer"
           onClick={() => navigate('/')}
         >
-          <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
-            <span className="text-white text-sm">🔭</span>
-          </div>
+          <ScoutLogo className="h-8 w-8" />
           <span className="font-semibold text-gray-900">Open Source Scout</span>
         </div>
       </div>

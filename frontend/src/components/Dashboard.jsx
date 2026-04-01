@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { Search, Rocket, ChevronLeft, Settings, User } from 'lucide-react'
 import { searchReposByTechStack, runAnalyze } from '../api'
+import ScoutLogo from './ScoutLogo'
 
 const QUICK_ADD_TAGS = ['Python', 'JavaScript', 'React', 'Node.js', 'TypeScript', 'Go', 'Java', 'Rust']
 
@@ -88,8 +89,8 @@ export default function Dashboard() {
   // Render waiting for input state
   const renderWaitingState = () => (
     <div className="flex flex-col items-center justify-center h-full py-20">
-      <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mb-6">
-        <span className="text-4xl">🔭</span>
+      <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6 ring-1 ring-gray-200 bg-gray-50 p-2">
+        <ScoutLogo className="h-14 w-14 rounded-lg" />
       </div>
       <h2 className="text-2xl font-semibold text-gray-900 mb-2">Waiting for input...</h2>
       <p className="text-gray-500 text-center max-w-md">
@@ -197,9 +198,7 @@ export default function Dashboard() {
       <aside className="w-80 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-primary-500 rounded-lg flex items-center justify-center">
-              <span className="text-white text-sm">🔭</span>
-            </div>
+            <ScoutLogo className="h-8 w-8" />
             <span className="font-semibold text-gray-900">Open Source Scout</span>
           </div>
         </div>
