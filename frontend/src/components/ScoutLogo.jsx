@@ -1,4 +1,4 @@
-export const SCOUT_LOGO_SRC = '/Opensource_Scout-Logo.jpeg'
+export const SCOUT_LOGO_SRC = '/Opensource_Scout-Logo.png'
 
 export default function ScoutLogo({
   className = 'h-8 w-8',
