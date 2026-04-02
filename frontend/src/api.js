@@ -136,3 +136,58 @@ export async function exportPdf(content) {
   }
   return res.blob();
 }
+
+// --- Project endpoints ---
+
+export async function getProjects() {
+  const res = await apiFetch('/projects')
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Failed to load projects')
+  }
+  return res.json()
+}
+
+export async function createProject(data) {
+  const res = await apiFetch('/projects', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Failed to create project')
+  }
+  return res.json()
+}
+
+export async function getProjectById(id) {
+  const res = await apiFetch(`/projects/${id}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Failed to load project')
+  }
+  return res.json()
+}
+
+export async function renameProject(id, name) {
+  const res = await apiFetch(`/projects/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Failed to rename project')
+  }
+  return res.json()
+}
+
+export async function deleteProject(id) {
+  const res = await apiFetch(`/projects/${id}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Failed to delete project')
+  }
+  return res.json()
+}

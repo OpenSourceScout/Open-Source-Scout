@@ -13,6 +13,7 @@ import ContributorBriefing from './pages/ContributorBriefing.jsx'
 import QaReport from './pages/QaReport.jsx'
 import EditorWindow from './pages/EditorWindow.jsx'
 import Profile from './pages/Profile.jsx'
+import Projects from './pages/Projects.jsx'
 import './index.css'
 import { isLoggedIn } from './auth'
 
@@ -184,6 +185,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </Route>
         <Route path="/editor" element={<RequireAuth><EditorWindow /></RequireAuth>} />
         <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+        <Route path="/projects" element={<RequireAuth><Projects /></RequireAuth>} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>,
