@@ -14,25 +14,11 @@ import QaReport from './pages/QaReport.jsx'
 import EditorWindow from './pages/EditorWindow.jsx'
 import Profile from './pages/Profile.jsx'
 import Projects from './pages/Projects.jsx'
+import AnalysisDashboard from './pages/AnalysisDashboard.jsx'
 import './index.css'
 import { isLoggedIn } from './auth'
 
-// Analysis Dashboard placeholder
-function AnalysisDashboard() {
-  return (
-    <div className="flex items-center justify-center h-full min-h-[50vh] bg-app-bg">
-      <div className="text-center px-4">
-        <div className="w-20 h-20 bg-primary-500/15 border border-primary-500/25 rounded-full flex items-center justify-center mx-auto mb-6">
-          <LayoutDashboard className="w-10 h-10 text-primary-400" />
-        </div>
-        <h2 className="text-2xl font-semibold text-app-text mb-2">Analysis Dashboard</h2>
-        <p className="text-app-muted max-w-sm mx-auto">Select a view from the sidebar to explore your analysis results.</p>
-      </div>
-    </div>
-  )
-}
-
-// Repositories view - shows ranked repos from tech stack search
+// RepositoriesView - shows ranked repos from tech stack search
 function RepositoriesView() {
   const context = useOutletContext()
   const rankedRepos = context?.rankedRepos
