@@ -74,6 +74,23 @@ def init_schema(pool: ConnectionPool) -> None:
     );
     create index if not exists idx_user_git_pushes_user
       on user_git_pushes(user_id);
+
+    create table if not exists user_projects (
+      id bigserial primary key,
+      user_id bigint not null references users(id) on delete cascade,
+      name text not null,
+      project_type text not null check (project_type in ('tech_stack', 'repo_url')),
+      tech_stack jsonb,
+      repo_url text,
+      repo_full_name text,
+      selected_issue_number int,
+      selected_issue_title text,
+      analysis_result jsonb,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+    create index if not exists idx_user_projects_user
+      on user_projects(user_id);
     """
     with pool.connection() as conn:
         with conn.cursor() as cur:
@@ -228,3 +245,129 @@ def fetch_user_activity(
             out["git_pushes"] = [_jsonable_row(r) for r in fetch_all_dicts(cur)]
     return out
 
+
+# ---------------------------------------------------------------------------
+# Project CRUD
+# ---------------------------------------------------------------------------
+
+FREE_PROJECT_LIMIT = 5
+
+
+def count_user_projects(pool: ConnectionPool, user_id: int) -> int:
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select count(*) from user_projects where user_id = %s",
+                (user_id,),
+            )
+            return cur.fetchone()[0]
+
+
+def create_project(
+    pool: ConnectionPool,
+    user_id: int,
+    *,
+    name: str,
+    project_type: str,
+    tech_stack: list[str] | None = None,
+    repo_url: str | None = None,
+    repo_full_name: str | None = None,
+    selected_issue_number: int | None = None,
+    selected_issue_title: str | None = None,
+    analysis_result: dict | None = None,
+) -> dict[str, Any]:
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                insert into user_projects
+                  (user_id, name, project_type, tech_stack, repo_url,
+                   repo_full_name, selected_issue_number, selected_issue_title,
+                   analysis_result)
+                values (%s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s::jsonb)
+                returning id, user_id, name, project_type, tech_stack, repo_url,
+                          repo_full_name, selected_issue_number, selected_issue_title,
+                          analysis_result, created_at, updated_at
+                """,
+                (
+                    user_id,
+                    name,
+                    project_type,
+                    Json(tech_stack) if tech_stack else None,
+                    repo_url,
+                    repo_full_name,
+                    selected_issue_number,
+                    selected_issue_title,
+                    Json(analysis_result) if analysis_result else None,
+                ),
+            )
+            row = fetch_one_dict(cur)
+            return _jsonable_row(row) if row else {}
+
+
+def get_user_projects(
+    pool: ConnectionPool, user_id: int
+) -> list[dict[str, Any]]:
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select id, name, project_type, tech_stack, repo_url,
+                       repo_full_name, selected_issue_number, selected_issue_title,
+                       created_at, updated_at
+                from user_projects
+                where user_id = %s
+                order by updated_at desc
+                """,
+                (user_id,),
+            )
+            return [_jsonable_row(r) for r in fetch_all_dicts(cur)]
+
+
+def get_project(
+    pool: ConnectionPool, user_id: int, project_id: int
+) -> dict[str, Any] | None:
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select id, user_id, name, project_type, tech_stack, repo_url,
+                       repo_full_name, selected_issue_number, selected_issue_title,
+                       analysis_result, created_at, updated_at
+                from user_projects
+                where id = %s and user_id = %s
+                """,
+                (project_id, user_id),
+            )
+            row = fetch_one_dict(cur)
+            return _jsonable_row(row) if row else None
+
+
+def rename_project(
+    pool: ConnectionPool, user_id: int, project_id: int, new_name: str
+) -> dict[str, Any] | None:
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update user_projects
+                set name = %s, updated_at = now()
+                where id = %s and user_id = %s
+                returning id, name, updated_at
+                """,
+                (new_name, project_id, user_id),
+            )
+            row = fetch_one_dict(cur)
+            return _jsonable_row(row) if row else None
+
+
+def delete_project(
+    pool: ConnectionPool, user_id: int, project_id: int
+) -> bool:
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "delete from user_projects where id = %s and user_id = %s",
+                (project_id, user_id),
+            )
+            return cur.rowcount > 0
