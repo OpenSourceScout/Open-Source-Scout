@@ -185,8 +185,11 @@ class ScoutOrchestrator:
 
         except Exception as e:
             logger.exception("Pipeline failed")
-            self._update_status(f"❌ Error: {e}")
-            return {"success": False, "error": str(e)}
+            error_msg = str(e)
+            if "RateLimitError" in error_msg or "rate limit" in error_msg.lower():
+                error_msg = "API rate limit exceeded. Please try again later or configure a new API key."
+            self._update_status(f"❌ Error: {error_msg}")
+            return {"success": False, "error": error_msg}
     
     # ------------------------------------------------------------------
     # Phased execution (used by the API for two-step UI flow)
@@ -224,7 +227,10 @@ class ScoutOrchestrator:
             }
 
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            error_msg = str(e)
+            if "RateLimitError" in error_msg or "rate limit" in error_msg.lower():
+                error_msg = "API rate limit exceeded. Please try again later."
+            return {"success": False, "error": error_msg}
 
     def run_phase2(self, repo_url: str, issue: GitHubIssue) -> dict:
         """Run Phase 2: Code location for a specific issue."""
@@ -246,7 +252,11 @@ class ScoutOrchestrator:
             }
 
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            logger.error(f"Error during Phase 2: {e}")
+            error_msg = str(e)
+            if "RateLimitError" in error_msg or "rate limit" in error_msg.lower():
+                error_msg = "API rate limit exceeded. Please try again later."
+            return {"success": False, "error": error_msg}
 
     def run_phase3(
         self,
@@ -262,7 +272,10 @@ class ScoutOrchestrator:
             return {"success": True, "agent3_output": agent3_output}
 
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            error_msg = str(e)
+            if "RateLimitError" in error_msg or "rate limit" in error_msg.lower():
+                error_msg = "API rate limit exceeded. Please try again later."
+            return {"success": False, "error": error_msg}
 
     def run_testing(
         self,
@@ -299,7 +312,10 @@ class ScoutOrchestrator:
             }
 
         except Exception as e:
-            return {"success": False, "error": str(e)}
+            error_msg = str(e)
+            if "RateLimitError" in error_msg or "rate limit" in error_msg.lower():
+                error_msg = "API rate limit exceeded. Please try again later."
+            return {"success": False, "error": error_msg}
 
     # ------------------------------------------------------------------
     # QA feedback loop (used by the full pipeline)
