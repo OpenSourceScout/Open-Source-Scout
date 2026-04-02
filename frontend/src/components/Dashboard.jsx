@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { Search, Rocket, Settings, User, Github, ExternalLink } from 'lucide-react'
-import { searchReposByTechStack, runAnalyze } from '../api'
+import { Search, Rocket, Settings, User, Github, ExternalLink, FolderKanban } from 'lucide-react'
+import { searchReposByTechStack, runAnalyze, createProject } from '../api'
 import ScoutLogo from './ScoutLogo'
 
 const QUICK_ADD_TAGS = ['Python', 'JavaScript', 'React', 'Node.js', 'TypeScript', 'Go', 'Java', 'Rust']
@@ -96,6 +96,21 @@ export default function Dashboard() {
     try {
       const result = await runAnalyze({ repo_url: repoUrl, beginner_only: beginnerOnly })
       setAnalysisResult(result)
+
+      // Auto-create project in background
+      const repoMatch = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/)
+      const repoFullName = repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : repoUrl
+      const repoName = repoMatch ? repoMatch[2] : repoUrl
+      try {
+        await createProject({
+          name: repoName,
+          project_type: 'repo_url',
+          repo_url: repoUrl,
+          repo_full_name: repoFullName,
+          analysis_result: result,
+        })
+      } catch (_) { /* limit reached or other error — non-blocking */ }
+
       navigate('/analysis', { state: { result, repoUrl } })
     } catch (err) {
       setError(typeof err === 'object' ? (err.message || JSON.stringify(err)) : String(err))
@@ -110,6 +125,20 @@ export default function Dashboard() {
     setError(null)
     try {
       const result = await runAnalyze({ repo_url: repo.url })
+
+      // Auto-create project in background
+      const repoName = repo.full_name.split('/')[1] || repo.full_name
+      try {
+        await createProject({
+          name: repoName,
+          project_type: 'tech_stack',
+          tech_stack: techTags.length > 0 ? techTags : undefined,
+          repo_url: repo.url,
+          repo_full_name: repo.full_name,
+          analysis_result: result,
+        })
+      } catch (_) { /* limit reached or other error — non-blocking */ }
+
       navigate('/analysis', { state: { result, repoUrl: repo.url, rankedRepos } })
     } catch (err) {
       setError(typeof err === 'object' ? (err.message || JSON.stringify(err)) : String(err))
@@ -411,6 +440,14 @@ export default function Dashboard() {
             </p>
           </div>
           <div className="flex items-center gap-4">
+            <Link
+              to="/projects"
+              title="My Projects"
+              aria-label="My Projects"
+              className="p-2 text-app-muted hover:text-primary-400 rounded-lg hover:bg-app-elevated transition-colors duration-200"
+            >
+              <FolderKanban className="w-5 h-5" />
+            </Link>
             <button
               type="button"
               className="p-2 text-app-muted hover:text-app-text rounded-lg hover:bg-app-elevated transition-colors duration-200"
