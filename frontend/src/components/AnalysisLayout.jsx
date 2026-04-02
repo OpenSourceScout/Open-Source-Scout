@@ -88,6 +88,7 @@ export default function AnalysisLayout() {
         repoInfo={repoInfo}
         onBackToRepos={rankedRepos ? handleBackToRepos : null}
         onClearAnalysis={clearAnalysis}
+        hasRankedRepos={!!rankedRepos}
       />
       <main className="flex-1 overflow-y-auto bg-app-bg min-h-screen">
         <Outlet context={{ analysisResult, setAnalysisResult, repoInfo, repoUrl, rankedRepos }} />
