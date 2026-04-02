@@ -10,6 +10,7 @@ import {
   User,
   Package,
   FolderKanban,
+  Lock,
 } from 'lucide-react'
 import ScoutLogo from './ScoutLogo'
 
@@ -35,8 +36,14 @@ const navClass = ({ isActive }) =>
       : 'text-app-muted hover:bg-app-elevated hover:text-app-text border border-transparent'
   }`
 
-export default function AnalysisSidebar({ repoInfo, onBackToRepos }) {
+export default function AnalysisSidebar({ repoInfo, onBackToRepos, hasRankedRepos }) {
   const navigate = useNavigate()
+
+  // Filter nav items: hide Repositories tab when user entered via direct repo URL
+  const visibleNavItems = NAV_ITEMS.filter((item) => {
+    if (item.path === '/analysis/repositories' && !hasRankedRepos) return false
+    return true
+  })
 
   return (
     <aside className="w-64 bg-app-surface border-r border-app-border flex flex-col h-screen">
@@ -72,7 +79,7 @@ export default function AnalysisSidebar({ repoInfo, onBackToRepos }) {
 
       <nav className="flex-1 p-4 overflow-y-auto">
         <div className="space-y-1">
-          {NAV_ITEMS.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink key={item.path} to={item.path} className={navClass}>
               <item.Icon className="w-4 h-4 shrink-0" />
               <span>{item.label}</span>
