@@ -14,12 +14,13 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv(override=True)
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
+from tenacity import RetryError
 
 from app.auth_routes import router as auth_router
 from app.auth_service import decode_access_token
@@ -219,7 +220,7 @@ def _record_phase1_issue_analysis(pool, user_id: int, body: AnalyzeRequest, resu
             break
     if title is None:
         title = ""
-    full_name = f"{repo.owner}/{repo.name}"
+    full_name = repo.full_name
     record_issue_analysis(
         pool,
         user_id,
@@ -260,8 +261,18 @@ def run_analyze(body: AnalyzeRequest, request: Request):
         if pool and uid:
             _safe_record_activity(_record_phase1_issue_analysis, pool, uid, body, results)
         return _to_jsonable(results)
+    except RetryError as e:
+        status_msg = str(e)
+        if "RateLimitError" in status_msg or "rate limit" in status_msg.lower():
+            raise HTTPException(status_code=429, detail="API rate limit exceeded. Please try again later or configure a new API key.")
+        raise HTTPException(status_code=500, detail=f"LLM request failed after retries: {status_msg}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/test-post")
+def test_post(request: Request):
+    print("Test POST hit!", flush=True)
+    return {"success": True}
 
 
 @app.post("/api/re-analyze-issue")
@@ -284,11 +295,13 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
         )
 
         # Fetch repo metadata
+        print(f"DEBUG: Fetching repo {body.repo_url}", flush=True)
         repo = github_client.get_repo(body.repo_url)
 
         # Fetch the specific issue directly by number — works for any issue
         # regardless of how recently it was updated (avoids the "top 50" limit).
         try:
+            print(f"DEBUG: Fetching issue {body.issue_number}", flush=True)
             target_issue = github_client.get_issue(body.repo_url, body.issue_number)
         except Exception:
             raise HTTPException(
@@ -300,7 +313,9 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
         issues = github_client.get_issues(body.repo_url, beginner_only=False, max_issues=50)
 
         # Phase 2 — Archaeologist
+        print("DEBUG: Running Phase 2", flush=True)
         phase2 = orchestrator.run_phase2(body.repo_url, target_issue)
+        print("DEBUG: Phase 2 finished", flush=True)
         if not phase2.get("success"):
             raise HTTPException(status_code=500, detail=phase2.get("error", "Phase 2 failed"))
 
@@ -309,8 +324,10 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
         # Fetch agent1_output from a fresh issue ranking (needed for phase 3 context)
         from core.schemas import Agent1Output, RepoInfo, RankedIssue, ScoreBreakdown
         from core.scoring import IssueScorer
+        print("DEBUG: Ranking context issues", flush=True)
         scorer = IssueScorer()
         ranked = scorer.rank_issues(issues, top_n=3)
+        print("DEBUG: Finished ranking context issues", flush=True)
         ranked_issues = [
             RankedIssue(
                 number=iss.number,
@@ -335,7 +352,9 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
         )
 
         # Phase 3 — Senior Dev
+        print("DEBUG: Running Phase 3", flush=True)
         phase3 = orchestrator.run_phase3(repo, target_issue, agent1_output, agent2_output)
+        print("DEBUG: Phase 3 finished", flush=True)
         if not phase3.get("success"):
             raise HTTPException(status_code=500, detail=phase3.get("error", "Phase 3 failed"))
 
@@ -353,6 +372,7 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
         # Phase 4 — Testing Agent with QA feedback loop
         # If any agent fails QA, they are re-run with feedback (up to 2 retries).
         # The returned agent outputs may be improved versions after retries.
+        print("DEBUG: Running QA cycle", flush=True)
         testing_result = orchestrator.run_testing(
             repo=repo,
             issue=target_issue,
@@ -367,6 +387,7 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
         final_agent2 = testing_result.get("agent2_output", agent2_output)
         final_agent3 = testing_result.get("agent3_output", agent3_output)
 
+        print("DEBUG: Re_analyze completed successfully", flush=True)
         payload = {
             "success": True,
             "target_issue": target_issue,
@@ -382,12 +403,17 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
                 pool,
                 uid,
                 repo_url=body.repo_url.strip(),
-                repo_full_name=f"{repo.owner}/{repo.name}",
+                repo_full_name=repo.full_name,
                 issue_number=target_issue.number,
                 issue_title=target_issue.title,
             )
         return _to_jsonable(payload)
 
+    except RetryError as e:
+        status_msg = str(e)
+        if "RateLimitError" in status_msg or "rate limit" in status_msg.lower():
+            raise HTTPException(status_code=429, detail="API rate limit exceeded. Please try again later or configure a new API key.")
+        raise HTTPException(status_code=500, detail=f"LLM request failed after retries: {status_msg}")
     except HTTPException:
         raise
     except Exception as e:
