@@ -25,11 +25,18 @@ from app.auth_routes import router as auth_router
 from app.auth_service import decode_access_token
 from app.db import (
     create_pool,
+    count_user_projects,
+    create_project,
+    delete_project,
     fetch_user_activity,
+    FREE_PROJECT_LIMIT,
+    get_project,
+    get_user_projects,
     init_schema,
     record_git_push,
     record_issue_analysis,
     record_tech_stack_search,
+    rename_project,
 )
 
 from integrations.github_client import GitHubClient
@@ -132,6 +139,25 @@ class ReAnalyzeRequest(BaseModel):
     pathfinder_output: dict | None = None
 
 
+class CreateProjectRequest(BaseModel):
+    """Request body for creating a new project."""
+
+    name: str
+    project_type: str  # 'tech_stack' or 'repo_url'
+    tech_stack: list[str] | None = None
+    repo_url: str | None = None
+    repo_full_name: str | None = None
+    selected_issue_number: int | None = None
+    selected_issue_title: str | None = None
+    analysis_result: dict | None = None
+
+
+class RenameProjectRequest(BaseModel):
+    """Request body for renaming a project."""
+
+    name: str
+
+
 def _to_jsonable(obj):
     """Convert Pydantic models and nested structures to JSON-serializable dict."""
     if hasattr(obj, "model_dump"):
@@ -153,6 +179,22 @@ def _optional_user_id(request: Request) -> int | None:
         return int(claims.get("sub"))
     except Exception:
         return None
+
+
+def _require_user_id(request: Request) -> int:
+    """Extract user ID from Bearer token or raise 401."""
+    uid = _optional_user_id(request)
+    if uid is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return uid
+
+
+def _require_pool(request: Request):
+    """Return the database pool or raise 500."""
+    pool = getattr(request.app.state, "db_pool", None)
+    if pool is None:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    return pool
 
 
 def _safe_record_activity(fn, *args, **kwargs) -> None:
@@ -451,6 +493,83 @@ def me(request: Request):
             activity = fetch_user_activity(pool, user_id)
             user.update(activity)
             return user
+
+
+# --- Project endpoints ---
+
+
+@app.get("/api/projects")
+def list_projects(request: Request):
+    """List all projects for the authenticated user."""
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+    projects = get_user_projects(pool, uid)
+    return {"projects": projects, "limit": FREE_PROJECT_LIMIT}
+
+
+@app.post("/api/projects", status_code=201)
+def create_project_endpoint(body: CreateProjectRequest, request: Request):
+    """Create a new project. Enforces the free plan project limit."""
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+
+    current_count = count_user_projects(pool, uid)
+    if current_count >= FREE_PROJECT_LIMIT:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Free plan limit reached. You can have at most {FREE_PROJECT_LIMIT} projects. "
+                   f"Delete an existing project to create a new one.",
+        )
+
+    if body.project_type not in ("tech_stack", "repo_url"):
+        raise HTTPException(status_code=400, detail="project_type must be 'tech_stack' or 'repo_url'")
+
+    project = create_project(
+        pool,
+        uid,
+        name=body.name,
+        project_type=body.project_type,
+        tech_stack=body.tech_stack,
+        repo_url=body.repo_url,
+        repo_full_name=body.repo_full_name,
+        selected_issue_number=body.selected_issue_number,
+        selected_issue_title=body.selected_issue_title,
+        analysis_result=body.analysis_result,
+    )
+    return project
+
+
+@app.get("/api/projects/{project_id}")
+def get_project_endpoint(project_id: int, request: Request):
+    """Get a single project with its full analysis result."""
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+    project = get_project(pool, uid, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+@app.patch("/api/projects/{project_id}")
+def rename_project_endpoint(project_id: int, body: RenameProjectRequest, request: Request):
+    """Rename a project. Only the name can be changed."""
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+    result = rename_project(pool, uid, project_id, body.name)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_project_endpoint(project_id: int, request: Request):
+    """Delete a project."""
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+    deleted = delete_project(pool, uid, project_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"ok": True}
 
 
 @app.get("/api/repos/{owner}/{repo}/files/{file_path:path}")
