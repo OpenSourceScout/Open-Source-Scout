@@ -182,60 +182,80 @@ export default function Dashboard() {
         </button>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         {rankedRepos.ranked_repos.map((repo, index) => {
           const repoName = repo.full_name.split('/')[1] || repo.full_name
           const owner = repo.full_name.split('/')[0] || ''
-          const avatarLetter = (repoName[0] || '?').toUpperCase()
-          const bullets = buildRepoBullets(repo)
           const isAnalyzingThis = loading && selectedRepo?.full_name === repo.full_name
 
           return (
             <article
               key={repo.full_name}
-              onClick={() => !loading && selectRepoForAnalysis(repo)}
-              style={{ animationDelay: `${index * 55}ms` }}
-              className="dashboard-repo-card-enter group cursor-pointer rounded-[10px] border border-[#1F2937] bg-[#111827] p-5 shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_4px_24px_-4px_rgba(0,0,0,0.35)] transition-all duration-200 ease-out hover:-translate-y-1 hover:border-[#3B82F6] hover:shadow-[0_0_0_1px_rgba(59,130,246,0.25),0_12px_40px_-8px_rgba(59,130,246,0.18)]"
+              className="bg-app-surface/50 border border-app-border rounded-2xl p-6 transition-colors hover:bg-app-surface"
             >
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#1F2937] bg-[#0B1220] text-sm font-semibold text-primary-400"
-                    aria-hidden
-                  >
-                    {avatarLetter}
+              {/* Header Section */}
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg bg-app-elevated border border-app-border text-app-muted shrink-0">
+                    #{index + 1}
                   </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="truncate font-semibold text-app-text">{repoName}</h3>
-                      <span className="text-[11px] font-medium uppercase tracking-wide text-app-muted/80">
-                        #{index + 1}
-                      </span>
+                  <div>
+                    <h3 className="font-semibold text-xl text-app-text mb-1 flex items-center gap-2">
+                      {repoName}
+                    </h3>
+                    <div className="flex flex-wrap items-center gap-4 text-sm text-app-muted">
+                      <span className="font-medium text-app-text/70">{owner}</span>
+                      <div className="flex items-center gap-3">
+                        <span className="flex items-center gap-1.5">
+                          <svg className="w-4 h-4 text-amber-400/80" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg> 
+                          {repo.stargazers_count?.toLocaleString() || repo.stars?.toLocaleString() || 0}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <svg className="w-4 h-4 text-app-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> 
+                          {repo.open_issues_count?.toLocaleString() || repo.open_issues?.toLocaleString() || 0} issues
+                        </span>
+                        {(repo.language) && (
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full bg-primary-500/80"></span> 
+                            {repo.language}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-app-muted text-sm truncate">{owner}</p>
                   </div>
                 </div>
-                <span className="shrink-0 rounded-full bg-[rgba(34,197,94,0.15)] px-2.5 py-1 text-sm font-semibold text-[#22C55E]">
-                  {repo.score_total}/100
-                </span>
+                <div className="flex flex-col items-end shrink-0 bg-app-bg px-4 py-2 border border-app-border rounded-xl">
+                  <span className="text-xl font-bold text-primary-400">
+                    {repo.score_total} <span className="text-sm font-medium text-app-muted">/100</span>
+                  </span>
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-app-muted">Match Score</span>
+                </div>
               </div>
 
+              {/* Description */}
               {repo.description && repo.description !== 'No description available' && (
-                <p className="mb-3 text-sm text-app-muted/90 leading-relaxed line-clamp-2 border-l-2 border-primary-500/30 pl-3 italic">
+                <p className="mb-6 text-base text-app-text/90 leading-relaxed">
                   {repo.description}
                 </p>
               )}
 
-              <ul className="mb-4 space-y-1.5 text-sm text-app-muted">
-                {bullets.map((line, i) => (
-                  <li key={`${repo.full_name}-b-${i}`} className="flex gap-2 leading-snug">
-                    <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-app-muted/50" aria-hidden />
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ul>
+              {/* Why it matches */}
+              {repo.why_match && repo.why_match.length > 0 && (
+                <div className="mb-6 bg-primary-500/5 rounded-xl p-4 border border-primary-500/10">
+                  <p className="text-xs font-semibold text-primary-400 capitalize tracking-wide mb-3">Why it matches</p>
+                  <ul className="text-sm text-app-text/80 space-y-2">
+                    {repo.why_match.slice(0, 3).map((reason, i) => (
+                      <li key={i} className="flex items-start gap-3">
+                        <svg className="w-4 h-4 text-primary-400/70 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        <span className="leading-snug">{reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
-              <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+              {/* Metrics Breakdown */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
                 {[
                   ['tech_match', 'Tech Match'],
                   ['beginner_friendliness', 'Beginner'],
@@ -243,41 +263,31 @@ export default function Dashboard() {
                   ['community', 'Community'],
                   ['issue_availability', 'Issues'],
                 ].map(([key, label]) => (
-                  <div
-                    key={key}
-                    className="rounded-lg border border-[#1F2937] bg-[#0B1220] px-2 py-2 text-center"
-                  >
-                    <div className="text-[11px] font-medium uppercase tracking-wide text-app-muted/80">{label}</div>
-                    <div className="mt-0.5 text-base font-semibold tabular-nums text-app-text">
-                      {repo.score_breakdown?.[key] ?? '—'}
-                    </div>
+                  <div key={key} className="p-3 bg-app-bg rounded-xl border border-app-border">
+                    <div className="text-[11px] font-semibold tracking-wide text-app-muted uppercase mb-1">{label}</div>
+                    <div className="font-medium text-app-text">{repo.score_breakdown?.[key] ?? '-'}</div>
                   </div>
                 ))}
               </div>
 
-              <div className="flex flex-wrap items-center gap-3">
+              {/* Actions */}
+              <div className="flex flex-wrap items-center gap-3 pt-6 border-t border-app-border/60">
                 <button
                   type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    selectRepoForAnalysis(repo)
-                  }}
+                  onClick={() => selectRepoForAnalysis(repo)}
                   disabled={loading}
-                  className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#22C55E] px-5 py-2 text-sm font-semibold text-[#0B0F14] shadow-sm transition-all duration-200 ease-out hover:-translate-y-px hover:shadow-[0_0_20px_-4px_rgba(34,197,94,0.55)] disabled:pointer-events-none disabled:opacity-50"
+                  className="inline-flex w-fit items-center gap-2 rounded-lg bg-app-text text-app-bg px-5 py-2.5 text-sm font-medium transition-all duration-200 hover:bg-app-text/90 hover:scale-[0.98] disabled:opacity-50"
                 >
-                  <Search className="h-4 w-4 shrink-0" strokeWidth={2.25} aria-hidden />
-                  {isAnalyzingThis ? 'Analyzing…' : 'Analyze Repo'}
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                  {isAnalyzingThis ? 'Analyzing...' : 'Analyze Repository'}
                 </button>
                 <a
                   href={repo.url}
                   target="_blank"
                   rel="noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="inline-flex w-fit items-center gap-2 rounded-lg border border-[#1F2937] bg-transparent px-4 py-2 text-sm font-medium text-app-muted transition-all duration-200 ease-out hover:-translate-y-px hover:border-[#3B82F6]/60 hover:text-primary-400"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 border border-app-border rounded-lg text-app-text hover:bg-app-elevated transition-colors text-sm font-medium"
                 >
-                  <Github className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
-                  View on GitHub
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
+                  View Source
                 </a>
               </div>
             </article>
@@ -288,16 +298,16 @@ export default function Dashboard() {
   )
 
   return (
-    <div className="min-h-screen bg-app-bg flex text-app-text">
-      <aside className="w-80 bg-app-surface border-r border-app-border flex flex-col">
-        <div className="p-4 border-b border-app-border">
+    <div className="h-screen bg-app-bg flex text-app-text overflow-hidden">
+      <aside className="w-80 bg-app-surface border-r border-app-border flex flex-col shrink-0">
+        <div className="p-4 border-b border-app-border shrink-0">
           <div className="flex items-center gap-2">
             <ScoutLogo className="h-8 w-8" />
             <span className="font-semibold text-app-text">Open Source Scout</span>
           </div>
         </div>
 
-        <div className="p-4 border-b border-app-border">
+        <div className="p-4 border-b border-app-border shrink-0">
           <div className="flex bg-app-bg rounded-lg p-1 border border-app-border">
             <button
               type="button"
@@ -355,7 +365,7 @@ export default function Dashboard() {
                   {QUICK_ADD_TAGS.filter((t) => !techTags.includes(t))
                     .slice(0, 6)
                     .map((tag) => (
-                      <button
+                       <button
                         key={tag}
                         type="button"
                         onClick={() => addTag(tag)}
@@ -396,7 +406,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="p-4 border-t border-app-border">
+        <div className="p-4 border-t border-app-border shrink-0">
           {error && (
             <div className="mb-3 p-2 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
               {error}
@@ -435,6 +445,31 @@ export default function Dashboard() {
             )}
           </button>
         </div>
+
+        {/* Profile Sidebar Footer */}
+        <div className="p-4 border-t border-app-border bg-app-surface/50 shrink-0">
+          <div className="flex items-center justify-between">
+            <Link
+              to="/profile"
+              className="flex items-center gap-3 flex-1 px-2 py-1.5 rounded-lg hover:bg-app-elevated transition-colors duration-200"
+            >
+              <div className="w-8 h-8 bg-app-elevated border border-app-border rounded-full flex items-center justify-center text-app-muted shrink-0">
+                <User className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-app-text truncate">Developer</p>
+                <p className="text-xs text-app-muted truncate">View Profile</p>
+              </div>
+            </Link>
+            <button
+              type="button"
+              className="p-2 text-app-muted hover:text-app-text rounded-lg hover:bg-app-elevated transition-colors duration-200 shrink-0"
+              title="Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
       </aside>
 
       <main className="flex-1 overflow-y-auto bg-app-bg">
@@ -445,28 +480,15 @@ export default function Dashboard() {
               {inputMode === 'tech' ? 'Discover repositories matching your skills' : 'Analyze a specific repository'}
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center justify-end">
             <Link
               to="/projects"
               title="My Projects"
               aria-label="My Projects"
-              className="p-2 text-app-muted hover:text-primary-400 rounded-lg hover:bg-app-elevated transition-colors duration-200"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-app-muted hover:text-primary-400 rounded-lg hover:bg-app-elevated border border-transparent hover:border-primary-500/30 transition-all duration-200"
             >
-              <FolderKanban className="w-5 h-5" />
-            </Link>
-            <button
-              type="button"
-              className="p-2 text-app-muted hover:text-app-text rounded-lg hover:bg-app-elevated transition-colors duration-200"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-            <Link
-              to="/profile"
-              title="Profile"
-              aria-label="Profile"
-              className="w-8 h-8 bg-app-elevated border border-app-border rounded-full flex items-center justify-center text-app-muted hover:border-primary-500/50 hover:text-primary-400 transition-all duration-200"
-            >
-              <User className="w-4 h-4" />
+              <FolderKanban className="w-4 h-4" />
+              <span>Projects</span>
             </Link>
           </div>
         </header>
