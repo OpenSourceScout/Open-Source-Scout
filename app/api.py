@@ -622,7 +622,7 @@ def get_file_content(
     owner: str,
     repo: str,
     file_path: str,
-    ref: str = "main",
+    ref: str = "HEAD",
 ):
     """
     Fetch raw file content from a repository.

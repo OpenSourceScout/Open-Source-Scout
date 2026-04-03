@@ -345,31 +345,54 @@ class GitHubClient:
         
         return repo_dir
 
+    def get_default_branch(self, owner: str, repo: str) -> str:
+        """Return the default branch name for a repository (e.g. 'main' or 'master')."""
+        resp = self.session.get(f"{self.BASE_URL}/repos/{owner}/{repo}")
+        if resp.status_code == 200:
+            return resp.json().get("default_branch", "main")
+        return "main"
+
     def get_file_content(
         self,
         owner: str,
         repo: str,
         path: str,
-        ref: str = "main"
+        ref: str = "HEAD"
     ) -> str:
         """
         Fetch raw file content from a repository via the GitHub Contents API.
+
+        Uses ``ref=HEAD`` by default so it always resolves to the repo's true
+        default branch regardless of whether it is called ``main``, ``master``
+        or anything else.  If that still returns 404 (e.g. the file genuinely
+        doesn't exist under that name) the error is propagated to the caller.
 
         Args:
             owner: Repository owner
             repo: Repository name
             path: File path relative to repo root
-            ref: Branch, tag, or commit SHA (default: main)
+            ref: Branch, tag, or commit SHA (default: HEAD — resolves to the
+                 repo's default branch automatically)
 
         Returns:
             Decoded file content as string
 
         Raises:
-            requests.HTTPError: On API errors (e.g. 404)
+            requests.HTTPError: On API errors (e.g. 404 when file not found)
             ValueError: If the path is not a file (e.g. directory)
         """
         url = f"{self.BASE_URL}/repos/{owner}/{repo}/contents/{path}"
         resp = self.session.get(url, params={"ref": ref})
+
+        # If the caller passed an explicit ref that isn't HEAD and the request
+        # failed, make one more attempt using the repo's actual default branch.
+        # This handles the common case where a caller hardcodes "main" but the
+        # repo uses "master" (or vice-versa).
+        if resp.status_code == 404 and ref != "HEAD":
+            default_branch = self.get_default_branch(owner, repo)
+            if default_branch != ref:
+                resp = self.session.get(url, params={"ref": default_branch})
+
         resp.raise_for_status()
         data = resp.json()
         if data.get("type") != "file":
