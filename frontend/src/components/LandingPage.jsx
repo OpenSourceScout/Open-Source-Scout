@@ -152,7 +152,7 @@ export default function LandingPage() {
                     <span>
                       <span className="text-[#E6EDF3]/90">export const </span>
                       DEFAULT_TIMEOUT = <span className="text-[#FBBF24]">15000</span>;{' '}
-                      <span className="text-[#9DA7B3]">// match upstream</span>
+                      <span className="text-[#9DA7B3]">{'// match upstream'}</span>
                     </span>
                   </span>
                   <span className="block h-2" />

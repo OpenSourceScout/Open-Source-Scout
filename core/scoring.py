@@ -8,9 +8,8 @@ Scoring breakdown (0-100 total):
 - Size Estimate: 0-20 points (estimated effort based on description)
 - Risk Penalty: -20 to 0 points (complexity signals, breaking changes)
 """
-import re
 from datetime import datetime, timezone
-from typing import List, Dict, Optional
+from typing import List, Optional
 from dataclasses import dataclass
 
 from core.schemas import GitHubIssue, ScoreBreakdown
@@ -136,7 +135,7 @@ class IssueScorer:
         score = 0
         reasons = []
         
-        labels_lower = [l.lower() for l in labels]
+        labels_lower = [lbl.lower() for lbl in labels]
         
         # Check positive labels
         for label, points in self.POSITIVE_LABELS.items():
@@ -217,7 +216,6 @@ class IssueScorer:
         
         try:
             # Parse dates
-            created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
             updated = datetime.fromisoformat(updated_at.replace("Z", "+00:00"))
             now = datetime.now(timezone.utc)
             
@@ -313,7 +311,7 @@ class IssueScorer:
         
         body = body or ""
         full_text = f"{title} {body}".lower()
-        labels_lower = [l.lower() for l in labels]
+        labels_lower = [lbl.lower() for lbl in labels]
         
         # Check risk labels
         for label, points in self.RISK_LABELS.items():

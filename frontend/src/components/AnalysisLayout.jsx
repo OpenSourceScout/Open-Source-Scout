@@ -18,7 +18,9 @@ export default function AnalysisLayout() {
       try {
         const info = JSON.parse(repoInfoSaved)
         if (info.owner && info.name) return `https://github.com/${info.owner}/${info.name}`
-      } catch (_) { }
+      } catch (e) { 
+        // ignore parsing errors
+      }
     }
     return null
   })
@@ -49,7 +51,7 @@ export default function AnalysisLayout() {
       if (location.state.repoUrl) {
         setRepoUrl(location.state.repoUrl)
         sessionStorage.setItem('scout_repoUrl', location.state.repoUrl)
-        const match = location.state.repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/)
+        const match = location.state.repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/)
         if (match) {
           const info = { owner: match[1], name: match[2] }
           setRepoInfo(info)

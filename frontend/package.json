@@ -24,6 +24,8 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.27",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react": "^7.37.5",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1",
     "vite": "^6.0.1"

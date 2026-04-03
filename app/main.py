@@ -2,6 +2,8 @@
 Open Source Scout - Streamlit UI
 A multi-agent AI assistant for finding and fixing GitHub issues.
 """
+# ruff: noqa: E402
+
 import os
 import sys
 from pathlib import Path
@@ -10,18 +12,17 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-import streamlit as st
-from dotenv import load_dotenv
-import time
+import streamlit as st  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 
 # Load environment variables
 load_dotenv()
 
-from integrations.github_client import GitHubClient
-from integrations.groq_client import GroqClient
-from core.orchestrator import ScoutOrchestrator
-from utils.cache import CacheManager
-from utils.pdf_generator import PDFGenerator
+from integrations.github_client import GitHubClient  # noqa: E402
+from integrations.groq_client import GroqClient  # noqa: E402
+from core.orchestrator import ScoutOrchestrator  # noqa: E402
+from utils.cache import CacheManager  # noqa: E402
+from utils.pdf_generator import PDFGenerator  # noqa: E402
 
 
 # Page configuration
@@ -308,9 +309,6 @@ def render_issue_ranking(results: dict):
     st.markdown("### 🏆 Top Ranked Issues")
     
     for i, issue in enumerate(agent1.ranked_issues, 1):
-        # Score color
-        score_class = "high" if issue.score_total >= 70 else ("medium" if issue.score_total >= 50 else "low")
-        
         with st.expander(f"#{i} Issue #{issue.number}: {issue.title}", expanded=(i == 1)):
             col1, col2 = st.columns([3, 1])
             
@@ -625,7 +623,6 @@ def render_testing_report(results: dict):
 
     for result in testing.agent_results:
         icon = "✅" if result.passed else "❌"
-        score_color = "green" if result.score >= 80 else ("orange" if result.score >= 60 else "red")
 
         with st.expander(f"{icon} {result.agent_name} — Score: {result.score}/100", expanded=not result.passed):
             # Score metric

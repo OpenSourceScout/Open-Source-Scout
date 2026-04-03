@@ -185,7 +185,7 @@ export default function Projects() {
           </div>
           {!canCreate && (
             <p className="text-xs text-amber-400 mt-2">
-              You've reached the free plan limit. Delete an existing project to create a new one.
+              You&apos;ve reached the free plan limit. Delete an existing project to create a new one.
             </p>
           )}
         </div>
@@ -237,7 +237,7 @@ export default function Projects() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3 text-amber-400">
                         <AlertTriangle className="w-5 h-5 shrink-0" />
-                        <span className="text-sm font-medium">Delete "{project.name}"? This cannot be undone.</span>
+                        <span className="text-sm font-medium">Delete &quot;{project.name}&quot;? This cannot be undone.</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <button

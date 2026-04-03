@@ -42,6 +42,7 @@ env/
 # Cache directories
 .cache/
 *.log
+.ruff_cache/
 
 # Testing
 .pytest_cache/

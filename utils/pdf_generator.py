@@ -2,19 +2,17 @@
 PDF generation from markdown using ReportLab.
 """
 import re
-from pathlib import Path
 from io import BytesIO
 from typing import Optional
 
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Preformatted,
-    Table, TableStyle, PageBreak, ListFlowable, ListItem
+    ListFlowable, ListItem
 )
-from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
 
 class PDFGenerator:

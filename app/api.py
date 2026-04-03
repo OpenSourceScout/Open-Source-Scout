@@ -4,8 +4,9 @@ FastAPI backend for Open Source Scout.
 Exposes REST endpoints so a React (or other) frontend can call
 the Python backend without going through Streamlit.
 """
+# ruff: noqa: E402
+
 import logging
-import os
 import sys
 from pathlib import Path
 
@@ -340,7 +341,7 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
         agent2_output = phase2["agent2_output"]
 
         # Fetch agent1_output from a fresh issue ranking (needed for phase 3 context)
-        from core.schemas import Agent1Output, RepoInfo, RankedIssue, ScoreBreakdown
+        from core.schemas import Agent1Output, RepoInfo, RankedIssue
         from core.scoring import IssueScorer
         print("DEBUG: Ranking context issues", flush=True)
         scorer = IssueScorer()

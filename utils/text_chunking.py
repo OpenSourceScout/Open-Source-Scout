@@ -1,7 +1,7 @@
 """
 Text chunking utilities for LLM context management.
 """
-from typing import List, Tuple
+from typing import List
 import re
 
 

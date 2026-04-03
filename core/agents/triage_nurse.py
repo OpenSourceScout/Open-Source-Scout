@@ -7,7 +7,7 @@ import json
 from core.agents.base import BaseAgent
 from core.schemas import (
     GitHubIssue, GitHubRepo, Agent1Output,
-    RankedIssue, ScoreBreakdown, RepoInfo
+    RankedIssue, RepoInfo
 )
 from core.scoring import IssueScorer
 from integrations.groq_client import GroqClient

@@ -4,7 +4,7 @@ Unit tests for scoring algorithm.
 import pytest
 from datetime import datetime, timezone, timedelta
 
-from core.scoring import IssueScorer, ScoreResult
+from core.scoring import IssueScorer
 from core.schemas import GitHubIssue
 
 

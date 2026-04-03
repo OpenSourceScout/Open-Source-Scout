@@ -1,12 +1,10 @@
 """
 Cache management utilities for repositories and run logs.
 """
-import os
 import json
 import hashlib
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from core.schemas import RunLog
 
