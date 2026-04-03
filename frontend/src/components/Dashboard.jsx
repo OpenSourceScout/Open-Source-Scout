@@ -29,11 +29,11 @@ function buildRepoBullets(repo) {
   const b = repo.score_breakdown
   const inferred = []
   if (b) {
-    if ((b.beginner_friendliness ?? 0) >= 55) inferred.push('Beginner-friendly repository')
-    if ((b.activity_score ?? 0) >= 55) inferred.push('Healthy activity and commits')
-    if ((b.issue_availability ?? 0) >= 50) inferred.push('Issues available for contributors')
-    if ((b.community_score ?? 0) >= 55) inferred.push('Active community')
-    if ((b.tech_match ?? 0) >= 65) inferred.push('Strong tech stack alignment')
+    if ((b.beginner_friendliness ?? 0) >= 15) inferred.push('Beginner-friendly repository')
+    if ((b.activity ?? 0) >= 10) inferred.push('Healthy activity and commits')
+    if ((b.issue_availability ?? 0) >= 7) inferred.push('Issues available for contributors')
+    if ((b.community ?? 0) >= 7) inferred.push('Active community')
+    if ((b.tech_match ?? 0) >= 25) inferred.push('Strong tech stack alignment')
   }
   return inferred.slice(0, MAX_REPO_BULLETS).length
     ? inferred.slice(0, MAX_REPO_BULLETS)
@@ -220,6 +220,12 @@ export default function Dashboard() {
                 </span>
               </div>
 
+              {repo.description && repo.description !== 'No description available' && (
+                <p className="mb-3 text-sm text-app-muted/90 leading-relaxed line-clamp-2 border-l-2 border-primary-500/30 pl-3 italic">
+                  {repo.description}
+                </p>
+              )}
+
               <ul className="mb-4 space-y-1.5 text-sm text-app-muted">
                 {bullets.map((line, i) => (
                   <li key={`${repo.full_name}-b-${i}`} className="flex gap-2 leading-snug">
@@ -233,8 +239,8 @@ export default function Dashboard() {
                 {[
                   ['tech_match', 'Tech Match'],
                   ['beginner_friendliness', 'Beginner'],
-                  ['activity_score', 'Activity'],
-                  ['community_score', 'Community'],
+                  ['activity', 'Activity'],
+                  ['community', 'Community'],
                   ['issue_availability', 'Issues'],
                 ].map(([key, label]) => (
                   <div
