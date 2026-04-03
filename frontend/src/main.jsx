@@ -105,8 +105,8 @@ function RepositoriesView() {
                 {[
                   ['tech_match', 'Tech Match'],
                   ['beginner_friendliness', 'Beginner'],
-                  ['activity_score', 'Activity'],
-                  ['community_score', 'Community'],
+                  ['activity', 'Activity'],
+                  ['community', 'Community'],
                   ['issue_availability', 'Issues'],
                 ].map(([key, label]) => (
                   <div key={key} className="text-center p-2 bg-app-bg rounded-lg border border-app-border">

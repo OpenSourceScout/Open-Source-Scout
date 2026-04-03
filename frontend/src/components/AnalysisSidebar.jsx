@@ -1,4 +1,5 @@
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import {
   LayoutDashboard,
   FolderOpen,
@@ -10,9 +11,9 @@ import {
   User,
   Package,
   FolderKanban,
-  Lock,
 } from 'lucide-react'
 import ScoutLogo from './ScoutLogo'
+import { getMe } from '../api'
 
 const NAV_ITEMS = [
   { path: '/analysis', label: 'Dashboard', Icon: LayoutDashboard },
@@ -38,6 +39,11 @@ const navClass = ({ isActive }) =>
 
 export default function AnalysisSidebar({ repoInfo, onBackToRepos, hasRankedRepos }) {
   const navigate = useNavigate()
+  const [user, setUser] = useState(null)
+
+  useEffect(() => {
+    getMe().then(setUser).catch(() => setUser(null))
+  }, [])
 
   // Filter nav items: hide Repositories tab when user entered via direct repo URL
   const visibleNavItems = NAV_ITEMS.filter((item) => {
@@ -45,19 +51,25 @@ export default function AnalysisSidebar({ repoInfo, onBackToRepos, hasRankedRepo
     return true
   })
 
+  const displayName = user?.display_name || user?.email?.split('@')[0] || 'Guest'
+  const email = user?.email || ''
+  const monogram = displayName.charAt(0).toUpperCase()
+
   return (
-    <aside className="w-64 bg-app-surface border-r border-app-border flex flex-col h-screen">
-      <div className="p-4 border-b border-app-border">
+    <aside className="w-64 bg-app-surface border-r border-app-border flex flex-col h-screen shrink-0">
+      {/* Logo */}
+      <div className="p-4 border-b border-app-border shrink-0">
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
           <ScoutLogo className="h-8 w-8" />
           <span className="font-semibold text-app-text">Open Source Scout</span>
         </div>
       </div>
 
+      {/* Active repo context */}
       {repoInfo && (
-        <div className="p-4 border-b border-app-border bg-app-bg/50">
+        <div className="p-4 border-b border-app-border bg-app-bg/50 shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-app-elevated rounded-lg flex items-center justify-center border border-app-border">
+            <div className="w-10 h-10 bg-app-elevated rounded-lg flex items-center justify-center border border-app-border shrink-0">
               <Package className="w-5 h-5 text-app-muted" />
             </div>
             <div className="flex-1 min-w-0">
@@ -77,10 +89,16 @@ export default function AnalysisSidebar({ repoInfo, onBackToRepos, hasRankedRepo
         </div>
       )}
 
+      {/* Nav links — scrolls if nav overflows */}
       <nav className="flex-1 p-4 overflow-y-auto">
         <div className="space-y-1">
           {visibleNavItems.map((item) => (
-            <NavLink key={item.path} to={item.path} className={navClass}>
+            <NavLink
+              key={item.path}
+              to={item.path}
+              end={item.path === '/analysis'}
+              className={navClass}
+            >
               <item.Icon className="w-4 h-4 shrink-0" />
               <span>{item.label}</span>
             </NavLink>
@@ -88,8 +106,9 @@ export default function AnalysisSidebar({ repoInfo, onBackToRepos, hasRankedRepo
         </div>
       </nav>
 
-      <div className="p-4 border-t border-app-border">
-        <div className="space-y-1">
+      {/* Bottom section — always pinned to the bottom */}
+      <div className="p-4 border-t border-app-border shrink-0">
+        <div className="space-y-1 mb-4">
           {BOTTOM_NAV.map((item) => (
             <NavLink key={item.path} to={item.path} className={navClass}>
               <item.Icon className="w-4 h-4 shrink-0" />
@@ -98,11 +117,14 @@ export default function AnalysisSidebar({ repoInfo, onBackToRepos, hasRankedRepo
           ))}
         </div>
 
-        <div className="mt-4 pt-4 border-t border-app-border flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-app-elevated border border-app-border" />
+        {/* Profile identity */}
+        <div className="pt-3 border-t border-app-border flex items-center gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-full bg-primary-500/20 border border-primary-500/30 flex items-center justify-center shrink-0 text-sm font-bold text-primary-400 uppercase">
+            {monogram}
+          </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-app-text truncate">Contributor</p>
-            <p className="text-xs text-app-muted">Session</p>
+            <p className="text-sm font-medium text-app-text truncate">{displayName}</p>
+            {email && <p className="text-xs text-app-muted truncate">{email}</p>}
           </div>
         </div>
       </div>
