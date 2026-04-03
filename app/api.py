@@ -160,6 +160,22 @@ class RenameProjectRequest(BaseModel):
     name: str
 
 
+class FileTreeRequest(BaseModel):
+    """Request body for fetching files with analysis metadata."""
+
+    ref: str = "HEAD"
+    analysis_data: dict | None = None  # Optional: contains agent2_output, agent3_output
+    max_files: int = 500
+
+
+class ForkChoiceRequest(BaseModel):
+    """Request body for fork choice confirmation."""
+
+    choice: str  # 'fork' or 'original'
+    issue_number: int | None = None
+    analysis_id: str | None = None
+
+
 def _to_jsonable(obj):
     """Convert Pydantic models and nested structures to JSON-serializable dict."""
     if hasattr(obj, "model_dump"):
@@ -431,11 +447,15 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
     except RetryError as e:
         status_msg = str(e)
         if "RateLimitError" in status_msg or "rate limit" in status_msg.lower():
-            raise HTTPException(status_code=429, detail="API rate limit exceeded. Please try again later or configure a new API key.")
+            raise HTTPException(
+                status_code=429, 
+                detail="Groq API rate limit exceeded. The analysis service is busy. Please wait a moment and try again, or update your API key for higher rate limits."
+            )
         raise HTTPException(status_code=500, detail=f"LLM request failed after retries: {status_msg}")
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Unexpected error in re-analyze: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -618,6 +638,125 @@ def delete_project_endpoint(project_id: int, request: Request):
     return {"ok": True}
 
 
+@app.get("/api/repos/{owner}/{repo}/tree")
+def get_repo_file_tree(
+    owner: str,
+    repo: str,
+    ref: str = "HEAD",
+    max_files: int = 500,
+):
+    """
+    Fetch the complete file tree structure for a repository.
+    
+    Returns all files and directories with metadata for building a file browser UI.
+    Files that need attention (from analysis) can be marked separately.
+    """
+    owner = owner.strip()
+    repo = repo.strip()
+    try:
+        client = GitHubClient()
+        files = client.get_repo_file_tree(owner, repo, ref=ref, max_files=max_files)
+        return {
+            "owner": owner,
+            "repo": repo,
+            "ref": ref,
+            "files": files,
+            "total": len(files),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/repos/{owner}/{repo}/tree/with-analysis")
+def get_tree_with_analysis(
+    owner: str,
+    repo: str,
+    body: FileTreeRequest,
+):
+    """
+    Fetch file tree merged with analysis data.
+    
+    Marks files that need to be changed (from Archaeologist hits and Senior Dev output).
+    Highlightedfiles are weighted: 80% Archaeologist hits, 20% Senior Dev mentions.
+    
+    Returns:
+    {
+        "owner": str,
+        "repo": str,
+        "files": [
+            {
+                "path": "src/main.py",
+                "type": "file" | "dir",
+                "size": 1024,
+                "highlighted": bool,
+                "reason": str  # Why this file is highlighted
+            }
+        ],
+        "highlighted_count": int,
+        "total": int,
+    }
+    """
+    owner = owner.strip()
+    repo = repo.strip()
+    try:
+        client = GitHubClient()
+        files = client.get_repo_file_tree(owner, repo, ref=body.ref, max_files=body.max_files)
+        
+        # Parse analysis data to find highlighted files
+        highlighted_paths = {}  # path -> reason
+        
+        if body.analysis_data:
+            # Extract from Archaeologist hits (80% weight)
+            agent2_output = body.analysis_data.get("agent2_output", {})
+            if agent2_output:
+                hits = agent2_output.get("hits", [])
+                for hit in hits:
+                    path = hit.get("path", "")  # Changed from file_path to path
+                    if path:
+                        reason = f"Code location: {hit.get('why_relevant', 'Referenced in analysis')}"
+                        highlighted_paths[path] = reason
+            
+            # Extract from Senior Dev briefing (20% weight - supplementary)
+            agent3_output = body.analysis_data.get("agent3_output", {})
+            if agent3_output:
+                briefing = agent3_output.get("briefing_markdown", "")
+                # Look for common file patterns mentioned in briefing
+                # (this is a simple heuristic; could be improved)
+                import re
+                # Match paths like src/main.py, app/api.py, etc.
+                file_patterns = re.findall(r'[`\']([a-zA-Z0-9_\-./]*\.[a-zA-Z0-9_]+)[`\']', briefing)
+                for pattern in file_patterns:
+                    if pattern and "/" in pattern:
+                        if pattern not in highlighted_paths:
+                            highlighted_paths[pattern] = "Mentioned in briefing"
+        
+        # Merge with file tree
+        result_files = []
+        for file in files:
+            file_path = file["path"]
+            is_highlighted = file_path in highlighted_paths
+            
+            result_files.append({
+                "path": file_path,
+                "type": file["type"],
+                "size": file.get("size", 0),
+                "highlighted": is_highlighted,
+                "reason": highlighted_paths.get(file_path, "")
+            })
+        
+        return {
+            "owner": owner,
+            "repo": repo,
+            "ref": body.ref,
+            "files": result_files,
+            "highlighted_count": sum(1 for f in result_files if f["highlighted"]),
+            "total": len(result_files),
+        }
+    except Exception as e:
+        logger.error(f"Error fetching tree with analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/repos/{owner}/{repo}/files/{file_path:path}")
 def get_file_content(
     owner: str,
@@ -695,6 +834,76 @@ def get_readme_summary(owner: str, repo: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/repos/{owner}/{repo}/fork-choice")
+def fork_choice(
+    owner: str,
+    repo: str,
+    body: ForkChoiceRequest,
+):
+    """
+    Process user's choice for editing a repository.
+    
+    The user can choose to:
+    1. Fork the repository and edit on their fork
+    2. Edit directly on original (if they have access, otherwise error)
+    
+    Returns fork information if forking, or confirmation if using original.
+    """
+    owner = owner.strip()
+    repo = repo.strip()
+    
+    try:
+        client = GitHubClient()
+        
+        if body.choice == "fork":
+            # Initiate fork
+            fork_info = client.fork_repo(owner, repo)
+            fork_owner = fork_info["fork_owner"]
+            fork_repo = fork_info["fork_repo"]
+            fork_url = f"https://github.com/{fork_owner}/{fork_repo}"
+            return {
+                "success": True,
+                "choice": "fork",
+                "fork_owner": fork_owner,
+                "fork_repo": fork_repo,
+                "fork_url": fork_url,
+                "message": f"Repository forked to {fork_owner}/{fork_repo}",
+            }
+        
+        elif body.choice == "original":
+            # Check if user has push access to original
+            resp = client.session.get(f"{client.BASE_URL}/repos/{owner}/{repo}")
+            resp.raise_for_status()
+            permissions = resp.json().get("permissions", {})
+            can_push = permissions.get("push", False)
+            
+            if not can_push:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You don't have push access to this repository. Please choose 'fork' instead."
+                )
+            
+            return {
+                "success": True,
+                "choice": "original",
+                "owner": owner,
+                "repo": repo,
+                "message": "Editing on original repository",
+            }
+        
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Choice must be 'fork' or 'original'"
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing fork choice: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/repos/{owner}/{repo}/push")
 def push_file(
     request: Request,
@@ -709,7 +918,11 @@ def push_file(
     a branch with the single-file commit. Returns branch URL and PR link.
     """
     try:
+        logger.info(f"Push request: {owner}/{repo} - file: {body.file_path}")
         client = GitHubClient()
+        
+        logger.info(f"Checking GitHub token: {'present' if client.has_token else 'MISSING'}")
+        
         result = client.push_file_content(
             owner=owner,
             repo=repo,
@@ -719,6 +932,8 @@ def push_file(
             commit_message=body.commit_message,
             base_branch=body.base_branch,
         )
+        logger.info(f"Push successful: {result.get('branch_url')}")
+        
         pool = getattr(request.app.state, "db_pool", None)
         uid = _optional_user_id(request)
         if pool and uid:
@@ -736,6 +951,7 @@ def push_file(
             )
         return result
     except Exception as e:
+        logger.error(f"Error pushing file to {owner}/{repo}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

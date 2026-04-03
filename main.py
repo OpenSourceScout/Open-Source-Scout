@@ -57,9 +57,10 @@ def _start_backend() -> subprocess.Popen:
         sys.executable, "-m", "uvicorn",
         "app.api:app",
         "--reload",
-        "--reload-exclude", "*.cache*",
-        "--reload-exclude", "*node_modules*",
         "--reload-exclude", ".cache",
+        "--reload-exclude", ".pytest_cache",
+        "--reload-exclude", "__pycache__",
+        "--reload-exclude", ".git",
         "--reload-include", "*.py",
         "--port", "8001",
     ]

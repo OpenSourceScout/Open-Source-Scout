@@ -2,13 +2,40 @@ import { getAccessToken } from './auth'
 
 const API_BASE = '/api';
 
-async function apiFetch(path, options = {}) {
+// Different timeouts for different operations
+const TIMEOUTS = {
+  default: 30000,      // 30 seconds for quick operations
+  analysis: 600000,    // 10 minutes for full analysis
+  reAnalysis: 600000,  // 10 minutes for re-analysis
+}
+
+async function apiFetch(path, options = {}, timeoutMs = TIMEOUTS.default) {
   const token = getAccessToken()
   const headers = new Headers(options.headers || {})
   if (token) headers.set('Authorization', `Bearer ${token}`)
   if (!headers.has('Content-Type') && options.body) headers.set('Content-Type', 'application/json')
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers })
-  return res
+  
+  try {
+    // Create abort controller for timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+    
+    try {
+      const res = await fetch(`${API_BASE}${path}`, { ...options, headers, signal: controller.signal })
+      clearTimeout(timeoutId)
+      return res
+    } finally {
+      clearTimeout(timeoutId)
+    }
+  } catch (error) {
+    // Network error or timeout
+    if (error.name === 'AbortError') {
+      console.error(`Request timeout calling ${API_BASE}${path} after ${timeoutMs/1000}s`)
+      throw new Error(`Request timeout. The analysis is taking longer than expected. Please wait and check the backend logs at http://localhost:8001`)
+    }
+    console.error(`Network error calling ${API_BASE}${path}:`, error)
+    throw new Error(`Network error: ${error.message}. Make sure the backend server is running on http://localhost:8001`)
+  }
 }
 
 export async function signup({ email, password, display_name }) {
@@ -68,7 +95,7 @@ export async function runAnalyze({ repo_url, beginner_only = true, fast_model, p
       fast_model: fast_model || 'openai/gpt-oss-120b',
       powerful_model: powerful_model || 'llama-3.3-70b',
     }),
-  });
+  }, TIMEOUTS.analysis);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
     throw new Error(err.detail || 'Analysis failed');
@@ -89,9 +116,18 @@ export async function reAnalyzeIssue({ repo_url, issue_number, fast_model, power
   const res = await apiFetch(`/re-analyze-issue`, {
     method: 'POST',
     body: JSON.stringify(payload),
-  });
+  }, TIMEOUTS.reAnalysis);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));
+    
+    // Handle specific error codes
+    if (res.status === 429) {
+      throw new Error('API rate limit exceeded. The analysis service is busy. Please wait 30-60 seconds and try again.');
+    }
+    if (res.status === 500) {
+      throw new Error(err.detail || 'Analysis failed on the server. Please try again.');
+    }
+    
     throw new Error(err.detail || 'Re-analysis failed');
   }
   return res.json();
@@ -188,6 +224,39 @@ export async function deleteProject(id) {
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }))
     throw new Error(err.detail || 'Failed to delete project')
+  }
+  return res.json()
+}
+
+// --- File tree and editor endpoints ---
+
+export async function fetchRepoFileTree(owner, repo, ref = 'HEAD', analysisData = {}, maxFiles = 500) {
+  const res = await apiFetch(`/repos/${owner}/${repo}/tree/with-analysis`, {
+    method: 'POST',
+    body: JSON.stringify({
+      ref,
+      analysis_data: analysisData,
+      max_files: maxFiles,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Failed to load file tree')
+  }
+  return res.json()
+}
+
+export async function makeForkChoice(owner, repo, choice, issueNumber = null) {
+  const res = await apiFetch(`/repos/${owner}/${repo}/fork-choice`, {
+    method: 'POST',
+    body: JSON.stringify({
+      choice,
+      issue_number: issueNumber,
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Fork choice failed')
   }
   return res.json()
 }

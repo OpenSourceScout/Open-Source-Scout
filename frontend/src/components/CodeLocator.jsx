@@ -1,10 +1,38 @@
 import { Search, FolderOpen, ClipboardList, Circle } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import './CodeLocator.css'
 
 export default function CodeLocator({ results }) {
+  const navigate = useNavigate()
   const agent2 = results?.agent2_output
   const agent3 = results?.agent3_output
   const repo = results?.repo
+
+  const openInEditor = (filePath) => {
+    if (!repo) return
+    const [owner, repoName] = repo.full_name.split('/')
+    const branchName = agent3?.pr_draft?.branch_name || `scout-edit-${agent2?.issue_number || 'edit'}`
+    const commitMessage = agent3?.pr_draft?.commit_message || 'Update file via Open Source Scout'
+    
+    // Navigate to editor with state containing analysis data for tree highlighting
+    navigate('/editor', {
+      state: {
+        filePath: filePath,
+        repoInfo: {
+          owner,
+          name: repoName,
+        },
+        ref: repo.default_branch || 'main',
+        branchName,
+        commitMessage,
+        analysisData: {
+          agent2_output: agent2,
+          agent3_output: agent3,
+          repo: repo,
+        },
+      },
+    })
+  }
 
   const openInNewTab = (filePath) => {
     if (!repo) return
@@ -55,9 +83,9 @@ export default function CodeLocator({ results }) {
             {repo && (
               <button
                 className="btn-load"
-                onClick={() => openInNewTab(hit.path)}
+                onClick={() => openInEditor(hit.path)}
               >
-                Load full file
+                Open in Editor →
               </button>
             )}
           </div>

@@ -68,8 +68,8 @@ class GroqClient:
     
     @retry(
         retry=retry_if_exception_type(GroqRateLimitError),
-        stop=stop_after_attempt(5),
-        wait=wait_exponential(multiplier=2, min=4, max=60)
+        stop=stop_after_attempt(15),
+        wait=wait_exponential(multiplier=3, min=6, max=120)
     )
     def _make_request(self, payload: dict) -> dict:
         """Make API request with retry logic for rate limits."""

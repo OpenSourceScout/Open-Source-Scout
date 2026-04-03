@@ -409,16 +409,39 @@ class GitHubClient:
         """
         Get the latest commit SHA for a branch.
 
-        GET /repos/{owner}/{repo}/git/ref/heads/{branch}
+        Uses the commits endpoint which is more reliable across different repo types.
+        GET /repos/{owner}/{repo}/commits?sha={branch_name}&per_page=1
 
         Returns:
             Commit SHA string.
         """
+        # List commits endpoint is more reliable than refs endpoint
         resp = self.session.get(
-            f"{self.BASE_URL}/repos/{owner}/{repo}/git/ref/heads/{branch}"
+            f"{self.BASE_URL}/repos/{owner}/{repo}/commits",
+            params={"sha": branch, "per_page": 1}
         )
+        
+        # If that fails, try the refs endpoint as fallback
+        if resp.status_code != 200:
+            resp = self.session.get(
+                f"{self.BASE_URL}/repos/{owner}/{repo}/git/refs/heads/{branch}"
+            )
+        
         resp.raise_for_status()
-        return resp.json()["object"]["sha"]
+        
+        # Handle both response formats
+        data = resp.json()
+        
+        # Commits endpoint returns a list, refs endpoint returns an object
+        if isinstance(data, list):
+            if data:
+                return data[0]["sha"]  # Get SHA from first (latest) commit
+            else:
+                raise ValueError(f"No commits found for branch {branch}")
+        elif "object" in data:
+            return data["object"]["sha"]  # Refs endpoint format
+        else:
+            return data["sha"]  # Direct commit format
 
     def create_blob(self, owner: str, repo: str, content: str) -> str:
         """
@@ -730,4 +753,150 @@ class GitHubClient:
                 pass
 
         walk_dir(repo_path)
+        return files
+
+    def get_repo_file_tree(
+        self,
+        owner: str,
+        repo: str,
+        ref: str = "HEAD",
+        max_files: int = 500
+    ) -> List[Dict]:
+        """
+        Fetch the entire file tree structure from a repository via GitHub API.
+        
+        Uses the GitHub Tree API with recursive=1 to fetch all files and directories
+        in a single request. Results are paginated via base_tree parameter.
+        
+        Args:
+            owner: Repository owner
+            repo: Repository name
+            ref: Branch, tag, or commit SHA (default: HEAD — repo's default branch)
+            max_files: Maximum files to return (GitHub default is 100k tree objects)
+        
+        Returns:
+            List of dicts with structure:
+            {
+                'path': 'src/main.py',
+                'type': 'blob' (file) or 'tree' (directory),
+                'size': 1024 (for files only)
+            }
+        
+        Raises:
+            requests.HTTPError: On API errors (e.g. 404 when ref not found)
+        """
+        try:
+            # Get the commit SHA for the ref
+            ref_sha = self._get_ref_sha(owner, repo, ref)
+        except requests.HTTPError:
+            # If ref fails (404), try default branch
+            default_branch = self.get_default_branch(owner, repo)
+            if default_branch != ref:
+                ref_sha = self._get_ref_sha(owner, repo, default_branch)
+            else:
+                raise
+
+        # Get tree with recursive=1 to fetch all files at once
+        url = f"{self.BASE_URL}/repos/{owner}/{repo}/git/trees/{ref_sha}"
+        params = {
+            "recursive": "1",
+            "per_page": "100"  # GitHub returns up to 100 tree objects per page
+        }
+
+        all_items = []
+        
+        try:
+            resp = self.session.get(url, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+            
+            # Check if we hit the 100k tree object limit
+            if data.get("truncated", False):
+                # Tree was truncated; try fetching via content API instead
+                return self._get_repo_files_via_content_api(owner, repo, ref, max_files)
+            
+            items = data.get("tree", [])
+            
+            # Filter to files/dirs only, exclude submodules
+            for item in items:
+                if item["type"] in ["blob", "tree"]:
+                    all_items.append({
+                        "path": item["path"],
+                        "type": "file" if item["type"] == "blob" else "dir",
+                        "size": item.get("size", 0)
+                    })
+            
+            return all_items[:max_files]
+        
+        except Exception as e:
+            # Fallback to content API if tree API fails
+            try:
+                return self._get_repo_files_via_content_api(owner, repo, ref, max_files)
+            except Exception:
+                raise e
+
+    def _get_repo_files_via_content_api(
+        self,
+        owner: str,
+        repo: str,
+        ref: str,
+        max_files: int = 500
+    ) -> List[Dict]:
+        """
+        Fallback method: Fetch file tree via Contents API (recursive).
+        
+        This is slower but works for truncated repositories.
+        """
+        files = []
+        visited_dirs = set()
+
+        def fetch_dir(path: str = ""):
+            if len(files) >= max_files:
+                return
+            
+            if path in visited_dirs:
+                return
+            
+            visited_dirs.add(path)
+            
+            url = f"{self.BASE_URL}/repos/{owner}/{repo}/contents/{path}"
+            try:
+                resp = self.session.get(
+                    url,
+                    params={"ref": ref}
+                )
+                
+                if resp.status_code == 404:
+                    return
+                
+                resp.raise_for_status()
+                items = resp.json()
+                
+                # Handle single file response
+                if isinstance(items, dict):
+                    items = [items]
+                
+                for item in items:
+                    if len(files) >= max_files:
+                        return
+                    
+                    if item["type"] == "file":
+                        files.append({
+                            "path": item["path"],
+                            "type": "file",
+                            "size": item.get("size", 0)
+                        })
+                    elif item["type"] == "dir":
+                        files.append({
+                            "path": item["path"],
+                            "type": "dir",
+                            "size": 0
+                        })
+                        # Recursively fetch subdirectory
+                        fetch_dir(item["path"])
+            
+            except Exception:
+                pass
+
+        fetch_dir()
         return files
