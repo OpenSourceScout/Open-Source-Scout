@@ -15,6 +15,7 @@ import EditorWindow from './pages/EditorWindow.jsx'
 import Profile from './pages/Profile.jsx'
 import Projects from './pages/Projects.jsx'
 import AnalysisDashboard from './pages/AnalysisDashboard.jsx'
+import SettingsPage from './pages/Settings.jsx'
 import './index.css'
 import { isLoggedIn } from './auth'
 
@@ -185,6 +186,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </Route>
         <Route path="/editor" element={<RequireAuth><EditorWindow /></RequireAuth>} />
         <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+        <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
         <Route path="/projects" element={<RequireAuth><Projects /></RequireAuth>} />
       </Routes>
     </BrowserRouter>

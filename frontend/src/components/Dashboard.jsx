@@ -461,13 +461,13 @@ export default function Dashboard() {
                 <p className="text-xs text-app-muted truncate">View Profile</p>
               </div>
             </Link>
-            <button
-              type="button"
+            <Link
+              to="/settings"
               className="p-2 text-app-muted hover:text-app-text rounded-lg hover:bg-app-elevated transition-colors duration-200 shrink-0"
               title="Settings"
             >
               <Settings className="w-4 h-4" />
-            </button>
+            </Link>
           </div>
         </div>
       </aside>
