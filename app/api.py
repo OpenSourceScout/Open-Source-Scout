@@ -234,6 +234,23 @@ def _record_phase1_issue_analysis(pool, user_id: int, body: AnalyzeRequest, resu
 # --- Endpoints ---
 
 
+def _enforce_free_tier_quota(request: Request):
+    """Raise 403 if user has hit the free tier project limit."""
+    uid = _optional_user_id(request)
+    pool = getattr(request.app.state, "db_pool", None)
+    if uid and pool:
+        try:
+            if count_user_projects(pool, uid) >= FREE_PROJECT_LIMIT:
+                raise HTTPException(
+                    status_code=403, 
+                    detail=f"Free plan limit reached ({FREE_PROJECT_LIMIT} projects max). Please delete a project to run a new analysis or search."
+                )
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise
+            logger.error("Failed to check project quota: %s", e)
+
+
 @app.post("/api/analyze")
 def run_analyze(body: AnalyzeRequest, request: Request):
     """
@@ -241,6 +258,7 @@ def run_analyze(body: AnalyzeRequest, request: Request):
 
     Blocks until complete (may take 1–2 minutes). Returns analysis results.
     """
+    _enforce_free_tier_quota(request)
     try:
         github_client = GitHubClient()
         groq_client = GroqClient()
@@ -428,6 +446,7 @@ def search_repos_by_tech_stack(body: SearchReposRequest, request: Request):
     Uses the Pathfinder agent to find beginner-friendly repos matching
     the user's skills. Returns top 5 ranked repositories.
     """
+    _enforce_free_tier_quota(request)
     try:
         if not body.tech_stack or len(body.tech_stack) == 0:
             raise HTTPException(status_code=400, detail="At least one technology/skill is required")
@@ -616,6 +635,61 @@ def get_file_content(
         return {"content": content, "path": file_path, "ref": ref}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/repos/{owner}/{repo}/readme-summary")
+def get_readme_summary(owner: str, repo: str):
+    """
+    Fetch repository README and generate an LLM summary.
+    """
+    owner = owner.strip()
+    repo = repo.strip()
+    print(f"DEBUG: get_readme_summary called with owner='{owner}', repo='{repo}'", flush=True)
+    try:
+        client = GitHubClient()
+        readme_names = ['README.md', 'readme.md', 'Readme.md', 'README.rst', 'README']
+        content = None
+        for name in readme_names:
+            try:
+                print(f"DEBUG: Trying to fetch {name}", flush=True)
+                content = client.get_file_content(owner, repo, name)
+                if content:
+                    print(f"DEBUG: Fetched successfully! Length: {len(content)}", flush=True)
+                    break
+            except Exception as e:
+                print(f"DEBUG: Failed to fetch {name}: {e}", flush=True)
+                continue
+                
+        if not content:
+            print("DEBUG: All README fetches failed. Returning default message.", flush=True)
+            return {"summary": "No README found for this repository."}
+            
+        print("DEBUG: Sending content to Groq...", flush=True)
+        groq_client = GroqClient()
+        prompt = (
+            "Please summarize the following repository README into a concise and well-formatted "
+            "technical overview. "
+            "CRITICAL FORMATTING RULES: "
+            "1. Match this exact section style using emojis and no markdown headers: 📄 Overview, ✨ Key Features, 🎯 Intended Audience, 🚀 Quick Start. "
+            "2. Do NOT use markdown bullet points (like - or *). Write features as individual standalone sentences. "
+            "3. You MUST use DOUBLE NEWLINES (\\n\\n) between EVERY single line, sentence, and section title. No two lines of text should touch each other. "
+            f"README:\n{content[:20000]}"
+        )
+        
+        summary = groq_client.complete(
+            prompt=prompt,
+            model=groq_client.DEFAULT_FAST_MODEL,
+            max_tokens=1500
+        )
+        print("DEBUG: Summary generated successfully.", flush=True)
+        return {"summary": summary}
+    except RetryError as e:
+        status_msg = str(e)
+        if "RateLimitError" in status_msg or "rate limit" in status_msg.lower():
+            raise HTTPException(status_code=429, detail="API rate limit exceeded. Please try again later.")
+        raise HTTPException(status_code=500, detail=f"LLM request failed: {status_msg}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
