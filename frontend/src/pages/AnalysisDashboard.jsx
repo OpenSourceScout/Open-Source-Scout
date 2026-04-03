@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import {
   LayoutDashboard,
   Star,
@@ -55,27 +57,16 @@ export default function AnalysisDashboard() {
       setReadmeLoading(true)
       setReadmeError(null)
 
-      // Try common README file names
-      const readmeNames = ['README.md', 'readme.md', 'Readme.md', 'README.rst', 'README']
-      let content = null
-
-      for (const name of readmeNames) {
-        try {
-          const res = await fetch(`/api/repos/${repoInfo.owner}/${repoInfo.name}/files/${name}`)
-          if (res.ok) {
-            const data = await res.json()
-            content = data.content
-            break
-          }
-        } catch (_) {
-          // Try next filename
+      try {
+        const res = await fetch(`/api/repos/${repoInfo.owner}/${repoInfo.name}/readme-summary`)
+        if (res.ok) {
+          const data = await res.json()
+          setReadme(data.summary)
+        } else {
+          setReadmeError('Failed to load README summary.')
         }
-      }
-
-      if (content) {
-        setReadme(content)
-      } else {
-        setReadmeError('No README found for this repository.')
+      } catch (err) {
+        setReadmeError('Error connecting to backend.')
       }
       setReadmeLoading(false)
     }
@@ -251,21 +242,27 @@ export default function AnalysisDashboard() {
             <p className="text-app-muted text-sm py-4">{readmeError}</p>
           ) : readme ? (
             <div className="prose prose-invert prose-sm max-w-none
-              prose-headings:text-app-text prose-headings:border-b prose-headings:border-app-border prose-headings:pb-2
-              prose-p:text-app-muted prose-p:leading-relaxed
+              prose-headings:text-app-text prose-headings:border-b prose-headings:border-app-border prose-headings:pb-2 prose-headings:mt-6
+              prose-p:text-app-muted prose-p:leading-relaxed prose-p:mb-5
+              prose-ul:space-y-2 prose-ol:space-y-2
+              prose-li:text-app-muted prose-li:leading-relaxed
               prose-a:text-primary-400 prose-a:no-underline hover:prose-a:underline
               prose-strong:text-app-text
               prose-code:text-accent-400 prose-code:bg-app-elevated prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:border prose-code:border-app-border
-              prose-pre:bg-app-bg prose-pre:border prose-pre:border-app-border prose-pre:rounded-lg
-              prose-li:text-app-muted
-              prose-img:rounded-lg prose-img:border prose-img:border-app-border
-              prose-blockquote:border-primary-500/50 prose-blockquote:text-app-muted
-              prose-hr:border-app-border
-              prose-table:border-app-border
+              prose-pre:bg-app-bg prose-pre:border prose-pre:border-app-border prose-pre:rounded-lg prose-pre:my-4
+              prose-img:max-w-full prose-img:m-0 prose-img:inline-block prose-img:my-4
+              prose-blockquote:border-primary-500/50 prose-blockquote:text-app-muted prose-blockquote:my-4
+              prose-hr:border-app-border prose-hr:my-6
+              prose-table:border-app-border prose-table:my-5
               prose-th:text-app-text prose-th:border-app-border prose-th:px-3 prose-th:py-1.5
               prose-td:text-app-muted prose-td:border-app-border prose-td:px-3 prose-td:py-1.5
             ">
-              <ReactMarkdown>{readme}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
+              >
+                {readme}
+              </ReactMarkdown>
             </div>
           ) : null}
         </div>
