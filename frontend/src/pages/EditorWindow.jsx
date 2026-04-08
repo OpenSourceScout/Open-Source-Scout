@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
-import MonacoEditor from '@monaco-editor/react'
+import MonacoEditor, { DiffEditor } from '@monaco-editor/react'
 import { FileCode, Pencil, ChevronDown } from 'lucide-react'
-import { getFileContent, pushFile } from '../api'
+import { getFileContent, pushFile, pushFilesBatch } from '../api'
 import FileTree from '../components/FileTree'
 import ScoutLogo from '../components/ScoutLogo'
 import './EditorWindow.css'
@@ -60,6 +60,17 @@ export default function EditorWindow() {
   const [showForkDialog, setShowForkDialog] = useState(false)
   const [forkChoiceLoading, setForkChoiceLoading] = useState(false)
   const [forkInfo, setForkInfo] = useState(null)
+  const [editTarget, setEditTarget] = useState(() => {
+    try {
+      const key = `scout-session-${ownerParam || ''}-${repoParam || ''}-editTarget`
+      return sessionStorage.getItem(key) || 'original'
+    } catch {
+      return 'original'
+    }
+  })
+  const [showReview, setShowReview] = useState(false)
+  const [reviewFiles, setReviewFiles] = useState([]) // [{ path, original, modified }]
+  const [reviewSelectedPath, setReviewSelectedPath] = useState(null)
   const [sidebarWidth, setSidebarWidth] = useState(280)
   const [rightPanelWidth, setRightPanelWidth] = useState(250)
   const isDragging = useRef(false)
@@ -175,10 +186,6 @@ export default function EditorWindow() {
   // Load initial file if provided
   useEffect(() => {
     if (ownerParam && repoParam && pathParam) {
-      // Show fork dialog if needed
-      if (!forkInfo && analysisDataParam) {
-        setShowForkDialog(true)
-      }
       loadFile(ownerParam, repoParam, pathParam, refParam)
     }
   }, [ownerParam, repoParam, pathParam, refParam, loadFile, analysisDataParam, forkInfo])
@@ -199,6 +206,11 @@ export default function EditorWindow() {
 
       const data = await response.json()
       setForkInfo(data)
+      setEditTarget(choice)
+      try {
+        const key = `scout-session-${owner}-${repo}-editTarget`
+        sessionStorage.setItem(key, choice)
+      } catch {}
       setShowForkDialog(false)
     } catch (err) {
       setError(err.message)
@@ -227,113 +239,90 @@ export default function EditorWindow() {
     }
   }
 
-  const handlePush = async () => {
-    if (!owner.trim() || !repo.trim() || !path.trim() || !content) {
-      setError('Owner, repo, path, and content are required')
-      return
-    }
+  const buildReview = async (paths) => {
+    const unique = Array.from(new Set(paths)).filter(Boolean)
+    if (unique.length === 0) return
+
     setPushing(true)
     setError(null)
-    setSuccess(null)
     try {
-      const result = await pushFile(owner.trim(), repo.trim(), {
-        file_path: path.trim(),
-        content,
-        branch_name: branchName.trim() || 'scout-edit',
-        commit_message: commitMessage.trim() || 'Update file via Open Source Scout',
-        base_branch: branch.trim() || 'main',
-      })
-      setSuccess(result)
-      const key = `scout-push-${result.upstream_owner}-${result.upstream_repo}`
-      sessionStorage.setItem(key, JSON.stringify(result))
+      // Load saved contents from sessionStorage
+      let savedContents = {}
+      try {
+        savedContents = JSON.parse(sessionStorage.getItem(modifiedContentsKey) || '{}')
+      } catch {}
+
+      const originals = await Promise.all(
+        unique.map(async (p) => {
+          const { content: c } = await getFileContent(owner.trim(), repo.trim(), p, branch || 'main')
+          return { path: p, original: c }
+        })
+      )
+      const built = originals.map(({ path: p, original }) => ({
+        path: p,
+        original,
+        modified: savedContents[p] ?? (p === path ? content : ''),
+      }))
+      setReviewFiles(built)
+      setReviewSelectedPath(built[0]?.path || null)
+      setShowReview(true)
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Failed to build review')
     } finally {
       setPushing(false)
     }
   }
 
+  const handlePush = async () => {
+    if (!owner.trim() || !repo.trim() || !path.trim() || !content) {
+      setError('Owner, repo, path, and content are required')
+      return
+    }
+    await buildReview([path.trim()])
+  }
+
   const handlePushAll = async () => {
-    // Push all modified files
     if (modifiedFiles.size === 0) {
       setError('No files have been modified')
       return
     }
-    
+    await buildReview(Array.from(modifiedFiles))
+  }
+
+  const finalizePushFromReview = async () => {
+    if (!reviewFiles || reviewFiles.length === 0) return
     setPushing(true)
     setError(null)
     setSuccess(null)
-    
     try {
-      const filesToPush = Array.from(modifiedFiles)
-      console.log('🚀 Push All: Files to push:', filesToPush)
-      
-      const results = []
-      let hasErrors = false
-      
-      // Load saved contents from sessionStorage
-      let savedContents = {}
+      const filesPayload = reviewFiles.map(f => ({ file_path: f.path, content: f.modified }))
+      const target_mode = editTarget === 'fork' ? 'fork' : 'original'
+      const result = await pushFilesBatch(owner.trim(), repo.trim(), {
+        files: filesPayload,
+        branch_name: branchName.trim() || 'scout-edit',
+        commit_message: commitMessage.trim() || 'Update via Open Source Scout',
+        base_branch: branch.trim() || 'main',
+        target_mode,
+      })
+      setSuccess({
+        ...result,
+        filesCount: result.files_count || reviewFiles.length,
+      })
+      const key = `scout-push-${result.upstream_owner}-${result.upstream_repo}`
+      sessionStorage.setItem(key, JSON.stringify(result))
+      setModifiedFiles(new Set())
       try {
-        savedContents = JSON.parse(sessionStorage.getItem(modifiedContentsKey) || '{}')
-        console.log('📦 Loaded saved contents keys:', Object.keys(savedContents))
-      } catch (err) {
-        console.error('Failed to load saved contents:', err)
-      }
-      
-      for (const filePath of filesToPush) {
-        try {
-          // Get the edited content from sessionStorage
-          const editedContent = savedContents[filePath]
-          
-          console.log(`📄 Pushing ${filePath}:`, { hasContent: !!editedContent, length: editedContent?.length })
-          
-          if (!editedContent) {
-            console.warn(`⚠️  No edited content found for ${filePath}, skipping`)
-            hasErrors = true
-            continue
-          }
-          
-          const result = await pushFile(owner.trim(), repo.trim(), {
-            file_path: filePath,
-            content: editedContent,
-            branch_name: branchName.trim() || 'scout-edit',
-            commit_message: commitMessage.trim() || 'Update file via Open Source Scout',
-            base_branch: branch.trim() || 'main',
-          })
-          console.log(`✅ Push successful for ${filePath}:`, result)
-          results.push(result)
-        } catch (err) {
-          hasErrors = true
-          console.error(`❌ Failed to push ${filePath}:`, err)
-          setError(prev => prev ? `${prev}\n${err.message}` : err.message)
-        }
-      }
-      
-      if (results.length > 0) {
-        // Use the last result as the success indicator (all should go to same branch/fork)
-        setSuccess({
-          ...results[0],
-          filesCount: results.length,
-          message: `Pushed ${results.length} files to ${results[0].fork_owner}/${results[0].fork_repo}:${results[0].branch}`
-        })
-        setModifiedFiles(new Set()) // Clear modified files after successful push
-        // Clear saved contents for pushed files
-        try {
-          const remaining = { ...savedContents }
-          filesToPush.forEach(f => delete remaining[f])
-          sessionStorage.setItem(modifiedContentsKey, JSON.stringify(remaining))
-        } catch (err) {
-          console.error('Failed to clear saved contents:', err)
-        }
-      }
-      
-      if (hasErrors && results.length === 0) {
-        setError('Failed to push all files. No files were pushed successfully.')
-      } else if (hasErrors) {
-        // Keep the individual error messages already set
-      }
+        sessionStorage.setItem(modifiedContentsKey, JSON.stringify({}))
+      } catch {}
+      setShowReview(false)
     } catch (err) {
-      setError(err.message || 'Failed to push all files')
+      const msg = err.message || 'Push failed'
+      // If user chose original but lacks access, force fork choice.
+      if (msg.toLowerCase().includes('fork before pushing') || msg.toLowerCase().includes('push access')) {
+        setShowForkDialog(true)
+      } else {
+        setError(msg)
+      }
     } finally {
       setPushing(false)
     }
@@ -427,7 +416,7 @@ export default function EditorWindow() {
                     Pushing...
                   </>
                 ) : (
-                  'Save & Push'
+                  'Review & Push'
                 )}
               </button>
               <button
@@ -443,13 +432,107 @@ export default function EditorWindow() {
                   onClick={handlePushAll}
                   className="text-xs px-2 py-1 border border-app-border rounded text-app-muted hover:text-app-text"
                 >
-                  Push All ({modifiedFiles.size})
+                  Review & Push All ({modifiedFiles.size})
                 </button>
               )}
             </>
           )}
         </div>
       </header>
+
+      {/* Review Modal */}
+      {showReview && (
+        <div className="fork-dialog-overlay">
+          <div className="review-dialog">
+            <div className="review-header">
+              <h2>Review changes</h2>
+              <div className="review-meta">
+                <span className="text-xs text-app-muted">Target:</span>
+                <span className="text-xs font-mono">{editTarget === 'fork' ? 'Fork' : 'Original'}</span>
+                <span className="text-xs text-app-muted">Branch:</span>
+                <span className="text-xs font-mono">{branchName}</span>
+              </div>
+              <button className="clear-search" onClick={() => setShowReview(false)}>✕</button>
+            </div>
+            <div className="review-body">
+              <div className="review-sidebar">
+                <div className="review-sidebar-title">Files ({reviewFiles.length})</div>
+                <div className="review-file-list">
+                  {reviewFiles.map(f => (
+                    <button
+                      key={f.path}
+                      type="button"
+                      className={`review-file-item ${reviewSelectedPath === f.path ? 'selected' : ''}`}
+                      onClick={() => setReviewSelectedPath(f.path)}
+                    >
+                      <span className="truncate">{f.path}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="review-sidebar-form">
+                  <label className="text-xs text-app-muted">Commit message</label>
+                  <textarea
+                    value={commitMessage}
+                    onChange={(e) => setCommitMessage(e.target.value)}
+                    disabled={pushing}
+                    className="review-textarea"
+                    rows={3}
+                  />
+                  <label className="text-xs text-app-muted mt-2">Branch name</label>
+                  <input
+                    value={branchName}
+                    onChange={(e) => setBranchName(e.target.value)}
+                    disabled={pushing}
+                    className="review-input"
+                  />
+                </div>
+              </div>
+              <div className="review-diff">
+                {(() => {
+                  const current = reviewFiles.find(f => f.path === reviewSelectedPath) || reviewFiles[0]
+                  if (!current) return null
+                  return (
+                    <DiffEditor
+                      height="100%"
+                      theme="vs-dark"
+                      language={getLanguage(current.path)}
+                      original={current.original || ''}
+                      modified={current.modified || ''}
+                      options={{
+                        readOnly: true,
+                        renderSideBySide: true,
+                        minimap: { enabled: false },
+                      }}
+                    />
+                  )
+                })()}
+              </div>
+            </div>
+            <div className="review-footer">
+              <button
+                type="button"
+                className="text-app-muted hover:text-app-text px-3 py-1.5 text-sm transition-colors"
+                onClick={() => setShowReview(false)}
+                disabled={pushing}
+              >
+                Back
+              </button>
+              <div className="review-footer-meta">
+                <span className="text-xs text-app-muted">Commit:</span>
+                <span className="text-xs font-mono truncate">{commitMessage || '(no message)'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={finalizePushFromReview}
+                disabled={pushing}
+                className="push-button"
+              >
+                {pushing ? 'Pushing...' : `Final Push (${reviewFiles.length})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Fork Dialog */}
       {showForkDialog && (
@@ -648,8 +731,8 @@ export default function EditorWindow() {
                   <p className="text-xs text-app-muted mb-2">
                     {highlightedFiles.length} files need attention
                   </p>
-                  <div className="highlighted-files-list">
-                    {highlightedFiles.slice(0, 5).map(file => (
+                  <div className="highlighted-files-list scroll">
+                    {highlightedFiles.map(file => (
                       <div
                         key={file}
                         className="highlighted-file-item"
@@ -659,11 +742,6 @@ export default function EditorWindow() {
                         {modifiedFiles.has(file) && <span className="badge">✓</span>}
                       </div>
                     ))}
-                    {highlightedFiles.length > 5 && (
-                      <div className="text-xs text-app-muted p-2">
-                        +{highlightedFiles.length - 5} more
-                      </div>
-                    )}
                   </div>
                 </div>
               </>

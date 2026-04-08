@@ -55,16 +55,18 @@ ROOT = Path(__file__).parent
 def _start_backend() -> subprocess.Popen:
     cmd = [
         sys.executable, "-m", "uvicorn",
-        "app.api:app",
         "--reload",
-        "--reload-exclude", ".cache",
-        "--reload-exclude", ".pytest_cache",
-        "--reload-exclude", "__pycache__",
-        "--reload-exclude", ".git",
-        "--reload-include", "*.py",
+        # Restrict reload watching to backend source folders; otherwise large
+        # temp/cached checkouts under `.cache/` can trigger endless reloads.
+        "--reload-dir", "app",
+        "--reload-dir", "core",
+        "--reload-dir", "integrations",
+        "--reload-dir", "utils",
+        "--reload-dir", "tests",
         "--port", "8001",
+        "app.api:app",
     ]
-    print(f"{CYAN}{BOLD}Starting backend{RESET}  → http://localhost:8001")
+    print(f"{CYAN}{BOLD}Starting backend{RESET}  -> http://localhost:8001")
     return subprocess.Popen(
         cmd,
         cwd=ROOT,
@@ -88,7 +90,7 @@ def _start_frontend() -> subprocess.Popen:
         npm = "pnpm"
 
     cmd = [npm, "run", "dev"]
-    print(f"{YELLOW}{BOLD}Starting frontend{RESET} → http://localhost:5173")
+    print(f"{YELLOW}{BOLD}Starting frontend{RESET} -> http://localhost:5173")
     return subprocess.Popen(
         cmd,
         cwd=frontend_dir,

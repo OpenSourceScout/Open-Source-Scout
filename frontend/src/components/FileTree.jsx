@@ -87,6 +87,7 @@ export default function FileTree({
             // It's a directory (intermediate path component)
             current[part] = {
               type: 'dir',
+              highlighted: false,
               children: {},
             }
           }
@@ -95,6 +96,7 @@ export default function FileTree({
           // convert it to a directory (shouldn't happen but being safe)
           current[part] = {
             type: 'dir',
+            highlighted: false,
             children: {},
           }
         }
@@ -108,6 +110,21 @@ export default function FileTree({
         }
       })
     })
+
+    // Mark directories as highlighted if any descendant file is highlighted.
+    function computeDirHighlights(node) {
+      if (!node) return false
+      if (node.type === 'file') return node.highlighted === true
+      if (node.type === 'dir') {
+        const children = node.children || {}
+        const anyChildHighlighted = Object.values(children).some(computeDirHighlights)
+        node.highlighted = anyChildHighlighted
+        return anyChildHighlighted
+      }
+      // Root map case
+      return Object.values(node).some(computeDirHighlights)
+    }
+    computeDirHighlights(tree)
 
     // Debug logging
     const highlightedInTree = flattenTree(tree).filter(item => item.highlighted).length
@@ -147,11 +164,12 @@ export default function FileTree({
       const childFileCount = childEntries.filter(
         ([_, child]) => child.type === 'file'
       ).length
+      const dirHighlighted = item.highlighted === true
 
       return (
         <div key={`dir-${fullPath}`} className="file-tree-item-wrapper">
           <div
-            className="tree-item dir-item"
+            className={`tree-item dir-item ${dirHighlighted ? 'highlighted' : ''}`}
             onClick={() => toggleDir(fullPath)}
           >
             <button className="expand-btn">

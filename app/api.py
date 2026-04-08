@@ -107,6 +107,17 @@ class PushFileRequest(BaseModel):
     branch_name: str
     commit_message: str
     base_branch: str = "main"
+    target_mode: str | None = None  # 'original' | 'fork' | 'auto' (default)
+
+
+class PushFilesRequest(BaseModel):
+    """Request body for pushing multiple files in one commit."""
+
+    files: list[dict]  # each: { file_path: str, content: str }
+    branch_name: str
+    commit_message: str
+    base_branch: str = "main"
+    target_mode: str | None = None  # 'original' | 'fork' | 'auto' (default)
 
 
 class AnalyzeRequest(BaseModel):
@@ -923,15 +934,27 @@ def push_file(
         
         logger.info(f"Checking GitHub token: {'present' if client.has_token else 'MISSING'}")
         
-        result = client.push_file_content(
-            owner=owner,
-            repo=repo,
-            branch_name=body.branch_name,
-            file_path=body.file_path,
-            content=body.content,
-            commit_message=body.commit_message,
-            base_branch=body.base_branch,
-        )
+        target_mode = (body.target_mode or "auto").strip().lower()
+        # Use the multi-file implementation for the single-file case too, so
+        # branch updates are consistent with the batch endpoint and honor
+        # target_mode ("original"|"fork"|"auto").
+        try:
+            result = client.push_files_content(
+                owner=owner,
+                repo=repo,
+                branch_name=body.branch_name,
+                files=[{"file_path": body.file_path, "content": body.content}],
+                commit_message=body.commit_message,
+                base_branch=body.base_branch,
+                target_mode=target_mode,
+            )
+        except PermissionError as e:
+            if str(e) == "NO_PUSH_ACCESS" or "NO_PUSH_ACCESS" in str(e):
+                raise HTTPException(
+                    status_code=403,
+                    detail="You don't have push access to this repository. Please fork before pushing.",
+                )
+            raise
         logger.info(f"Push successful: {result.get('branch_url')}")
         
         pool = getattr(request.app.state, "db_pool", None)
@@ -952,6 +975,65 @@ def push_file(
         return result
     except Exception as e:
         logger.error(f"Error pushing file to {owner}/{repo}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/repos/{owner}/{repo}/push-batch")
+def push_files_batch(
+    request: Request,
+    owner: str,
+    repo: str,
+    body: PushFilesRequest,
+):
+    """
+    Push multiple edited files to a single branch as ONE commit.
+
+    This fixes the previous behavior where looping single-file pushes would
+    force-update the branch and effectively keep only the last file.
+    """
+    try:
+        client = GitHubClient()
+        target_mode = (body.target_mode or "auto").strip().lower()
+        try:
+            result = client.push_files_content(
+                owner=owner,
+                repo=repo,
+                branch_name=body.branch_name,
+                files=body.files,
+                commit_message=body.commit_message,
+                base_branch=body.base_branch,
+                target_mode=target_mode,
+            )
+        except PermissionError as e:
+            if str(e) == "NO_PUSH_ACCESS" or "NO_PUSH_ACCESS" in str(e):
+                raise HTTPException(
+                    status_code=403,
+                    detail="You don't have push access to this repository. Please fork before pushing.",
+                )
+            raise
+
+        pool = getattr(request.app.state, "db_pool", None)
+        uid = _optional_user_id(request)
+        if pool and uid:
+            # Record a single activity row with a representative file path.
+            rep_path = (body.files[0].get("file_path") if body.files else None) or ""
+            _safe_record_activity(
+                record_git_push,
+                pool,
+                uid,
+                upstream_owner=result.get("upstream_owner") or owner,
+                upstream_repo=result.get("upstream_repo") or repo,
+                branch_name=result.get("branch") or body.branch_name,
+                file_path=rep_path,
+                commit_sha=result.get("commit_sha"),
+                pr_url=result.get("pr_url"),
+                commit_message=body.commit_message,
+            )
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error pushing batch to {owner}/{repo}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

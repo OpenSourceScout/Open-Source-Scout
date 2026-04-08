@@ -161,6 +161,24 @@ export async function pushFile(owner, repo, { file_path, content, branch_name, c
   return res.json();
 }
 
+export async function pushFilesBatch(owner, repo, { files, branch_name, commit_message, base_branch, target_mode }) {
+  const res = await apiFetch(`/repos/${owner}/${repo}/push-batch`, {
+    method: 'POST',
+    body: JSON.stringify({
+      files,
+      branch_name,
+      commit_message,
+      base_branch: base_branch || 'main',
+      target_mode: target_mode || 'auto',
+    }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }))
+    throw new Error(err.detail || 'Batch push failed')
+  }
+  return res.json()
+}
+
 export async function exportPdf(content) {
   const res = await apiFetch(`/export/pdf`, {
     method: 'POST',

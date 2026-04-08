@@ -70,12 +70,9 @@ export default function RepoRanking({ repos, onSelectRepo, loading, readOnly = f
 
                 {repo.topics && repo.topics.length > 0 && (
                   <div className="repo-topics">
-                    {repo.topics.slice(0, 5).map(topic => (
+                    {repo.topics.map(topic => (
                       <span key={topic} className="topic-tag">{topic}</span>
                     ))}
-                    {repo.topics.length > 5 && (
-                      <span className="topic-more">+{repo.topics.length - 5} more</span>
-                    )}
                   </div>
                 )}
                 

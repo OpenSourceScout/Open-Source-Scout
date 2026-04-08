@@ -508,6 +508,35 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()["sha"]
 
+    def create_tree_multi(
+        self,
+        owner: str,
+        repo: str,
+        base_tree_sha: str,
+        entries: list[dict],
+    ) -> str:
+        """
+        Create a new tree that replaces multiple files with new blobs.
+
+        Args:
+            owner: Target repo owner (where we have write access)
+            repo: Target repo name
+            base_tree_sha: Base tree SHA to apply changes onto
+            entries: List of {path, mode, type, sha} objects for the tree API
+
+        Returns:
+            SHA of the new tree.
+        """
+        resp = self.session.post(
+            f"{self.BASE_URL}/repos/{owner}/{repo}/git/trees",
+            json={
+                "base_tree": base_tree_sha,
+                "tree": entries,
+            },
+        )
+        resp.raise_for_status()
+        return resp.json()["sha"]
+
     def create_commit(
         self,
         owner: str,
@@ -703,6 +732,94 @@ class GitHubClient:
             "upstream_owner": upstream_owner,
             "upstream_repo": upstream_repo,
             "pr_url": pr_url,
+        }
+
+    def push_files_content(
+        self,
+        owner: str,
+        repo: str,
+        branch_name: str,
+        files: list[dict],
+        commit_message: str,
+        base_branch: str = "main",
+        target_mode: str = "auto",
+    ) -> dict:
+        """
+        Push multiple file edits as a single commit on *branch_name*.
+
+        target_mode:
+            - "original": require push access and write to upstream repo
+            - "fork": always write to a fork (create if needed)
+            - "auto": write to upstream if push access else fork
+        """
+        if not files:
+            raise ValueError("No files provided to push")
+
+        upstream_owner = owner
+        upstream_repo = repo
+
+        perm_resp = self.session.get(f"{self.BASE_URL}/repos/{owner}/{repo}")
+        perm_resp.raise_for_status()
+        permissions = perm_resp.json().get("permissions", {})
+        can_push = permissions.get("push", False)
+
+        if target_mode not in ("original", "fork", "auto"):
+            raise ValueError("target_mode must be 'original', 'fork', or 'auto'")
+
+        target_owner = owner
+        target_repo = repo
+
+        if target_mode == "original":
+            if not can_push:
+                raise PermissionError("NO_PUSH_ACCESS")
+        elif target_mode == "fork":
+            fork_info = self.fork_repo(owner, repo)
+            target_owner = fork_info["fork_owner"]
+            target_repo = fork_info["fork_repo"]
+        else:  # auto
+            if not can_push:
+                fork_info = self.fork_repo(owner, repo)
+                target_owner = fork_info["fork_owner"]
+                target_repo = fork_info["fork_repo"]
+
+        base_commit_sha = self._get_ref_sha(upstream_owner, upstream_repo, base_branch)
+        base_tree_sha = self._get_commit_tree_sha(upstream_owner, upstream_repo, base_commit_sha)
+
+        tree_entries: list[dict] = []
+        for f in files:
+            file_path = f.get("file_path") or f.get("path")
+            content = f.get("content")
+            if not file_path or content is None:
+                raise ValueError("Each file must have file_path and content")
+            blob_sha = self.create_blob(target_owner, target_repo, content)
+            tree_entries.append(
+                {
+                    "path": file_path,
+                    "mode": "100644",
+                    "type": "blob",
+                    "sha": blob_sha,
+                }
+            )
+
+        new_tree_sha = self.create_tree_multi(target_owner, target_repo, base_tree_sha, tree_entries)
+        new_commit_sha = self.create_commit(target_owner, target_repo, new_tree_sha, base_commit_sha, commit_message)
+        self.create_or_update_ref(target_owner, target_repo, branch_name, new_commit_sha)
+
+        branch_url = f"https://github.com/{target_owner}/{target_repo}/tree/{branch_name}"
+        pr_url = (
+            f"https://github.com/{upstream_owner}/{upstream_repo}"
+            f"/compare/{base_branch}...{target_owner}:{branch_name}"
+        )
+        return {
+            "commit_sha": new_commit_sha,
+            "branch": branch_name,
+            "branch_url": branch_url,
+            "fork_owner": target_owner,
+            "fork_repo": target_repo,
+            "upstream_owner": upstream_owner,
+            "upstream_repo": upstream_repo,
+            "pr_url": pr_url,
+            "files_count": len(files),
         }
 
     def get_file_tree(self, repo_path: Path, max_depth: int = 5) -> List[str]:
