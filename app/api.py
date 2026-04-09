@@ -34,6 +34,7 @@ from app.db import (
     FREE_PROJECT_LIMIT,
     get_project,
     get_user_projects,
+    get_user_github_token,
     init_schema,
     record_git_push,
     record_issue_analysis,
@@ -226,6 +227,25 @@ def _require_pool(request: Request):
     return pool
 
 
+def _get_github_token_for_user(request: Request) -> str | None:
+    """
+    Get the GitHub token for the current user.
+    Falls back to .env token if user is not authenticated or has no token.
+    """
+    uid = _optional_user_id(request)
+    if uid:
+        pool = getattr(request.app.state, "db_pool", None)
+        if pool:
+            try:
+                token = get_user_github_token(pool, uid)
+                if token:
+                    return token
+            except Exception:
+                pass
+    # Fallback to .env token if available
+    return None
+
+
 def _safe_record_activity(fn, *args, **kwargs) -> None:
     try:
         fn(*args, **kwargs)
@@ -288,7 +308,7 @@ def run_analyze(body: AnalyzeRequest, request: Request):
     """
     _enforce_free_tier_quota(request)
     try:
-        github_client = GitHubClient()
+        github_client = GitHubClient(token=_get_github_token_for_user(request))
         groq_client = GroqClient()
         cache_manager = CacheManager()
         orchestrator = ScoutOrchestrator(
@@ -331,7 +351,7 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
     (code search + briefing generation) are repeated.
     """
     try:
-        github_client = GitHubClient()
+        github_client = GitHubClient(token=_get_github_token_for_user(request))
         groq_client = GroqClient()
         orchestrator = ScoutOrchestrator(
             github_client=github_client,
@@ -483,7 +503,7 @@ def search_repos_by_tech_stack(body: SearchReposRequest, request: Request):
         if not body.tech_stack or len(body.tech_stack) == 0:
             raise HTTPException(status_code=400, detail="At least one technology/skill is required")
         
-        github_client = GitHubClient()
+        github_client = GitHubClient(token=_get_github_token_for_user(request))
         groq_client = GroqClient()
         
         pathfinder = PathfinderAgent(groq_client, model=body.fast_model)
@@ -665,7 +685,7 @@ def get_repo_file_tree(
     owner = owner.strip()
     repo = repo.strip()
     try:
-        client = GitHubClient()
+        client = GitHubClient(token=_get_github_token_for_user(request))
         files = client.get_repo_file_tree(owner, repo, ref=ref, max_files=max_files)
         return {
             "owner": owner,
@@ -710,7 +730,7 @@ def get_tree_with_analysis(
     owner = owner.strip()
     repo = repo.strip()
     try:
-        client = GitHubClient()
+        client = GitHubClient(token=_get_github_token_for_user(request))
         files = client.get_repo_file_tree(owner, repo, ref=body.ref, max_files=body.max_files)
         
         # Parse analysis data to find highlighted files
@@ -781,7 +801,7 @@ def get_file_content(
     Uses the GitHub Contents API. Requires GITHUB_TOKEN for private repos.
     """
     try:
-        client = GitHubClient()
+        client = GitHubClient(token=_get_github_token_for_user(request))
         content = client.get_file_content(owner, repo, file_path, ref=ref)
         return {"content": content, "path": file_path, "ref": ref}
     except ValueError as e:
@@ -799,7 +819,7 @@ def get_readme_summary(owner: str, repo: str):
     repo = repo.strip()
     print(f"DEBUG: get_readme_summary called with owner='{owner}', repo='{repo}'", flush=True)
     try:
-        client = GitHubClient()
+        client = GitHubClient(token=_get_github_token_for_user(request))
         readme_names = ['README.md', 'readme.md', 'Readme.md', 'README.rst', 'README']
         content = None
         for name in readme_names:
@@ -864,7 +884,7 @@ def fork_choice(
     repo = repo.strip()
     
     try:
-        client = GitHubClient()
+        client = GitHubClient(token=_get_github_token_for_user(request))
         
         if body.choice == "fork":
             # Initiate fork
@@ -930,7 +950,7 @@ def push_file(
     """
     try:
         logger.info(f"Push request: {owner}/{repo} - file: {body.file_path}")
-        client = GitHubClient()
+        client = GitHubClient(token=_get_github_token_for_user(request))
         
         logger.info(f"Checking GitHub token: {'present' if client.has_token else 'MISSING'}")
         
@@ -992,7 +1012,7 @@ def push_files_batch(
     force-update the branch and effectively keep only the last file.
     """
     try:
-        client = GitHubClient()
+        client = GitHubClient(token=_get_github_token_for_user(request))
         target_mode = (body.target_mode or "auto").strip().lower()
         try:
             result = client.push_files_content(

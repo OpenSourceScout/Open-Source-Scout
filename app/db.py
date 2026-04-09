@@ -136,6 +136,17 @@ def _jsonable_row(row: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def get_user_github_token(pool: ConnectionPool, user_id: int) -> str | None:
+    """Fetch the user's GitHub access token from the database."""
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select github_access_token from users where id = %s", (user_id,))
+            row = fetch_one_dict(cur)
+            if row:
+                return row.get("github_access_token")
+    return None
+
+
 def upsert_user_from_github(
     pool: ConnectionPool,
     *,
