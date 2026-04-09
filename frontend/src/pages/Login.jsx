@@ -14,6 +14,11 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
+  const handleGithubClick = (e) => {
+    e.preventDefault()
+    window.location.href = '/api/auth/github'
+  }
+
   const onSubmit = async (e) => {
     e.preventDefault()
     setError(null)
@@ -52,13 +57,13 @@ export default function Login() {
           <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">{error}</div>
         )}
 
-        <a
-          href="/api/auth/github"
+        <button
+          onClick={handleGithubClick}
           className="mb-5 flex w-full items-center justify-center gap-2 rounded-lg border border-app-border bg-app-bg py-2.5 text-sm font-medium text-app-text transition-all duration-200 hover:border-app-muted hover:bg-app-elevated"
         >
           <Github className="h-5 w-5" aria-hidden />
           Continue with GitHub
-        </a>
+        </button>
 
         <div className="relative mb-5">
           <div className="absolute inset-0 flex items-center">
