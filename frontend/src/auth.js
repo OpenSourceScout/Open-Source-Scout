@@ -15,6 +15,10 @@ export function getCurrentUser() {
   }
 }
 
+export function setAccessToken(token) {
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
 export function setAuthSession({ access_token, user }) {
   localStorage.setItem(TOKEN_KEY, access_token)
   localStorage.setItem(USER_KEY, JSON.stringify(user))

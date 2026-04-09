@@ -1,6 +1,7 @@
 import os
 from typing import Any, Sequence
 
+from psycopg import errors as pg_errors
 from psycopg.types.json import Json
 from psycopg_pool import ConnectionPool
 
@@ -95,6 +96,18 @@ def init_schema(pool: ConnectionPool) -> None:
     with pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(schema_sql)
+            _ensure_github_oauth_columns(cur)
+
+
+def _ensure_github_oauth_columns(cur) -> None:
+    cur.execute("alter table users alter column password_hash drop not null")
+    cur.execute("alter table users add column if not exists github_id bigint")
+    cur.execute("alter table users add column if not exists github_login text")
+    cur.execute("alter table users add column if not exists github_access_token text")
+    cur.execute(
+        "create unique index if not exists idx_users_github_id on users (github_id) "
+        "where github_id is not null"
+    )
 
 
 def fetch_one_dict(cur) -> dict[str, Any] | None:
@@ -121,6 +134,78 @@ def _jsonable_row(row: dict[str, Any]) -> dict[str, Any]:
         else:
             out[k] = v
     return out
+
+
+def upsert_user_from_github(
+    pool: ConnectionPool,
+    *,
+    github_id: int,
+    github_login: str,
+    email: str,
+    display_name: str | None,
+    access_token: str,
+) -> dict[str, Any]:
+    email_norm = email.lower().strip()
+    display = (display_name or github_login).strip()[:80] or github_login
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select id, email, display_name, created_at
+                from users where github_id = %s
+                """,
+                (github_id,),
+            )
+            existing = fetch_one_dict(cur)
+            if existing:
+                cur.execute(
+                    """
+                    update users set
+                      github_access_token = %s,
+                      github_login = %s,
+                      display_name = coalesce(%s, display_name)
+                    where id = %s
+                    """,
+                    (access_token, github_login, display, existing["id"]),
+                )
+                cur.execute(
+                    "select id, email, display_name, created_at from users where id = %s",
+                    (existing["id"],),
+                )
+                row = fetch_one_dict(cur)
+                return _jsonable_row(row) if row else _jsonable_row(existing)
+
+            try:
+                cur.execute(
+                    """
+                    insert into users
+                      (email, display_name, password_hash, github_id, github_login, github_access_token)
+                    values (%s, %s, null, %s, %s, %s)
+                    returning id, email, display_name, created_at
+                    """,
+                    (email_norm, display, github_id, github_login, access_token),
+                )
+                row = fetch_one_dict(cur)
+                if not row:
+                    raise RuntimeError("insert returned no row")
+                return _jsonable_row(row)
+            except pg_errors.UniqueViolation:
+                pass
+
+            fallback_email = f"github.{github_id}.scout@local.invalid"
+            cur.execute(
+                """
+                insert into users
+                  (email, display_name, password_hash, github_id, github_login, github_access_token)
+                values (%s, %s, null, %s, %s, %s)
+                returning id, email, display_name, created_at
+                """,
+                (fallback_email, display, github_id, github_login, access_token),
+            )
+            row = fetch_one_dict(cur)
+            if not row:
+                raise RuntimeError("insert with fallback email returned no row")
+            return _jsonable_row(row)
 
 
 def record_tech_stack_search(

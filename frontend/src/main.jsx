@@ -7,6 +7,7 @@ import Dashboard from './components/Dashboard.jsx'
 import AnalysisLayout from './components/AnalysisLayout.jsx'
 import Login from './pages/Login.jsx'
 import Signup from './pages/Signup.jsx'
+import OAuthCallback from './pages/OAuthCallback.jsx'
 import IssueRanking from './pages/IssueRanking.jsx'
 import CodeLocator from './pages/CodeLocator.jsx'
 import ContributorBriefing from './pages/ContributorBriefing.jsx'
@@ -175,6 +176,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/oauth/callback" element={<OAuthCallback />} />
         <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
         <Route path="/analysis" element={<RequireAuth><AnalysisLayout /></RequireAuth>}>
           <Route index element={<AnalysisDashboard />} />
