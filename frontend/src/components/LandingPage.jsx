@@ -113,7 +113,7 @@ export default function LandingPage() {
             <div className="mt-10 flex flex-wrap items-center gap-4">
               <button type="button" onClick={() => navigate('/dashboard')} className={btnPrimary}>
                 Get started free
-                <Rocket className="w-4 h-4" />
+
               </button>
               <button type="button" className={btnSecondary}>
                 Watch demo
