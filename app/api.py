@@ -576,7 +576,7 @@ def me(request: Request):
     with pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "select id, email, display_name, created_at from users where id = %s",
+                "select id, email, display_name, role, created_at from users where id = %s",
                 (user_id,),
             )
             row = cur.fetchone()

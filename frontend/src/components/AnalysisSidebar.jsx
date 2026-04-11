@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import ScoutLogo from './ScoutLogo'
 import { getMe } from '../api'
+import { isAdmin } from '../auth'
 
 const NAV_ITEMS = [
   { path: '/analysis', label: 'Dashboard', Icon: LayoutDashboard },
@@ -21,7 +22,7 @@ const NAV_ITEMS = [
   { path: '/analysis/issues', label: 'Issue Ranking', Icon: ClipboardList },
   { path: '/analysis/code', label: 'Code Locator', Icon: MapPin },
   { path: '/analysis/briefing', label: 'Contributor Briefing', Icon: FileText },
-  { path: '/analysis/qa-report', label: 'QA Report', Icon: ShieldCheck },
+  { path: '/analysis/qa-report', label: 'QA Report', Icon: ShieldCheck, adminOnly: true },
 ]
 
 const BOTTOM_NAV = [
@@ -45,9 +46,13 @@ export default function AnalysisSidebar({ repoInfo, onBackToRepos, hasRankedRepo
     getMe().then(setUser).catch(() => setUser(null))
   }, [])
 
-  // Filter nav items: hide Repositories tab when user entered via direct repo URL
+  // Filter nav items based on access rules:
+  // 1. Hide Repositories tab when user entered via direct repo URL
+  // 2. Hide admin-only items (e.g. QA Report) from non-admin users
+  const admin = isAdmin()
   const visibleNavItems = NAV_ITEMS.filter((item) => {
     if (item.path === '/analysis/repositories' && !hasRankedRepos) return false
+    if (item.adminOnly && !admin) return false
     return true
   })
 

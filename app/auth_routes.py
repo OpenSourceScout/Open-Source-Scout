@@ -90,7 +90,7 @@ def signup(body: SignupRequest, request: Request):
                     """
                     insert into users (email, display_name, password_hash)
                     values (%s, %s, %s)
-                    returning id, email, display_name, created_at
+                    returning id, email, display_name, role, created_at
                     """,
                     (email, body.display_name, password_hash),
                 )
@@ -119,7 +119,7 @@ def login(body: LoginRequest, request: Request):
     with pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                "select id, email, display_name, password_hash, created_at from users where email = %s",
+                "select id, email, display_name, role, password_hash, created_at from users where email = %s",
                 (email,),
             )
             user = fetch_one_dict(cur)

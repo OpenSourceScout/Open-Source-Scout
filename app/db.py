@@ -36,6 +36,7 @@ def init_schema(pool: ConnectionPool) -> None:
       email text not null unique,
       display_name text,
       password_hash text not null,
+      role text not null default 'user' check (role in ('user', 'admin')),
       created_at timestamptz not null default now()
     );
 
@@ -108,6 +109,11 @@ def _ensure_github_oauth_columns(cur) -> None:
         "create unique index if not exists idx_users_github_id on users (github_id) "
         "where github_id is not null"
     )
+    # Ensure role column exists for existing databases (migration)
+    cur.execute(
+        "alter table users add column if not exists role text "
+        "not null default 'user' check (role in ('user', 'admin'))"
+    )
 
 
 def fetch_one_dict(cur) -> dict[str, Any] | None:
@@ -162,7 +168,7 @@ def upsert_user_from_github(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                select id, email, display_name, created_at
+                select id, email, display_name, role, created_at
                 from users where github_id = %s
                 """,
                 (github_id,),
@@ -180,7 +186,7 @@ def upsert_user_from_github(
                     (access_token, github_login, display, existing["id"]),
                 )
                 cur.execute(
-                    "select id, email, display_name, created_at from users where id = %s",
+                    "select id, email, display_name, role, created_at from users where id = %s",
                     (existing["id"],),
                 )
                 row = fetch_one_dict(cur)
@@ -192,7 +198,7 @@ def upsert_user_from_github(
                     insert into users
                       (email, display_name, password_hash, github_id, github_login, github_access_token)
                     values (%s, %s, null, %s, %s, %s)
-                    returning id, email, display_name, created_at
+                    returning id, email, display_name, role, created_at
                     """,
                     (email_norm, display, github_id, github_login, access_token),
                 )
@@ -209,7 +215,7 @@ def upsert_user_from_github(
                 insert into users
                   (email, display_name, password_hash, github_id, github_login, github_access_token)
                 values (%s, %s, null, %s, %s, %s)
-                returning id, email, display_name, created_at
+                returning id, email, display_name, role, created_at
                 """,
                 (fallback_email, display, github_id, github_login, access_token),
             )

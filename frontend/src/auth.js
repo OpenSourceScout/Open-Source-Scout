@@ -33,3 +33,7 @@ export function isLoggedIn() {
   return Boolean(getAccessToken())
 }
 
+export function isAdmin() {
+  const user = getCurrentUser()
+  return user?.role === 'admin'
+}

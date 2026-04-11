@@ -18,7 +18,7 @@ import Projects from './pages/Projects.jsx'
 import AnalysisDashboard from './pages/AnalysisDashboard.jsx'
 import SettingsPage from './pages/Settings.jsx'
 import './index.css'
-import { isLoggedIn } from './auth'
+import { isLoggedIn, isAdmin } from './auth'
 
 // RepositoriesView - shows ranked repos from tech stack search
 function RepositoriesView() {
@@ -169,6 +169,16 @@ function RequireAuth({ children }) {
   return children
 }
 
+function RequireAdmin({ children }) {
+  if (!isLoggedIn()) {
+    return <Navigate to="/login" replace />
+  }
+  if (!isAdmin()) {
+    return <Navigate to="/dashboard" replace />
+  }
+  return children
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
@@ -184,7 +194,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="issues" element={<IssueRanking />} />
           <Route path="code" element={<CodeLocator />} />
           <Route path="briefing" element={<ContributorBriefing />} />
-          <Route path="qa-report" element={<QaReport />} />
+          <Route path="qa-report" element={<RequireAdmin><QaReport /></RequireAdmin>} />
         </Route>
         <Route path="/editor" element={<RequireAuth><EditorWindow /></RequireAuth>} />
         <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
