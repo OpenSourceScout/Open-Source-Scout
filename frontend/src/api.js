@@ -1,4 +1,5 @@
 import { getAccessToken } from './auth'
+import { encodeRepoFilePathForApi } from './utils/repoPaths'
 
 const API_BASE = '/api';
 
@@ -134,7 +135,7 @@ export async function reAnalyzeIssue({ repo_url, issue_number, fast_model, power
 }
 
 export async function getFileContent(owner, repo, path, ref = 'main') {
-  const encodedPath = path.split('/').map(encodeURIComponent).join('/');
+  const encodedPath = encodeRepoFilePathForApi(path);
   const res = await apiFetch(`/repos/${owner}/${repo}/files/${encodedPath}?ref=${encodeURIComponent(ref)}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: res.statusText }));

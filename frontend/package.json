@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:e2e:live": "playwright test --config=playwright.config.live.js"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -19,15 +22,20 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.50.1",
     "@tailwindcss/postcss": "^4.2.1",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.27",
     "eslint": "^8.57.1",
     "eslint-plugin-react": "^7.37.5",
+    "jsdom": "^25.0.1",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1",
-    "vite": "^6.0.1"
+    "vite": "^6.0.1",
+    "vitest": "^3.0.5"
   }
 }

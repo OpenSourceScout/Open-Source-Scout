@@ -5,26 +5,8 @@ import { FileCode, Pencil, ChevronDown } from 'lucide-react'
 import { getFileContent, pushFile, pushFilesBatch } from '../api'
 import FileTree from '../components/FileTree'
 import ScoutLogo from '../components/ScoutLogo'
+import { getLanguage } from '../utils/editorLanguage'
 import './EditorWindow.css'
-
-const EXT_TO_LANG = {
-  py: 'python',
-  js: 'javascript',
-  ts: 'typescript',
-  jsx: 'javascript',
-  tsx: 'typescript',
-  json: 'json',
-  md: 'markdown',
-  html: 'html',
-  css: 'css',
-  yaml: 'yaml',
-  yml: 'yaml',
-}
-
-function getLanguage(path) {
-  const ext = path?.split('.').pop()?.toLowerCase() || ''
-  return EXT_TO_LANG[ext] || 'plaintext'
-}
 
 export default function EditorWindow() {
   const [searchParams] = useSearchParams()
@@ -458,7 +440,7 @@ export default function EditorWindow() {
 
       {/* Review Modal */}
       {showReview && (
-        <div className="fork-dialog-overlay">
+        <div className="fork-dialog-overlay" data-testid="review-changes-modal">
           <div className="review-dialog">
             <div className="review-header">
               <h2>Review changes</h2>
@@ -659,7 +641,7 @@ export default function EditorWindow() {
           )}
 
           {/* Monaco Editor */}
-          <div className="editor-wrapper">
+          <div className="editor-wrapper" data-testid="editor-monaco-wrapper">
             {content ? (
               <MonacoEditor
                 height="100%"
