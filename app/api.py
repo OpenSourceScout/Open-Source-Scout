@@ -671,6 +671,7 @@ def delete_project_endpoint(project_id: int, request: Request):
 
 @app.get("/api/repos/{owner}/{repo}/tree")
 def get_repo_file_tree(
+    request: Request,
     owner: str,
     repo: str,
     ref: str = "HEAD",
@@ -700,6 +701,7 @@ def get_repo_file_tree(
 
 @app.post("/api/repos/{owner}/{repo}/tree/with-analysis")
 def get_tree_with_analysis(
+    request: Request,
     owner: str,
     repo: str,
     body: FileTreeRequest,
@@ -790,6 +792,7 @@ def get_tree_with_analysis(
 
 @app.get("/api/repos/{owner}/{repo}/files/{file_path:path}")
 def get_file_content(
+    request: Request,
     owner: str,
     repo: str,
     file_path: str,
@@ -811,7 +814,7 @@ def get_file_content(
 
 
 @app.get("/api/repos/{owner}/{repo}/readme-summary")
-def get_readme_summary(owner: str, repo: str):
+def get_readme_summary(request: Request, owner: str, repo: str):
     """
     Fetch repository README and generate an LLM summary.
     """
@@ -867,6 +870,7 @@ def get_readme_summary(owner: str, repo: str):
 
 @app.post("/api/repos/{owner}/{repo}/fork-choice")
 def fork_choice(
+    request: Request,
     owner: str,
     repo: str,
     body: ForkChoiceRequest,
