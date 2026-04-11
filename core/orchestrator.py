@@ -15,7 +15,7 @@ from core.schemas import (
     Agent1Output, Agent2Output, Agent3Output, TestingAgentOutput, RunLog,
 )
 from integrations.github_client import GitHubClient
-from integrations.groq_client import GroqClient
+from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B
 from utils.cache import CacheManager
 
 logger = logging.getLogger(__name__)
@@ -41,16 +41,20 @@ class ScoutOrchestrator:
         cache_manager: Optional[CacheManager] = None,
         fast_model: str = "openai/gpt-oss-120b",
         powerful_model: str = "llama-3.3-70b",
+        triage_model: Optional[str] = None,
+        testing_model: Optional[str] = None,
     ):
         self.github = github_client
         self.groq = groq_client
         self.cache = cache_manager or CacheManager()
 
-        # Initialize agents
-        self.agent1 = TriageNurseAgent(groq_client, model=fast_model)
+        triage_m = triage_model or MODEL_LLAMA_4_SCOUT_17B
+        testing_m = testing_model or MODEL_LLAMA_4_SCOUT_17B
+
+        self.agent1 = TriageNurseAgent(groq_client, model=triage_m)
         self.agent2 = ArchaeologistAgent(groq_client, model=fast_model)
         self.agent3 = SeniorDevAgent(groq_client, model=powerful_model)
-        self.testing_agent = TestingAgent(groq_client, model=powerful_model)
+        self.testing_agent = TestingAgent(groq_client, model=testing_m)
 
         self._status_callback: Optional[Callable[[str], None]] = None
     

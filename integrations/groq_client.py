@@ -18,6 +18,9 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar('T', bound=BaseModel)
 
+MODEL_LLAMA_4_SCOUT_17B = "meta-llama/llama-4-scout-17b-16e-instruct"
+MODEL_README_SUMMARY = "llama-3.1-8b"
+
 
 class GroqRateLimitError(Exception):
     """Raised when Groq API returns 429 Too Many Requests."""
@@ -38,6 +41,7 @@ class GroqClient:
     MODELS = {
         # Fast models for agent 1 and 2
         "openai/gpt-oss-120b": "openai/gpt-oss-120b",
+        MODEL_LLAMA_4_SCOUT_17B: MODEL_LLAMA_4_SCOUT_17B,
         "llama-3.3-70b": "llama-3.3-70b-versatile",
         "llama-3.1-8b": "llama-3.1-8b-instant",
         "gemma2-9b": "gemma2-9b-it",

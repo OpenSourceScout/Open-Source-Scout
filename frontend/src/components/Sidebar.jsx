@@ -49,7 +49,6 @@ export default function Sidebar({ onAnalyze, onSearchRepos, loading }) {
     } else {
       onSearchRepos({
         tech_stack: techStackTags,
-        fast_model: fast,
       })
     }
   }

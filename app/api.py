@@ -43,7 +43,7 @@ from app.db import (
 )
 
 from integrations.github_client import GitHubClient
-from integrations.groq_client import GroqClient
+from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B, MODEL_README_SUMMARY
 from core.orchestrator import ScoutOrchestrator
 from core.agents.pathfinder import PathfinderAgent
 from utils.cache import CacheManager
@@ -134,7 +134,7 @@ class SearchReposRequest(BaseModel):
     """Request body for searching repositories by tech stack."""
     
     tech_stack: list[str]
-    fast_model: str = "openai/gpt-oss-120b"
+    fast_model: str = MODEL_LLAMA_4_SCOUT_17B
 
 
 class ExportPdfRequest(BaseModel):
@@ -854,7 +854,7 @@ def get_readme_summary(request: Request, owner: str, repo: str):
         
         summary = groq_client.complete(
             prompt=prompt,
-            model=groq_client.DEFAULT_FAST_MODEL,
+            model=MODEL_README_SUMMARY,
             max_tokens=1500
         )
         print("DEBUG: Summary generated successfully.", flush=True)

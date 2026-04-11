@@ -9,7 +9,7 @@ from core.agents.base import BaseAgent
 from core.schemas import (
     RankedRepo, RepoScoreBreakdown, PathfinderOutput
 )
-from integrations.groq_client import GroqClient
+from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B
 
 
 class PathfinderAgent(BaseAgent):
@@ -35,7 +35,7 @@ class PathfinderAgent(BaseAgent):
         groq_client: GroqClient,
         model: Optional[str] = None
     ):
-        super().__init__(groq_client, model or "openai/gpt-oss-120b")
+        super().__init__(groq_client, model or MODEL_LLAMA_4_SCOUT_17B)
     
     @property
     def name(self) -> str:

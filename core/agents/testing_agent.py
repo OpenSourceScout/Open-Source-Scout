@@ -15,7 +15,7 @@ from core.schemas import (
     PathfinderOutput,
     AgentTestResult, TestingAgentOutput,
 )
-from integrations.groq_client import GroqClient
+from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B
 
 PASS_THRESHOLD = 60
 
@@ -33,7 +33,7 @@ class TestingAgent(BaseAgent):
     """
 
     def __init__(self, groq_client: GroqClient, model: Optional[str] = None):
-        super().__init__(groq_client, model or "llama-3.3-70b")
+        super().__init__(groq_client, model or MODEL_LLAMA_4_SCOUT_17B)
 
     @property
     def name(self) -> str:

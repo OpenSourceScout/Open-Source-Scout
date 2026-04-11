@@ -76,7 +76,7 @@ export async function searchReposByTechStack({ tech_stack, fast_model }) {
     method: 'POST',
     body: JSON.stringify({
       tech_stack,
-      fast_model: fast_model || 'openai/gpt-oss-120b',
+      fast_model: fast_model || 'meta-llama/llama-4-scout-17b-16e-instruct',
     }),
   });
   if (!res.ok) {
