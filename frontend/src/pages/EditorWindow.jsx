@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react'
 import { FileCode, Pencil, ChevronDown } from 'lucide-react'
@@ -35,7 +35,23 @@ export default function EditorWindow() {
   const repoParam = searchParams.get('repo') || location.state?.repoInfo?.name
   const pathParam = searchParams.get('path') || location.state?.filePath
   const refParam = searchParams.get('ref') || 'main'
-  const analysisDataParam = location.state?.analysisData || location.state?.analysisResult
+  const analysisKey = searchParams.get('analysisKey')
+  const analysisFromTabOpen = useMemo(() => {
+    if (!analysisKey) return null
+    try {
+      const raw = sessionStorage.getItem(analysisKey)
+      if (!raw) return null
+      return JSON.parse(raw)
+    } catch {
+      return null
+    }
+  }, [analysisKey])
+  const analysisDataParam =
+    analysisFromTabOpen?.analysisData ??
+    analysisFromTabOpen?.analysisResult ??
+    analysisFromTabOpen ??
+    location.state?.analysisData ??
+    location.state?.analysisResult
 
   const [owner, setOwner] = useState(ownerParam || '')
   const [repo, setRepo] = useState(repoParam || '')

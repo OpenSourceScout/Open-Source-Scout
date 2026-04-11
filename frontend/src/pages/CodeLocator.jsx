@@ -100,15 +100,25 @@ export default function CodeLocator() {
   }
 
   const handleOpenInEditor = () => {
-    if (selectedFile && repoInfo) {
-      navigate('/editor', {
-        state: {
-          repoInfo,
-          filePath: selectedFile.path,
-          analysisResult,
-        },
-      })
+    if (!selectedFile || !repoInfo) return
+    const ref = analysisResult?.repo?.default_branch || 'main'
+    const params = new URLSearchParams({
+      owner: repoInfo.owner,
+      repo: repoInfo.name,
+      path: selectedFile.path,
+      ref,
+    })
+    if (analysisResult) {
+      const analysisKey = `scout-editor-analysis-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+      try {
+        sessionStorage.setItem(analysisKey, JSON.stringify(analysisResult))
+        params.set('analysisKey', analysisKey)
+      } catch (e) {
+        console.error('Could not store analysis for editor tab', e)
+      }
     }
+    const base = `${window.location.origin}${import.meta.env.BASE_URL || '/'}`.replace(/\/$/, '')
+    window.open(`${base}/editor?${params.toString()}`, '_blank', 'noopener,noreferrer')
   }
 
   const emptyState = (title, body, btnLabel, onNavigate) => (
