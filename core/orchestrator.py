@@ -1,6 +1,7 @@
 """
 Orchestrator - Coordinates the multi-agent pipeline including QA validation.
 """
+import errno
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -238,15 +239,47 @@ class ScoutOrchestrator:
 
     def run_phase2(self, repo_url: str, issue: GitHubIssue) -> dict:
         """Run Phase 2: Code location for a specific issue."""
+        repo_path = None
         try:
             self._update_status("📦 Cloning repository...")
-            repo_path = self.github.clone_repo(repo_url)
+            try:
+                repo_path = self.github.clone_repo(repo_url)
+            except (OSError, RuntimeError) as e:
+                logger.exception("Phase 2 failed during git clone")
+                cache = getattr(self.github, "cache_dir", "")
+                return {
+                    "success": False,
+                    "error": (
+                        f"Git clone failed: {e}. "
+                        f"Clone cache directory is {cache}. "
+                        "If this project lives under OneDrive, set environment variable "
+                        "OSS_REPO_CACHE to a path outside OneDrive (e.g. C:/dev/oss-repos) "
+                        "and restart the backend."
+                    ),
+                }
 
             self._update_status("🗂️ Analyzing repository structure...")
-            file_tree = self.github.get_file_tree(repo_path)
+            try:
+                file_tree = self.github.get_file_tree(repo_path)
+            except OSError as e:
+                logger.exception("Phase 2 failed while scanning repository tree")
+                return {
+                    "success": False,
+                    "error": (
+                        f"Repository file scan failed: {e}. "
+                        f"Clone path: {repo_path}."
+                    ),
+                }
 
             self._update_status(f"🔭 Searching code for issue #{issue.number}...")
-            agent2_output = self.agent2.run(issue, repo_path, file_tree)
+            try:
+                agent2_output = self.agent2.run(issue, repo_path, file_tree)
+            except OSError as e:
+                logger.exception("Phase 2 failed during code search (Archaeologist)")
+                return {
+                    "success": False,
+                    "error": f"Code search failed: {e}",
+                }
 
             return {
                 "success": True,
@@ -256,10 +289,19 @@ class ScoutOrchestrator:
             }
 
         except Exception as e:
-            logger.error(f"Error during Phase 2: {e}")
+            logger.exception("Phase 2 failed (unexpected error)")
             error_msg = str(e)
             if "RateLimitError" in error_msg or "rate limit" in error_msg.lower():
                 error_msg = "API rate limit exceeded. Please try again later."
+            elif isinstance(e, OSError) and getattr(e, "errno", None) == errno.EINVAL:
+                error_msg = (
+                    "Windows [Errno 22] Invalid argument — usually OneDrive, a stuck git cache, or a bad "
+                    "backend port. Fix: (1) Stop all Python/uvicorn, run Open-Source-Scout\\run-backend.ps1 "
+                    "(uses port 8003 by default), (2) In frontend folder run: "
+                    "$env:OSS_API_PROXY_TARGET='http://localhost:8003'; npm run dev "
+                    "(3) Optional: set OSS_REPO_CACHE to a folder outside OneDrive. "
+                    f"Original: {e}"
+                )
             return {"success": False, "error": error_msg}
 
     def run_phase3(

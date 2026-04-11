@@ -114,6 +114,8 @@ When uncertain, indicate lower confidence rather than guessing."""
         )[:10]
         
         for file_path, data in sorted_files:
+            if not (file_path or "").strip():
+                continue
             # Get file content around matches
             min_line = max(1, min(data["lines"]) - 5)
             max_line = max(data["lines"]) + 10
@@ -185,12 +187,22 @@ Example: {{"queries": ["handleSubmit", "ValidationError", "user_input", "form.py
             )
             
             data = json.loads(response)
-            queries = data.get("queries", keywords)
-            
-            # Add original keywords as fallback
-            queries.extend(keywords)
-            
-            return queries[:10]
+            raw_queries = data.get("queries", keywords)
+            if not isinstance(raw_queries, list):
+                raw_queries = keywords
+            queries = [
+                str(q).strip()
+                for q in raw_queries
+                if q is not None and str(q).strip()
+            ]
+            queries.extend(str(k).strip() for k in keywords if k is not None and str(k).strip())
+            seen: set[str] = set()
+            unique: list[str] = []
+            for q in queries:
+                if q not in seen:
+                    seen.add(q)
+                    unique.append(q)
+            return unique[:10]
         
         except Exception as e:
             self.log(f"Failed to get search strategy: {e}", level="warning")

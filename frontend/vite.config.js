@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// Default 8003: port 8001 is often left in a bad state on Windows (ghost listeners → bogus API errors).
+const apiProxyTarget =
+  process.env.OSS_API_PROXY_TARGET || 'http://localhost:8003'
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -12,7 +16,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:8001',
+        target: apiProxyTarget,
         changeOrigin: true,
         timeout: 600000, // 10 minutes for long-running analysis operations
       },

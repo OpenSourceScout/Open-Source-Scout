@@ -6,7 +6,9 @@ the Python backend without going through Streamlit.
 """
 # ruff: noqa: E402
 
+import errno
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -18,6 +20,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
@@ -189,14 +192,8 @@ class ForkChoiceRequest(BaseModel):
 
 
 def _to_jsonable(obj):
-    """Convert Pydantic models and nested structures to JSON-serializable dict."""
-    if hasattr(obj, "model_dump"):
-        return obj.model_dump()
-    if isinstance(obj, dict):
-        return {k: _to_jsonable(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_to_jsonable(item) for item in obj]
-    return obj
+    """Convert Pydantic models and nested structures to JSON-serializable values."""
+    return jsonable_encoder(obj)
 
 
 def _optional_user_id(request: Request) -> int | None:
@@ -242,8 +239,7 @@ def _get_github_token_for_user(request: Request) -> str | None:
                     return token
             except Exception:
                 pass
-    # Fallback to .env token if available
-    return None
+    return os.getenv("GITHUB_TOKEN")
 
 
 def _safe_record_activity(fn, *args, **kwargs) -> None:
@@ -361,13 +357,13 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
         )
 
         # Fetch repo metadata
-        print(f"DEBUG: Fetching repo {body.repo_url}", flush=True)
+        logger.info("re-analyze: fetching repo %s", body.repo_url)
         repo = github_client.get_repo(body.repo_url)
 
         # Fetch the specific issue directly by number — works for any issue
         # regardless of how recently it was updated (avoids the "top 50" limit).
         try:
-            print(f"DEBUG: Fetching issue {body.issue_number}", flush=True)
+            logger.info("re-analyze: fetching issue %s", body.issue_number)
             target_issue = github_client.get_issue(body.repo_url, body.issue_number)
         except Exception:
             raise HTTPException(
@@ -379,10 +375,11 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
         issues = github_client.get_issues(body.repo_url, beginner_only=False, max_issues=50)
 
         # Phase 2 — Archaeologist
-        print("DEBUG: Running Phase 2", flush=True)
+        logger.info("re-analyze: running Phase 2")
         phase2 = orchestrator.run_phase2(body.repo_url, target_issue)
-        print("DEBUG: Phase 2 finished", flush=True)
+        logger.info("re-analyze: Phase 2 finished")
         if not phase2.get("success"):
+            logger.error("re-analyze Phase 2 failed: %s", phase2.get("error"))
             raise HTTPException(status_code=500, detail=phase2.get("error", "Phase 2 failed"))
 
         agent2_output = phase2["agent2_output"]
@@ -390,10 +387,10 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
         # Fetch agent1_output from a fresh issue ranking (needed for phase 3 context)
         from core.schemas import Agent1Output, RepoInfo, RankedIssue
         from core.scoring import IssueScorer
-        print("DEBUG: Ranking context issues", flush=True)
+        logger.info("re-analyze: ranking context issues")
         scorer = IssueScorer()
         ranked = scorer.rank_issues(issues, top_n=3)
-        print("DEBUG: Finished ranking context issues", flush=True)
+        logger.info("re-analyze: ranking context issues done")
         ranked_issues = [
             RankedIssue(
                 number=iss.number,
@@ -418,9 +415,9 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
         )
 
         # Phase 3 — Senior Dev
-        print("DEBUG: Running Phase 3", flush=True)
+        logger.info("re-analyze: running Phase 3")
         phase3 = orchestrator.run_phase3(repo, target_issue, agent1_output, agent2_output)
-        print("DEBUG: Phase 3 finished", flush=True)
+        logger.info("re-analyze: Phase 3 finished")
         if not phase3.get("success"):
             raise HTTPException(status_code=500, detail=phase3.get("error", "Phase 3 failed"))
 
@@ -438,7 +435,7 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
         # Phase 4 — Testing Agent with QA feedback loop
         # If any agent fails QA, they are re-run with feedback (up to 2 retries).
         # The returned agent outputs may be improved versions after retries.
-        print("DEBUG: Running QA cycle", flush=True)
+        logger.info("re-analyze: running QA cycle")
         testing_result = orchestrator.run_testing(
             repo=repo,
             issue=target_issue,
@@ -449,11 +446,16 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
             file_tree=phase2.get("file_tree"),
             pathfinder_output=pathfinder,
         )
+        if not testing_result.get("success"):
+            raise HTTPException(
+                status_code=500,
+                detail=testing_result.get("error", "Testing / QA phase failed"),
+            )
 
         final_agent2 = testing_result.get("agent2_output", agent2_output)
         final_agent3 = testing_result.get("agent3_output", agent3_output)
 
-        print("DEBUG: Re_analyze completed successfully", flush=True)
+        logger.info("re-analyze: completed successfully")
         payload = {
             "success": True,
             "target_issue": target_issue,
@@ -486,8 +488,15 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in re-analyze: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Unexpected error in re-analyze")
+        detail = str(e)
+        if isinstance(e, OSError) and getattr(e, "errno", None) == errno.EINVAL:
+            detail = (
+                f"{detail} — On Windows, stop other uvicorn/Python on :8001, start API on port 8003 "
+                "(.\\run-backend.ps1), then: $env:OSS_API_PROXY_TARGET='http://localhost:8003'; npm run dev "
+                "in frontend. See Open-Source-Scout\\run-backend.ps1."
+            )
+        raise HTTPException(status_code=500, detail=detail)
 
 
 @app.post("/api/search-repos")

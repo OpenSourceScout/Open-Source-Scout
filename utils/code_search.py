@@ -1,6 +1,7 @@
 """
 Code search utilities - uses ripgrep if available, falls back to Python.
 """
+import json
 import os
 import re
 import subprocess
@@ -18,6 +19,11 @@ class SearchResult:
     match_text: str
 
 
+def _ignore_walk_oserror(exc: OSError) -> None:
+    """Let os.walk continue past unreadable dirs (OneDrive placeholders, reparse points, etc.)."""
+    return None
+
+
 class CodeSearcher:
     """Search code in repositories using ripgrep or Python fallback."""
     
@@ -33,14 +39,19 @@ class CodeSearcher:
     
     def _check_ripgrep(self) -> bool:
         """Check if ripgrep is available on the system."""
+        if os.name == "nt":
+            flag = (os.environ.get("OSS_USE_RG") or "").strip().lower()
+            if flag not in ("1", "true", "yes"):
+                return False
         try:
             subprocess.run(
                 ["rg", "--version"],
                 capture_output=True,
-                check=True
+                check=True,
+                timeout=5,
             )
             return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError, subprocess.TimeoutExpired):
             return False
     
     @property
@@ -69,6 +80,9 @@ class CodeSearcher:
         Returns:
             List of SearchResult objects
         """
+        if not (query or "").strip():
+            return []
+
         if self._has_ripgrep:
             return self._search_ripgrep(
                 query, file_patterns, max_results, context_lines, case_sensitive
@@ -104,6 +118,7 @@ class CodeSearcher:
         for exclude in [".git", "node_modules", "__pycache__", "dist", "build", ".venv"]:
             cmd.extend(["--glob", f"!{exclude}"])
         
+        cmd.append("--")
         cmd.append(query)
         cmd.append(str(self.repo_path))
         
@@ -112,16 +127,16 @@ class CodeSearcher:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=30
+                encoding="utf-8",
+                errors="replace",
+                timeout=30,
             )
-            
-            import json
             results = []
-            
+
             for line in result.stdout.split("\n"):
                 if not line.strip():
                     continue
-                    
+
                 try:
                     data = json.loads(line)
                     if data.get("type") == "match":
@@ -129,14 +144,15 @@ class CodeSearcher:
                         path = match_data.get("path", {}).get("text", "")
                         line_num = match_data.get("line_number", 0)
                         lines = match_data.get("lines", {}).get("text", "")
-                        
-                        # Get the relative path
+                        if not (path or "").strip():
+                            continue
+
                         try:
                             rel_path = Path(path).relative_to(self.repo_path)
                             path = str(rel_path).replace("\\", "/")
                         except ValueError:
                             pass
-                        
+
                         results.append(SearchResult(
                             file_path=path,
                             line_number=line_num,
@@ -145,13 +161,14 @@ class CodeSearcher:
                         ))
                 except json.JSONDecodeError:
                     continue
-            
+
             return results[:max_results]
-        
+
+        except OSError:
+            return self._search_python(query, file_patterns, max_results, case_sensitive)
         except subprocess.TimeoutExpired:
             return []
         except Exception:
-            # Fall back to Python search
             return self._search_python(query, file_patterns, max_results, case_sensitive)
     
     def _search_python(
@@ -177,7 +194,7 @@ class CodeSearcher:
         
         ignore_dirs = {".git", "node_modules", "__pycache__", "dist", "build", ".venv", "venv"}
         
-        for root, dirs, files in os.walk(self.repo_path):
+        for root, dirs, files in os.walk(self.repo_path, onerror=_ignore_walk_oserror):
             # Filter out ignored directories
             dirs[:] = [d for d in dirs if d not in ignore_dirs]
             
@@ -260,11 +277,19 @@ class CodeSearcher:
         Returns:
             File content as string
         """
-        full_path = self.repo_path / file_path
-        
-        if not full_path.exists():
+        if not (file_path or "").strip():
             return ""
-        
+
+        try:
+            repo_root = self.repo_path.resolve()
+            full_path = (self.repo_path / file_path).resolve()
+            full_path.relative_to(repo_root)
+        except (OSError, ValueError):
+            return ""
+
+        if not full_path.is_file():
+            return ""
+
         try:
             with open(full_path, "r", encoding="utf-8", errors="ignore") as f:
                 lines = f.readlines()
@@ -288,9 +313,17 @@ class CodeSearcher:
         Returns:
             List of symbol names (functions, classes)
         """
-        full_path = self.repo_path / file_path
-        
-        if not full_path.exists():
+        if not (file_path or "").strip():
+            return []
+
+        try:
+            repo_root = self.repo_path.resolve()
+            full_path = (self.repo_path / file_path).resolve()
+            full_path.relative_to(repo_root)
+        except (OSError, ValueError):
+            return []
+
+        if not full_path.is_file():
             return []
         
         symbols = []

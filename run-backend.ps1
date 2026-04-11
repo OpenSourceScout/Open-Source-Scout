@@ -1,0 +1,24 @@
+# Start the FastAPI app without --reload (more stable on Windows + OneDrive).
+# Default port 8003 — use 8001 only if nothing else is bound there:  .\run-backend.ps1 -ApiPort 8001
+param([int]$ApiPort = 8003)
+
+$ErrorActionPreference = "SilentlyContinue"
+
+foreach ($conn in Get-NetTCPConnection -LocalPort $ApiPort -State Listen) {
+    Stop-Process -Id $conn.OwningProcess -Force
+}
+Start-Sleep -Seconds 1
+
+$frontend = Join-Path $PSScriptRoot "frontend"
+if (Test-Path $frontend) {
+    Push-Location $frontend
+    npx --yes kill-port $ApiPort 2>$null
+    Pop-Location
+}
+Start-Sleep -Seconds 1
+
+Set-Location $PSScriptRoot
+Write-Host "API: http://127.0.0.1:$ApiPort"
+Write-Host "Clone cache: $env:LOCALAPPDATA\OpenSourceScout\repos"
+Write-Host "Frontend: cd frontend; npm run dev   (Vite defaults to proxy http://localhost:$ApiPort)"
+python -m uvicorn app.api:app --port $ApiPort

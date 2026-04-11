@@ -15,21 +15,39 @@ from git.exc import GitCommandError
 from core.schemas import GitHubIssue, GitHubRepo
 
 
+def default_github_repo_cache_dir() -> Path:
+    """
+    Local directory for git clones.
+
+    On Windows, avoid storing clones under OneDrive/Desktop project trees: sync and
+    placeholder files often trigger OSError [Errno 22] Invalid argument from git/os.walk.
+    Override with env OSS_REPO_CACHE.
+    """
+    override = (os.environ.get("OSS_REPO_CACHE") or "").strip()
+    if override:
+        return Path(override)
+    if os.name == "nt":
+        local = os.environ.get("LOCALAPPDATA")
+        if local:
+            return Path(local) / "OpenSourceScout" / "repos"
+    return Path(".cache") / "repos"
+
+
 class GitHubClient:
     """Client for interacting with GitHub API and cloning repos."""
     
     BASE_URL = "https://api.github.com"
     
-    def __init__(self, token: Optional[str] = None, cache_dir: str = ".cache/repos"):
+    def __init__(self, token: Optional[str] = None, cache_dir: Optional[str] = None):
         """
         Initialize GitHub client.
         
         Args:
             token: GitHub personal access token (optional but recommended)
-            cache_dir: Directory to cache cloned repositories
+            cache_dir: Directory to cache cloned repositories (default: off OneDrive on Windows)
         """
         self.token = token or os.getenv("GITHUB_TOKEN")
-        self.cache_dir = Path(cache_dir)
+        self.cache_dir = Path(cache_dir) if cache_dir else default_github_repo_cache_dir()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
         self.session = requests.Session()
@@ -316,21 +334,26 @@ class GitHubClient:
         repo_hash = hashlib.md5(f"{owner}/{repo}".encode()).hexdigest()[:12]
         repo_dir = self.cache_dir / f"{owner}_{repo}_{repo_hash}"
         
+        import shutil
+
+        def _remove_clone_dir() -> None:
+            try:
+                shutil.rmtree(repo_dir, ignore_errors=False)
+            except OSError:
+                shutil.rmtree(repo_dir, ignore_errors=True)
+
         if repo_dir.exists():
             if force_fresh:
-                import shutil
-                shutil.rmtree(repo_dir)
+                _remove_clone_dir()
             else:
-                # Pull latest changes
+                # Pull latest changes (git may raise OSError e.g. [Errno 22] on Windows, not only GitCommandError)
                 try:
                     git_repo = GitRepo(repo_dir)
                     git_repo.remotes.origin.pull()
                     return repo_dir
-                except GitCommandError:
-                    # If pull fails, do a fresh clone
-                    import shutil
-                    shutil.rmtree(repo_dir)
-        
+                except (GitCommandError, OSError):
+                    _remove_clone_dir()
+
         # Clone the repository
         clone_url = f"https://github.com/{owner}/{repo}.git"
         try:
@@ -340,7 +363,7 @@ class GitHubClient:
                 depth=1,  # Shallow clone for speed
                 single_branch=True
             )
-        except GitCommandError as e:
+        except (GitCommandError, OSError) as e:
             raise RuntimeError(f"Failed to clone repository: {e}")
         
         return repo_dir
@@ -850,24 +873,28 @@ class GitHubClient:
         def walk_dir(path: Path, depth: int = 0):
             if depth > max_depth:
                 return
-                
+
             try:
-                for item in path.iterdir():
+                entries = list(path.iterdir())
+            except OSError:
+                return
+
+            for item in entries:
+                try:
                     if item.name in ignore_dirs:
                         continue
-                    
+
                     if item.is_file():
-                        # Skip ignored extensions
                         if any(item.name.endswith(ext) for ext in ignore_extensions):
                             continue
-                        
+
                         rel_path = item.relative_to(repo_path)
                         files.append(str(rel_path).replace("\\", "/"))
-                    
+
                     elif item.is_dir():
                         walk_dir(item, depth + 1)
-            except PermissionError:
-                pass
+                except OSError:
+                    continue
 
         walk_dir(repo_path)
         return files

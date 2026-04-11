@@ -40,3 +40,12 @@ class TestCodeSearcherPythonFallback:
         s = CodeSearcher(tmp_path)
         assert s.search("xyz_nonexistent_token_999", max_results=5) == []
         assert s.get_file_content("missing.py") == ""
+
+    def test_empty_path_and_directory_not_opened_as_file(self, tmp_path: Path):
+        (tmp_path / "subdir").mkdir()
+        s = CodeSearcher(tmp_path)
+        assert s.get_file_content("") == ""
+        assert s.get_file_content("   ") == ""
+        assert s.get_file_content("subdir") == ""
+        assert s.extract_symbols("subdir") == []
+        assert s.search("", max_results=5) == []

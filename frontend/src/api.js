@@ -10,6 +10,53 @@ const TIMEOUTS = {
   reAnalysis: 600000,  // 10 minutes for re-analysis
 }
 
+const BACKEND_HINT =
+  'Start the API from Open-Source-Scout ( .\\run-backend.ps1 , default port 8003 ), then run npm run dev in frontend.'
+
+function augmentGeneric500(res, detail) {
+  if (res.status !== 500) return detail
+  const s = String(detail || '').trim()
+  if (!/^internal server error$/i.test(s)) return detail
+  return `${s} — Often the API crashed while building the JSON response, or the Vite proxy reached the wrong port. ${BACKEND_HINT} Check the terminal running uvicorn for a Python traceback.`
+}
+
+/**
+ * Parse error message from a failed Response (FastAPI JSON, HTML proxy page, or empty body).
+ */
+async function responseErrorDetail(res) {
+  const text = await res.text()
+  const statusFallback = res.statusText || `HTTP ${res.status}`
+  const finish = (msg) => augmentGeneric500(res, msg)
+
+  if (!text || !String(text).trim()) {
+    if (res.status === 502 || res.status === 504) {
+      return finish(`Cannot reach the API (${statusFallback}). ${BACKEND_HINT}`)
+    }
+    return finish(statusFallback)
+  }
+  try {
+    const data = JSON.parse(text)
+    if (typeof data.detail === 'string') return finish(data.detail)
+    if (Array.isArray(data.detail)) {
+      return finish(
+        data.detail
+          .map((d) => (d && typeof d.msg === 'string' ? d.msg : JSON.stringify(d)))
+          .join('; '),
+      )
+    }
+    if (data.detail != null) return finish(String(data.detail))
+    if (typeof data.message === 'string') return finish(data.message)
+  } catch {
+    /* not JSON */
+  }
+  const stripped = String(text).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+  if (stripped.length) return finish(stripped.slice(0, 1200))
+  if (res.status === 502 || res.status === 504) {
+    return finish(`Cannot reach the API (${statusFallback}). ${BACKEND_HINT}`)
+  }
+  return finish(statusFallback)
+}
+
 async function apiFetch(path, options = {}, timeoutMs = TIMEOUTS.default) {
   const token = getAccessToken()
   const headers = new Headers(options.headers || {})
@@ -32,10 +79,10 @@ async function apiFetch(path, options = {}, timeoutMs = TIMEOUTS.default) {
     // Network error or timeout
     if (error.name === 'AbortError') {
       console.error(`Request timeout calling ${API_BASE}${path} after ${timeoutMs/1000}s`)
-      throw new Error(`Request timeout. The analysis is taking longer than expected. Please wait and check the backend logs at http://localhost:8001`)
+      throw new Error(`Request timeout. The analysis is taking longer than expected. ${BACKEND_HINT}`)
     }
     console.error(`Network error calling ${API_BASE}${path}:`, error)
-    throw new Error(`Network error: ${error.message}. Make sure the backend server is running on http://localhost:8001`)
+    throw new Error(`Network error: ${error.message}. ${BACKEND_HINT}`)
   }
 }
 
@@ -45,8 +92,7 @@ export async function signup({ email, password, display_name }) {
     body: JSON.stringify({ email, password, display_name }),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Signup failed')
+    throw new Error((await responseErrorDetail(res)) || 'Signup failed')
   }
   return res.json()
 }
@@ -57,8 +103,7 @@ export async function login({ email, password }) {
     body: JSON.stringify({ email, password }),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Login failed')
+    throw new Error((await responseErrorDetail(res)) || 'Login failed')
   }
   return res.json()
 }
@@ -66,8 +111,7 @@ export async function login({ email, password }) {
 export async function getMe() {
   const res = await apiFetch('/me')
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Failed to load profile')
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load profile')
   }
   return res.json()
 }
@@ -81,8 +125,7 @@ export async function searchReposByTechStack({ tech_stack, fast_model }) {
     }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || 'Repository search failed');
+    throw new Error((await responseErrorDetail(res)) || 'Repository search failed')
   }
   return res.json();
 }
@@ -98,8 +141,7 @@ export async function runAnalyze({ repo_url, beginner_only = true, fast_model, p
     }),
   }, TIMEOUTS.analysis);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || 'Analysis failed');
+    throw new Error((await responseErrorDetail(res)) || 'Analysis failed')
   }
   return res.json();
 }
@@ -119,17 +161,11 @@ export async function reAnalyzeIssue({ repo_url, issue_number, fast_model, power
     body: JSON.stringify(payload),
   }, TIMEOUTS.reAnalysis);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    
-    // Handle specific error codes
     if (res.status === 429) {
-      throw new Error('API rate limit exceeded. The analysis service is busy. Please wait 30-60 seconds and try again.');
+      throw new Error('API rate limit exceeded. The analysis service is busy. Please wait 30-60 seconds and try again.')
     }
-    if (res.status === 500) {
-      throw new Error(err.detail || 'Analysis failed on the server. Please try again.');
-    }
-    
-    throw new Error(err.detail || 'Re-analysis failed');
+    const detail = await responseErrorDetail(res)
+    throw new Error(detail || 'Re-analysis failed')
   }
   return res.json();
 }
@@ -138,8 +174,7 @@ export async function getFileContent(owner, repo, path, ref = 'main') {
   const encodedPath = encodeRepoFilePathForApi(path);
   const res = await apiFetch(`/repos/${owner}/${repo}/files/${encodedPath}?ref=${encodeURIComponent(ref)}`);
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || 'Failed to load file');
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load file')
   }
   return res.json();
 }
@@ -156,8 +191,7 @@ export async function pushFile(owner, repo, { file_path, content, branch_name, c
     }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || 'Push failed');
+    throw new Error((await responseErrorDetail(res)) || 'Push failed')
   }
   return res.json();
 }
@@ -174,8 +208,7 @@ export async function pushFilesBatch(owner, repo, { files, branch_name, commit_m
     }),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Batch push failed')
+    throw new Error((await responseErrorDetail(res)) || 'Batch push failed')
   }
   return res.json()
 }
@@ -186,8 +219,7 @@ export async function exportPdf(content) {
     body: JSON.stringify({ content }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }));
-    throw new Error(err.detail || 'PDF export failed');
+    throw new Error((await responseErrorDetail(res)) || 'PDF export failed')
   }
   return res.blob();
 }
@@ -197,8 +229,7 @@ export async function exportPdf(content) {
 export async function getProjects() {
   const res = await apiFetch('/projects')
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Failed to load projects')
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load projects')
   }
   return res.json()
 }
@@ -209,8 +240,7 @@ export async function createProject(data) {
     body: JSON.stringify(data),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Failed to create project')
+    throw new Error((await responseErrorDetail(res)) || 'Failed to create project')
   }
   return res.json()
 }
@@ -218,8 +248,7 @@ export async function createProject(data) {
 export async function getProjectById(id) {
   const res = await apiFetch(`/projects/${id}`)
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Failed to load project')
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load project')
   }
   return res.json()
 }
@@ -230,8 +259,7 @@ export async function renameProject(id, name) {
     body: JSON.stringify({ name }),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Failed to rename project')
+    throw new Error((await responseErrorDetail(res)) || 'Failed to rename project')
   }
   return res.json()
 }
@@ -241,8 +269,7 @@ export async function deleteProject(id) {
     method: 'DELETE',
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Failed to delete project')
+    throw new Error((await responseErrorDetail(res)) || 'Failed to delete project')
   }
   return res.json()
 }
@@ -259,8 +286,7 @@ export async function fetchRepoFileTree(owner, repo, ref = 'HEAD', analysisData 
     }),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Failed to load file tree')
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load file tree')
   }
   return res.json()
 }
@@ -274,8 +300,7 @@ export async function makeForkChoice(owner, repo, choice, issueNumber = null) {
     }),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail || 'Fork choice failed')
+    throw new Error((await responseErrorDetail(res)) || 'Fork choice failed')
   }
   return res.json()
 }
