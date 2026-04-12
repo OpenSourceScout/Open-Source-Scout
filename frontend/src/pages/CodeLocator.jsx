@@ -47,6 +47,17 @@ function isBinaryFile(path) {
   return BINARY_EXTENSIONS.some((ext) => lowerPath.endsWith(ext))
 }
 
+function formatIssueDate(iso) {
+  if (!iso) return null
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return null
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(d)
+  } catch {
+    return null
+  }
+}
+
 export default function CodeLocator() {
   const context = useOutletContext()
   const analysisResult = context?.analysisResult
@@ -62,6 +73,9 @@ export default function CodeLocator() {
 
   const codeLocations = analysisResult?.agent2_output?.hits || []
   const selectedIssue = location.state?.selectedIssue
+  const targetIssue = analysisResult?.target_issue
+  const issueNumber = targetIssue?.number ?? selectedIssue?.issue_number
+  const issueOpened = formatIssueDate(targetIssue?.created_at)
 
   useEffect(() => {
     if (codeLocations.length > 0 && !selectedFile) {
@@ -162,12 +176,32 @@ export default function CodeLocator() {
     <div className="h-full flex flex-col bg-app-bg text-app-text">
       <header className="bg-app-surface border-b border-app-border px-6 py-4 shrink-0">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-lg font-semibold text-app-text">Code Locator</h1>
             <p className="text-sm text-app-muted">
               {codeLocations.length} relevant code locations identified
-              {selectedIssue && <span className="text-primary-400"> for issue #{selectedIssue.issue_number}</span>}
+              {issueNumber != null && (
+                <span className="text-primary-400"> for issue #{issueNumber}</span>
+              )}
             </p>
+            {targetIssue && (
+              <div className="mt-2 text-sm text-app-text space-y-1">
+                <p className="font-medium leading-snug">{targetIssue.title}</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-app-muted">
+                  {issueOpened && <span>Opened {issueOpened}</span>}
+                  {targetIssue.html_url && (
+                    <a
+                      href={targetIssue.html_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary-400 hover:underline"
+                    >
+                      View issue on GitHub
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <button
             type="button"

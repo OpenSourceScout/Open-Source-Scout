@@ -1,7 +1,25 @@
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useState, useEffect } from 'react'
-import { FileText, Download, FileDown, Package, ClipboardList, Rocket, Clock, MapPin, AlertTriangle, Github } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { FileText, Download, FileDown, ClipboardList, Rocket, Clock, MapPin, AlertTriangle, Github } from 'lucide-react'
 import { exportPdf } from '../api'
+
+const briefingProseClass =
+  'prose prose-invert prose-sm max-w-none ' +
+  'prose-headings:text-app-text prose-headings:border-b prose-headings:border-app-border prose-headings:pb-2 prose-headings:mt-6 ' +
+  'prose-p:text-app-muted prose-p:leading-relaxed prose-p:mb-5 ' +
+  'prose-ul:space-y-2 prose-ol:space-y-2 ' +
+  'prose-li:text-app-muted prose-li:leading-relaxed ' +
+  'prose-a:text-primary-400 prose-a:no-underline hover:prose-a:underline ' +
+  'prose-strong:text-app-text ' +
+  'prose-code:text-accent-400 prose-code:bg-app-elevated prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:border prose-code:border-app-border ' +
+  'prose-pre:bg-app-bg prose-pre:border prose-pre:border-app-border prose-pre:rounded-lg prose-pre:my-4 ' +
+  'prose-blockquote:border-primary-500/50 prose-blockquote:text-app-muted prose-blockquote:my-4 ' +
+  'prose-hr:border-app-border prose-hr:my-6 ' +
+  'prose-table:border-app-border prose-table:my-5 ' +
+  'prose-th:text-app-text prose-th:border-app-border prose-th:px-3 prose-th:py-1.5 ' +
+  'prose-td:text-app-muted prose-td:border-app-border prose-td:px-3 prose-td:py-1.5'
 
 export default function ContributorBriefing() {
   const { analysisResult, repoInfo } = useOutletContext()
@@ -120,49 +138,6 @@ export default function ContributorBriefing() {
     )
   }
 
-  // Parse briefing markdown into sections - improved parsing
-  const parseImplementationPlan = (markdown) => {
-    if (!markdown) return []
-    const lines = markdown.split('\n')
-    const steps = []
-    let currentStep = null
-
-    for (const line of lines) {
-      // Match numbered steps like "1. Step Title" or "**1. Step Title**"
-      const match = line.match(/^\*?\*?(\d+)\.\s*\*?\*?\s*(.+)/)
-      if (match) {
-        if (currentStep) {
-          // Limit description to first 150 chars
-          currentStep.description = currentStep.description.trim().substring(0, 150)
-          if (currentStep.description.length >= 150) {
-            currentStep.description += '...'
-          }
-          steps.push(currentStep)
-        }
-        currentStep = {
-          number: match[1],
-          title: match[2].replace(/\*\*/g, '').replace(/`/g, '').trim().substring(0, 80),
-          description: ''
-        }
-      } else if (currentStep && line.trim() && !line.startsWith('#') && !line.startsWith('*') && !line.startsWith('-')) {
-        // Only add non-list content as description, limit accumulation
-        if (currentStep.description.length < 200) {
-          currentStep.description += line.trim() + ' '
-        }
-      }
-    }
-    if (currentStep) {
-      currentStep.description = currentStep.description.trim().substring(0, 150)
-      if (currentStep.description.length >= 150) {
-        currentStep.description += '...'
-      }
-      steps.push(currentStep)
-    }
-    return steps.slice(0, 5) // Max 5 steps
-  }
-
-  const implementationSteps = parseImplementationPlan(briefing.briefing_markdown)
-
   const field =
     'mt-1 w-full p-2 bg-app-input border border-app-border rounded-lg text-sm text-app-text focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500/40 outline-none'
 
@@ -215,24 +190,12 @@ export default function ContributorBriefing() {
         {/* Left Column - Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-3xl space-y-6">
-            <section>
-              <h2 className="text-lg font-semibold text-app-text mb-3">Overview</h2>
-              <div className="prose prose-sm max-w-none text-app-muted leading-relaxed">
-                {briefing.briefing_markdown ? (
-                  <p>{briefing.briefing_markdown.split('\n\n')[0]}</p>
-                ) : (
-                  <p>No overview available.</p>
-                )}
-              </div>
-            </section>
-
-            {/* Risk Notes - Warning Box */}
             {briefing.risk_notes && briefing.risk_notes.length > 0 && (
               <div className="bg-amber-500/10 border-l-4 border-amber-500 rounded-r-lg p-4 border-y border-r border-amber-500/20">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="text-amber-400 w-5 h-5 shrink-0" />
                   <div>
-                    <h3 className="font-semibold text-amber-200 mb-2">Risk Note</h3>
+                    <h3 className="font-semibold text-amber-200 mb-2">Risk notes</h3>
                     <div className="text-sm text-amber-100/90 space-y-1">
                       {briefing.risk_notes.map((risk, i) => (
                         <p key={i}>{risk}</p>
@@ -243,76 +206,28 @@ export default function ContributorBriefing() {
               </div>
             )}
 
-            {/* Setup Instructions */}
-            <section>
-              <div className="flex items-center gap-2 mb-3">
-                <Package className="w-5 h-5 text-app-muted" />
-                <h2 className="text-lg font-semibold text-app-text">Setup Instructions</h2>
-              </div>
-              <p className="text-sm text-app-muted mb-4">Clone the repository and install dependencies.</p>
-
-              <div className="bg-[#0b0f14] border border-app-border rounded-lg overflow-hidden mb-4">
-                <div className="p-4 font-mono text-sm text-[#e6edf3] space-y-1">
-                  <div><span className="text-green-400">git clone</span> https://github.com/{repoInfo?.owner}/{repoInfo?.name}.git</div>
-                  <div><span className="text-green-400">cd</span> {repoInfo?.name}</div>
-                  <div><span className="text-green-400">npm install</span></div>
-                </div>
-              </div>
-
-              {/* Test Commands */}
-              {briefing.test_commands && briefing.test_commands.length > 0 && (
-                <>
-                  <p className="text-sm text-app-muted mb-3">Run tests or development server:</p>
-                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mb-4">
-                    {briefing.test_commands.map((cmd, i) => (
-                      <div key={i} className="font-mono text-sm text-amber-200">
-                        {cmd}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </section>
-
-            {/* Implementation Plan */}
-            {implementationSteps.length > 0 && (
+            {briefing.test_commands && briefing.test_commands.length > 0 && (
               <section>
-                <div className="flex items-center gap-2 mb-4">
-                  <ClipboardList className="w-5 h-5 text-app-muted" />
-                  <h2 className="text-lg font-semibold text-app-text">Implementation Plan</h2>
-                </div>
-                <div className="space-y-4">
-                  {implementationSteps.map((step, index) => (
-                    <div key={index} className="flex gap-4 bg-app-surface rounded-lg border border-app-border p-4">
-                      <div className="shrink-0 w-8 h-8 rounded-full bg-primary-500/20 text-primary-300 border border-primary-500/30 flex items-center justify-center font-semibold text-sm">
-                        {index + 1}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-app-text mb-1">{step.title}</h3>
-                        {step.description && (
-                          <p className="text-sm text-app-muted leading-relaxed">{step.description}</p>
-                        )}
-                      </div>
-                    </div>
+                <h2 className="text-lg font-semibold text-app-text mb-3">Suggested test commands</h2>
+                <p className="text-sm text-app-muted mb-3">Try these from the repo root (adjust if the README says otherwise).</p>
+                <div className="bg-[#0b0f14] border border-app-border rounded-lg p-4 font-mono text-sm text-[#e6edf3] space-y-1">
+                  {briefing.test_commands.map((cmd, i) => (
+                    <div key={i}>{cmd}</div>
                   ))}
                 </div>
               </section>
             )}
 
-            {/* Full Briefing Markdown */}
-            {briefing.briefing_markdown && (
-              <section className="pt-6 border-t border-app-border">
-                <details className="group">
-                  <summary className="cursor-pointer text-sm font-medium text-app-muted hover:text-app-text flex items-center gap-2">
-                    <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
-                    View Full Briefing
-                  </summary>
-                  <div className="mt-4 prose prose-sm max-w-none text-app-muted bg-app-surface rounded-lg border border-app-border p-4">
-                    <pre className="whitespace-pre-wrap text-sm font-sans">{briefing.briefing_markdown}</pre>
-                  </div>
-                </details>
-              </section>
-            )}
+            <section className="bg-app-surface rounded-xl border border-app-border p-5">
+              <h2 className="text-lg font-semibold text-app-text mb-4">Briefing</h2>
+              {briefing.briefing_markdown ? (
+                <div className={briefingProseClass}>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{briefing.briefing_markdown}</ReactMarkdown>
+                </div>
+              ) : (
+                <p className="text-sm text-app-muted">No briefing content was returned for this run.</p>
+              )}
+            </section>
           </div>
         </div>
 

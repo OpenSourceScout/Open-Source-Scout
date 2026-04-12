@@ -428,7 +428,8 @@ export default function EditorWindow() {
                 <button
                   type="button"
                   onClick={handlePushAll}
-                  className="text-xs px-2 py-1 border border-app-border rounded text-app-muted hover:text-app-text"
+                  disabled={pushing}
+                  className="push-button-all"
                 >
                   Review & Push All ({modifiedFiles.size})
                 </button>

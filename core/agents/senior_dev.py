@@ -122,6 +122,9 @@ Explain the 'why' behind each step."""
                 "body": issue.body or "No description provided",
                 "url": issue.html_url,
                 "labels": issue.labels,
+                "created_at": issue.created_at,
+                "updated_at": issue.updated_at,
+                "comments": issue.comments,
                 "score": ranked_issue.score_total if ranked_issue else 0,
                 "why_selected": ranked_issue.why if ranked_issue else []
             },
@@ -145,55 +148,33 @@ Explain the 'why' behind each step."""
     def _generate_briefing(self, context: dict) -> str:
         """Generate the contributor briefing document."""
         feedback_ctx = self._get_feedback_prompt()
-        prompt = f"""Create a comprehensive Contributor Briefing Document for this GitHub issue.
+        prompt = f"""Write a Contributor Briefing as Markdown for a new open-source contributor.
 
-CONTEXT:
+DATA (do not paste this JSON verbatim into the document; synthesize it):
 {json.dumps(context, indent=2)}
 {feedback_ctx}
-Generate a well-structured Markdown document with these sections:
 
-# Contributor Briefing: [Issue Title]
+Rules:
+- Start with title: # Contributor Briefing: <issue title>
+- Then 3-5 bullet "At a glance" (repo, issue link, dates from issue.created_at / issue.updated_at, confidence, primary stack).
+- Use plain ## section headings (no emoji). Keep sections scannable: short paragraphs and bullets, not walls of text.
+- Tailor install and test hints to repo.primary_language and repo.languages when possible; if unsure, say "check the project README" instead of guessing wrong tools.
+- Do not repeat the full issue body; summarize what to change and acceptance criteria in your own words.
+- In "Issue analysis", mention when the issue was opened/last updated (human-readable) and comment count if useful.
+- In "Code location", list concrete file paths and symbols from the data.
+- In "Implementation plan", use numbered steps (1. 2. 3.) with one clear action per step.
+- Include fenced code blocks only for shell commands or short illustrative snippets.
 
-## 📋 Overview
-- Repository, issue link, difficulty rating
+Sections (in order):
+## At a glance
+## Repository setup
+## Issue analysis
+## Code location
+## Implementation plan
+## Testing
+## PR preparation
+## Notes and risks
 
-## 🏗️ Repository Setup
-- Clone command
-- Prerequisites (languages, tools)
-- Installation steps (generic best-effort)
-- How to run tests
-
-## 🎯 Issue Analysis
-- What the issue is asking for
-- Score breakdown and why it was selected
-- Expected outcome
-
-## 📍 Code Location
-- Files to examine (with paths)
-- Key functions/classes
-- Call trace hints
-- Confidence level explanation
-
-## 🔧 Implementation Plan
-1. Step-by-step fix plan
-2. Pseudo-code or code hints
-3. Edge cases to consider
-
-## ✅ Testing Strategy
-- What to test
-- Test commands
-- How to verify the fix
-
-## 📝 PR Preparation
-- Branch naming convention
-- Commit message template
-- PR checklist items
-
-## ⚠️ Notes & Risks
-- Potential pitfalls
-- Questions to ask maintainers if stuck
-
-Be thorough, specific, and encouraging. Use code blocks where appropriate.
 Write the complete document now:"""
 
         response = self.groq.complete(
