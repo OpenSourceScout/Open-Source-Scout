@@ -41,9 +41,9 @@ COPY main.py    ./
 # Copy the built React frontend from stage 1
 COPY --from=frontend-build /frontend/dist ./frontend/dist
 
-# Expose the port (Render/Fly use $PORT; fallback to 8000)
-ENV PORT=8000
-EXPOSE 8000
+# Railway injects $PORT at runtime — do NOT hardcode it here.
+# EXPOSE is documentation only; Railway routes via $PORT env var.
+EXPOSE 8080
 
-# Start FastAPI — reads $PORT at runtime
-CMD ["sh", "-c", "uvicorn app.api:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# Start FastAPI: echo the port for deploy log visibility, then exec uvicorn.
+CMD ["sh", "-c", "echo '>>> Starting uvicorn on port '${PORT:-8080} && exec uvicorn app.api:app --host 0.0.0.0 --port ${PORT:-8080}"]
