@@ -150,32 +150,47 @@ Explain the 'why' behind each step."""
         feedback_ctx = self._get_feedback_prompt()
         prompt = f"""Write a Contributor Briefing as Markdown for a new open-source contributor.
 
-DATA (do not paste this JSON verbatim into the document; synthesize it):
+You MUST strictly follow this exact Markdown template. Do NOT omit the `#`, `##`, or `- **` Markdown symbols! Do NOT wrap your response in ```markdown tags. Output the raw text.
+
+TEMPLATE:
+# Contributor Briefing: <Issue Title>
+
+## At a glance
+- **Repository:** <repo full name>
+- **Issue Link:** <issue url>
+- **Dates:** <created at> to <updated at>
+- **Confidence:** <confidence>
+- **Stack:** <languages>
+
+## Repository setup
+<Explain how to clone and set up based on language and README. Add empty lines between paragraphs.>
+
+## Issue analysis
+<Explain the issue clearly. Add empty lines between paragraphs.>
+
+## Code location
+<List the files using `- \`file_path\` ` and explain why. Include small fenced code blocks if it helps.>
+
+## Implementation plan
+<Numbered list of steps:>
+1. **<Step name>**: <detail...>
+2. **<Step name>**: <detail...>
+
+## Testing
+<How to test this fix. List standard commands if known.>
+
+## PR preparation
+<Steps to prepare PR>
+
+## Notes and risks
+<List any risks or gotchas>
+
+DATA TO SYNTHESIZE:
 {json.dumps(context, indent=2)}
+
 {feedback_ctx}
 
-Rules:
-- Start with title: # Contributor Briefing: <issue title>
-- Then 3-5 bullet "At a glance" (repo, issue link, dates from issue.created_at / issue.updated_at, confidence, primary stack).
-- Use plain ## section headings (no emoji). Keep sections scannable: short paragraphs and bullets, not walls of text.
-- Tailor install and test hints to repo.primary_language and repo.languages when possible; if unsure, say "check the project README" instead of guessing wrong tools.
-- Do not repeat the full issue body; summarize what to change and acceptance criteria in your own words.
-- In "Issue analysis", mention when the issue was opened/last updated (human-readable) and comment count if useful.
-- In "Code location", list concrete file paths and symbols from the data.
-- In "Implementation plan", use numbered steps (1. 2. 3.) with one clear action per step.
-- Include fenced code blocks only for shell commands or short illustrative snippets.
-
-Sections (in order):
-## At a glance
-## Repository setup
-## Issue analysis
-## Code location
-## Implementation plan
-## Testing
-## PR preparation
-## Notes and risks
-
-Write the complete document now:"""
+Output the RAW MARKDOWN starting immediately with `# Contributor Briefing:`:"""
 
         response = self.groq.complete(
             prompt=prompt,
