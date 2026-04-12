@@ -26,23 +26,6 @@
   min-width: 0;
 }
 
-.header-back-btn {
-  background: none;
-  border: none;
-  color: var(--app-muted);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: color 0.2s;
-  flex-shrink: 0;
-}
-
-.header-back-btn:hover {
-  color: var(--app-text);
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
 .header-logo {
   display: flex;
   align-items: center;

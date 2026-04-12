@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useSearchParams, useNavigate, useLocation } from 'react-router-dom'
+import { useSearchParams, useLocation } from 'react-router-dom'
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react'
 import { FileCode, Pencil, ChevronDown } from 'lucide-react'
 import { getFileContent, pushFile, pushFilesBatch } from '../api'
@@ -11,7 +11,6 @@ import './EditorWindow.css'
 export default function EditorWindow() {
   const [searchParams] = useSearchParams()
   const location = useLocation()
-  const navigate = useNavigate()
   
   const ownerParam = searchParams.get('owner') || location.state?.repoInfo?.owner
   const repoParam = searchParams.get('repo') || location.state?.repoInfo?.name
@@ -368,13 +367,6 @@ export default function EditorWindow() {
       {/* Header */}
       <header className="editor-header">
         <div className="editor-header-left">
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="header-back-btn"
-          >
-            ← Back
-          </button>
           <div className="header-logo">
             <ScoutLogo className="h-6 w-6 rounded-md" />
             <span className="header-title">PR Pipeline Editor</span>
