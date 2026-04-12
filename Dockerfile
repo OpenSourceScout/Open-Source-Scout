@@ -22,7 +22,7 @@ FROM python:3.11-slim AS final
 
 # System deps needed by some Python packages (argon2-cffi, psycopg, etc.)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev \
+    gcc libpq-dev git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
