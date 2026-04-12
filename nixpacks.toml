@@ -1,9 +1,9 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "python311"]
+nixPkgs = ["nodejs_20", "python311", "python311Packages.pip"]
 
 [phases.install]
 cmds = [
-  "pip install --no-cache-dir -r requirements.txt",
+  "python3.11 -m pip install --no-cache-dir -r requirements.txt",
   "cd frontend && npm ci"
 ]
 
