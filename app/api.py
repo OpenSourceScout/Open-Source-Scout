@@ -1085,12 +1085,25 @@ def push_files_batch(
 
 _dist_dir = project_root / "frontend" / "dist"
 if _dist_dir.is_dir():
-    # Serve static assets (JS/CSS/images) under their hashed paths
-    app.mount("/assets", StaticFiles(directory=_dist_dir / "assets"), name="assets")
+    # Serve the hashed JS/CSS chunks (e.g. /assets/index-abc123.js)
+    _assets_dir = _dist_dir / "assets"
+    if _assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
 
-    # Catch-all: serve index.html for any non-API route so React Router works
+    # Serve root-level public files (e.g. /Opensource_Scout-Logo.png, /vite.svg, /favicon.ico)
+    # These are files from frontend/public/ that Vite copies to dist/ root.
+    # Must be mounted BEFORE the SPA catch-all so they're served as real files.
+    app.mount("/static-root", StaticFiles(directory=_dist_dir), name="static-root")
+
+    # Catch-all: serve index.html for any non-API, non-asset path so React Router works.
     @app.get("/{full_path:path}", response_class=HTMLResponse, include_in_schema=False)
-    async def serve_spa(full_path: str):
+    async def serve_spa(request: Request, full_path: str):
+        # Try to serve the file directly from dist/ first (handles /Opensource_Scout-Logo.png etc.)
+        candidate = _dist_dir / full_path
+        if candidate.is_file():
+            from fastapi.responses import FileResponse
+            return FileResponse(str(candidate))
+        # Fall back to SPA index.html for all other paths
         index = _dist_dir / "index.html"
         return HTMLResponse(content=index.read_text(), status_code=200)
 
