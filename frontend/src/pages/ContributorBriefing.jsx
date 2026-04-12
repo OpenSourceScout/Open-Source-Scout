@@ -195,10 +195,42 @@ export default function ContributorBriefing() {
       )}
 
       <section className="rounded-2xl border border-app-border bg-app-surface p-6 sm:p-8 shadow-sm">
-        <h2 className="text-lg font-semibold text-app-text mb-6 pb-3 border-b border-app-border">Briefing</h2>
         {briefing.briefing_markdown ? (
-          <div className={briefingProseClass}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{briefing.briefing_markdown}</ReactMarkdown>
+          <div>
+            <ReactMarkdown 
+              remarkPlugins={[remarkGfm]}
+              components={{
+                h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-app-text mt-0 mb-4 tracking-tight border-b border-app-border pb-2" {...props} />,
+                h2: ({node, ...props}) => <h2 className="text-xl font-semibold text-app-text mt-6 mb-3 tracking-tight" {...props} />,
+                h3: ({node, ...props}) => <h3 className="text-lg font-medium text-app-text mt-5 mb-2" {...props} />,
+                p: ({node, ...props}) => <p className="text-app-muted leading-relaxed mb-4" {...props} />,
+                ul: ({node, ...props}) => <ul className="list-disc pl-5 my-4 space-y-2 text-app-muted" {...props} />,
+                ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-4 space-y-2 text-app-muted" {...props} />,
+                li: ({node, ...props}) => <li className="leading-relaxed" {...props} />,
+                a: ({node, ...props}) => <a className="text-primary-400 no-underline hover:underline hover:text-primary-300 transition-colors" {...props} />,
+                strong: ({node, ...props}) => <strong className="font-semibold text-app-text" {...props} />,
+                code: ({node, className, children, ...props}) => {
+                  const inline = !String(children).includes('\n')
+                  return inline ? (
+                    <code className="text-accent-400 bg-app-elevated px-1.5 py-0.5 rounded text-[0.85em] border border-app-border font-mono font-normal" {...props}>
+                      {children}
+                    </code>
+                  ) : (
+                    <code className="block w-full bg-[#0b0f14] border border-app-border rounded-xl my-5 p-4 overflow-x-auto text-sm text-[#e6edf3] font-mono shadow-inner" {...props}>
+                      {children}
+                    </code>
+                  )
+                },
+                pre: ({node, ...props}) => <pre className="m-0 p-0 bg-transparent border-none" {...props} />,
+                blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-primary-500/50 text-app-muted my-5 bg-app-bg/50 py-2 pl-4 rounded-r-lg" {...props} />,
+                hr: ({node, ...props}) => <hr className="border-app-border my-8" {...props} />,
+                table: ({node, ...props}) => <div className="overflow-x-auto"><table className="w-full border-collapse border border-app-border my-6 text-sm" {...props} /></div>,
+                th: ({node, ...props}) => <th className="text-left text-app-text border border-app-border px-3 py-2 bg-app-elevated font-semibold" {...props} />,
+                td: ({node, ...props}) => <td className="text-app-muted border border-app-border px-3 py-2" {...props} />,
+              }}
+            >
+              {briefing.briefing_markdown}
+            </ReactMarkdown>
           </div>
         ) : (
           <p className="text-sm text-app-muted">No briefing content was returned for this run.</p>

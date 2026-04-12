@@ -273,25 +273,40 @@ export default function AnalysisDashboard() {
           ) : readmeError ? (
             <p className="text-app-muted text-sm py-4">{readmeError}</p>
           ) : readme ? (
-            <div className="prose prose-invert prose-sm max-w-none
-              prose-headings:text-app-text prose-headings:border-b prose-headings:border-app-border prose-headings:pb-2 prose-headings:mt-6
-              prose-p:text-app-muted prose-p:leading-relaxed prose-p:mb-5
-              prose-ul:space-y-2 prose-ol:space-y-2
-              prose-li:text-app-muted prose-li:leading-relaxed
-              prose-a:text-primary-400 prose-a:no-underline hover:prose-a:underline
-              prose-strong:text-app-text
-              prose-code:text-accent-400 prose-code:bg-app-elevated prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-xs prose-code:border prose-code:border-app-border
-              prose-pre:bg-app-bg prose-pre:border prose-pre:border-app-border prose-pre:rounded-lg prose-pre:my-4
-              prose-img:max-w-full prose-img:m-0 prose-img:inline-block prose-img:my-4
-              prose-blockquote:border-primary-500/50 prose-blockquote:text-app-muted prose-blockquote:my-4
-              prose-hr:border-app-border prose-hr:my-6
-              prose-table:border-app-border prose-table:my-5
-              prose-th:text-app-text prose-th:border-app-border prose-th:px-3 prose-th:py-1.5
-              prose-td:text-app-muted prose-td:border-app-border prose-td:px-3 prose-td:py-1.5
-            ">
+            <div>
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeRaw]}
+                components={{
+                  h1: ({node, ...props}) => <h1 className="text-2xl font-bold text-app-text mt-8 mb-4 tracking-tight border-b border-app-border pb-2" {...props} />,
+                  h2: ({node, ...props}) => <h2 className="text-xl font-semibold text-app-text mt-6 mb-3 tracking-tight border-b border-app-border pb-2" {...props} />,
+                  h3: ({node, ...props}) => <h3 className="text-lg font-medium text-app-text mt-5 mb-2" {...props} />,
+                  p: ({node, ...props}) => <p className="text-app-muted leading-relaxed mb-4 text-sm" {...props} />,
+                  ul: ({node, ...props}) => <ul className="list-disc pl-5 my-4 space-y-2 text-app-muted text-sm" {...props} />,
+                  ol: ({node, ...props}) => <ol className="list-decimal pl-5 my-4 space-y-2 text-app-muted text-sm" {...props} />,
+                  li: ({node, ...props}) => <li className="leading-relaxed" {...props} />,
+                  a: ({node, ...props}) => <a className="text-primary-400 no-underline hover:underline hover:text-primary-300 transition-colors" {...props} />,
+                  strong: ({node, ...props}) => <strong className="font-semibold text-app-text" {...props} />,
+                  code: ({node, className, children, ...props}) => {
+                    const inline = !String(children).includes('\n')
+                    return inline ? (
+                      <code className="text-accent-400 bg-app-elevated px-1.5 py-0.5 rounded text-xs border border-app-border font-mono font-normal" {...props}>
+                        {children}
+                      </code>
+                    ) : (
+                      <code className="block w-full bg-[#0b0f14] border border-app-border rounded-xl my-5 p-4 overflow-x-auto text-xs text-[#e6edf3] font-mono shadow-inner" {...props}>
+                        {children}
+                      </code>
+                    )
+                  },
+                  pre: ({node, ...props}) => <pre className="m-0 p-0 bg-transparent border-none" {...props} />,
+                  blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-primary-500/50 text-app-muted my-5 bg-app-bg/50 py-2 pl-4 rounded-r-lg text-sm" {...props} />,
+                  hr: ({node, ...props}) => <hr className="border-app-border my-6" {...props} />,
+                  table: ({node, ...props}) => <div className="overflow-x-auto"><table className="w-full border-collapse border border-app-border my-5 text-sm" {...props} /></div>,
+                  th: ({node, ...props}) => <th className="text-left text-app-text border border-app-border px-3 py-1.5 bg-app-elevated font-semibold" {...props} />,
+                  td: ({node, ...props}) => <td className="text-app-muted border border-app-border px-3 py-1.5" {...props} />,
+                  img: ({node, ...props}) => <img className="max-w-full m-0 inline-block my-4 rounded-lg" {...props} />
+                }}
               >
                 {readme}
               </ReactMarkdown>
