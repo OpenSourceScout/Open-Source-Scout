@@ -1,18 +1,10 @@
-# nixpacks.toml — Railway build config for Open Source Scout
-# Nixpacks will:
-#   1. Install Node.js + npm (for the frontend build)
-#   2. Install Python + pip (for the backend)
-#   3. Run the build phases below in order
-
 [phases.setup]
-# python311Packages.pip must be listed explicitly — pip is NOT included in
-# the base python311 Nix package and neither pip nor pip3 are on PATH without it.
-nixPkgs = ["nodejs_20", "python311", "python311Packages.pip", "gcc"]
+nixPkgs = ["nodejs_20", "python311", "gcc"]
 
 [phases.install]
 cmds = [
   "cd frontend && npm ci",
-  "python3.11 -m pip install --no-cache-dir -r requirements.txt"
+  "/opt/venv/bin/pip install --no-cache-dir -r requirements.txt"
 ]
 
 [phases.build]
