@@ -1,10 +1,10 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "python311", "gcc"]
+nixPkgs = ["nodejs_20", "python311"]
 
 [phases.install]
 cmds = [
-  "cd frontend && npm ci",
-  "/opt/venv/bin/pip install --no-cache-dir -r requirements.txt"
+  "pip install --no-cache-dir -r requirements.txt",
+  "cd frontend && npm ci"
 ]
 
 [phases.build]
