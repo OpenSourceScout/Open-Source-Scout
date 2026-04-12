@@ -52,3 +52,7 @@ htmlcov/
 # OS
 .DS_Store
 Thumbs.db
+
+# Frontend build output — built by Railway during deploy, not committed
+frontend/dist/
+frontend/node_modules/

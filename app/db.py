@@ -111,8 +111,24 @@ def _ensure_github_oauth_columns(cur) -> None:
     )
     # Ensure role column exists for existing databases (migration)
     cur.execute(
-        "alter table users add column if not exists role text "
-        "not null default 'user' check (role in ('user', 'admin'))"
+        "alter table users add column if not exists role text not null default 'user'"
+    )
+    # Add the CHECK constraint separately (idempotent via DO block)
+    cur.execute(
+        """
+        do $$
+        begin
+          if not exists (
+            select 1 from information_schema.constraint_column_usage
+            where table_name = 'users' and column_name = 'role'
+            and constraint_name = 'users_role_check'
+          ) then
+            alter table users add constraint users_role_check
+              check (role in ('user', 'admin'));
+          end if;
+        end
+        $$;
+        """
     )
 
 

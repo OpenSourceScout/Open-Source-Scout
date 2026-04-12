@@ -1,0 +1,22 @@
+# nixpacks.toml — Railway build config for Open Source Scout
+# Nixpacks will:
+#   1. Install Node.js + npm (for the frontend build)
+#   2. Install Python + pip (for the backend)
+#   3. Run the build phases below in order
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "python311", "gcc"]
+
+[phases.install]
+cmds = [
+  "cd frontend && npm ci",
+  "pip install -r requirements.txt"
+]
+
+[phases.build]
+cmds = [
+  "cd frontend && npm run build"
+]
+
+[start]
+cmd = "uvicorn app.api:app --host 0.0.0.0 --port $PORT"

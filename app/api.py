@@ -7,6 +7,7 @@ the Python backend without going through Streamlit.
 # ruff: noqa: E402
 
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -19,7 +20,8 @@ load_dotenv(override=True)
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from tenacity import RetryError
 
@@ -79,18 +81,23 @@ def _shutdown():
 
 app.include_router(auth_router)
 
+# Build CORS origins list from env (supports production Railway URL)
+_default_origins = [
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+    "http://127.0.0.1:5175",
+]
+_extra = os.getenv("ALLOWED_ORIGINS", "")
+_allowed_origins = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "http://127.0.0.1:5175",
-    ],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1055,6 +1062,25 @@ def push_files_batch(
     except Exception as e:
         logger.error(f"Error pushing batch to {owner}/{repo}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Serve the built React frontend (production only)
+# ---------------------------------------------------------------------------
+# Mount the Vite build output so FastAPI serves the full app from one process.
+# This is only active when frontend/dist exists (i.e. after `npm run build`).
+# In local dev the Vite dev server handles the frontend on port 5173.
+
+_dist_dir = project_root / "frontend" / "dist"
+if _dist_dir.is_dir():
+    # Serve static assets (JS/CSS/images) under their hashed paths
+    app.mount("/assets", StaticFiles(directory=_dist_dir / "assets"), name="assets")
+
+    # Catch-all: serve index.html for any non-API route so React Router works
+    @app.get("/{full_path:path}", response_class=HTMLResponse, include_in_schema=False)
+    async def serve_spa(full_path: str):
+        index = _dist_dir / "index.html"
+        return HTMLResponse(content=index.read_text(), status_code=200)
 
 
 if __name__ == "__main__":
