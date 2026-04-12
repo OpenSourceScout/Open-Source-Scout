@@ -51,27 +51,59 @@ export default function AnalysisDashboard() {
   const repo = analysisResult?.repo
 
   useEffect(() => {
-    if (!repoInfo?.owner || !repoInfo?.name) return
+    const owner = repoInfo?.owner
+    const name = repoInfo?.name
+    if (!owner || !name) return
+
+    const cacheKey = `scout_readme_summary_${owner}_${name}`
+    let cancelled = false
+
+    try {
+      const raw = sessionStorage.getItem(cacheKey)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed?.summary && typeof parsed.summary === 'string') {
+          setReadme(parsed.summary)
+          setReadmeError(null)
+          setReadmeLoading(false)
+          return
+        }
+      }
+    } catch {
+      /* fetch below */
+    }
+
+    setReadme(null)
+    setReadmeError(null)
 
     const fetchReadme = async () => {
       setReadmeLoading(true)
-      setReadmeError(null)
 
       try {
-        const res = await fetch(`/api/repos/${repoInfo.owner}/${repoInfo.name}/readme-summary`)
+        const res = await fetch(`/api/repos/${owner}/${name}/readme-summary`)
+        if (cancelled) return
         if (res.ok) {
           const data = await res.json()
-          setReadme(data.summary)
+          const text = data.summary
+          setReadme(text)
+          try {
+            sessionStorage.setItem(cacheKey, JSON.stringify({ summary: text }))
+          } catch {
+            /* quota / private mode */
+          }
         } else {
           setReadmeError('Failed to load README summary.')
         }
       } catch (err) {
-        setReadmeError('Error connecting to backend.')
+        if (!cancelled) setReadmeError('Error connecting to backend.')
       }
-      setReadmeLoading(false)
+      if (!cancelled) setReadmeLoading(false)
     }
 
     fetchReadme()
+    return () => {
+      cancelled = true
+    }
   }, [repoInfo?.owner, repoInfo?.name])
 
   // No analysis result yet

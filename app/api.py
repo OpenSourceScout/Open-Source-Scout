@@ -10,6 +10,7 @@ import errno
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 # Ensure project root is on path (for uvicorn app.api:app)
@@ -48,6 +49,10 @@ from app.db import (
 
 from integrations.github_client import GitHubClient
 from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B, MODEL_README_SUMMARY
+
+# In-process README LLM summaries (avoid re-generating on every dashboard visit)
+_readme_summary_cache: dict[str, tuple[str, float]] = {}
+README_SUMMARY_CACHE_TTL_SEC = 86400.0
 from core.orchestrator import ScoutOrchestrator
 from core.agents.pathfinder import PathfinderAgent
 from utils.cache import CacheManager
@@ -839,27 +844,31 @@ def get_readme_summary(request: Request, owner: str, repo: str):
     """
     owner = owner.strip()
     repo = repo.strip()
-    print(f"DEBUG: get_readme_summary called with owner='{owner}', repo='{repo}'", flush=True)
+    cache_key = f"{owner}/{repo}".lower()
+    now = time.time()
+    cached = _readme_summary_cache.get(cache_key)
+    if cached is not None:
+        summary_text, stored_at = cached
+        if now - stored_at < README_SUMMARY_CACHE_TTL_SEC:
+            return {"summary": summary_text}
+
     try:
         client = GitHubClient(token=_get_github_token_for_user(request))
         readme_names = ['README.md', 'readme.md', 'Readme.md', 'README.rst', 'README']
         content = None
         for name in readme_names:
             try:
-                print(f"DEBUG: Trying to fetch {name}", flush=True)
                 content = client.get_file_content(owner, repo, name)
                 if content:
-                    print(f"DEBUG: Fetched successfully! Length: {len(content)}", flush=True)
                     break
-            except Exception as e:
-                print(f"DEBUG: Failed to fetch {name}: {e}", flush=True)
+            except Exception:
                 continue
-                
+
         if not content:
-            print("DEBUG: All README fetches failed. Returning default message.", flush=True)
-            return {"summary": "No README found for this repository."}
-            
-        print("DEBUG: Sending content to Groq...", flush=True)
+            msg = "No README found for this repository."
+            _readme_summary_cache[cache_key] = (msg, now)
+            return {"summary": msg}
+
         groq_client = GroqClient()
         prompt = (
             "Please summarize the following repository README into a concise and well-formatted "
@@ -876,7 +885,7 @@ def get_readme_summary(request: Request, owner: str, repo: str):
             model=MODEL_README_SUMMARY,
             max_tokens=1500
         )
-        print("DEBUG: Summary generated successfully.", flush=True)
+        _readme_summary_cache[cache_key] = (summary, time.time())
         return {"summary": summary}
     except RetryError as e:
         status_msg = str(e)
