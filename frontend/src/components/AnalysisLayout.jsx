@@ -1,6 +1,9 @@
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { PanelLeft } from 'lucide-react'
 import AnalysisSidebar from './AnalysisSidebar'
+
+const SIDEBAR_OPEN_KEY = 'scout_analysis_sidebar_open'
 
 export default function AnalysisLayout() {
   const location = useLocation()
@@ -32,6 +35,27 @@ export default function AnalysisLayout() {
     const saved = sessionStorage.getItem('scout_rankedRepos')
     return saved ? JSON.parse(saved) : null
   })
+  const [analysisNavOpen, setAnalysisNavOpen] = useState(() => {
+    try {
+      const v = sessionStorage.getItem(SIDEBAR_OPEN_KEY)
+      if (v === '0') return false
+      return true
+    } catch {
+      return true
+    }
+  })
+
+  const toggleAnalysisNav = useCallback(() => {
+    setAnalysisNavOpen((prev) => {
+      const next = !prev
+      try {
+        sessionStorage.setItem(SIDEBAR_OPEN_KEY, next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [])
 
   // Persist analysisResult to sessionStorage whenever it changes
   const setAnalysisResult = (result) => {
@@ -86,14 +110,42 @@ export default function AnalysisLayout() {
 
   return (
     <div className="h-screen overflow-hidden bg-app-bg flex text-app-text">
-      <AnalysisSidebar
-        repoInfo={repoInfo}
-        onBackToRepos={rankedRepos ? handleBackToRepos : null}
-        onClearAnalysis={clearAnalysis}
-        hasRankedRepos={!!rankedRepos}
-      />
-      <main className="flex-1 overflow-y-auto bg-app-bg">
-        <Outlet context={{ analysisResult, setAnalysisResult, repoInfo, repoUrl, rankedRepos }} />
+      <div
+        className={`shrink-0 h-full overflow-hidden transition-[width] duration-200 ease-out ${
+          analysisNavOpen ? 'w-64' : 'w-0'
+        }`}
+      >
+        <AnalysisSidebar
+          repoInfo={repoInfo}
+          onBackToRepos={rankedRepos ? handleBackToRepos : null}
+          onClearAnalysis={clearAnalysis}
+          hasRankedRepos={!!rankedRepos}
+          onCollapseNav={toggleAnalysisNav}
+        />
+      </div>
+      {!analysisNavOpen && (
+        <button
+          type="button"
+          onClick={toggleAnalysisNav}
+          className="fixed left-3 top-24 z-40 flex items-center gap-2 rounded-lg border border-app-border bg-app-surface px-3 py-2 text-sm font-medium text-app-text shadow-lg hover:border-primary-500/40 hover:text-primary-400 transition-colors"
+          aria-label="Show navigation"
+        >
+          <PanelLeft className="w-4 h-4" />
+          Menu
+        </button>
+      )}
+      <main className="flex-1 min-w-0 min-h-0 overflow-y-auto bg-app-bg">
+        <Outlet
+          context={{
+            analysisResult,
+            setAnalysisResult,
+            repoInfo,
+            repoUrl,
+            rankedRepos,
+            analysisNavOpen,
+            toggleAnalysisNav,
+          }}
+        />
       </main>
     </div>
   )

@@ -49,7 +49,7 @@ export default function QaReport() {
     return empty(
       'QA Report Not Available',
       <>Select an issue and click <strong className="text-app-text">Analyze This Issue</strong> to generate a QA report.</>,
-      { label: 'Go to Issue Ranking', onClick: () => navigate('/analysis/issues') }
+      { label: 'Go to issue analysis', onClick: () => navigate('/analysis/issues') }
     )
   }
 

@@ -9,7 +9,7 @@ import RepoRanking from './components/RepoRanking'
 import './App.css'
 
 const TABS = [
-  { id: 'issues', label: '🏆 Issue Ranking' },
+  { id: 'issues', label: '🏆 Issue analysis' },
   { id: 'code', label: '🔍 Code Locator' },
   { id: 'briefing', label: '📋 Contributor Briefing' },
 ]

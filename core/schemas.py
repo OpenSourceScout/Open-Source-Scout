@@ -58,6 +58,10 @@ class RankedIssue(BaseModel):
     score_total: int = Field(ge=0, le=100, description="Total score (0-100)")
     score_breakdown: ScoreBreakdown = Field(description="Score breakdown by category")
     why: List[str] = Field(description="Bullet points explaining why this issue was selected")
+    body: Optional[str] = Field(default=None, description="Issue body (markdown)")
+    created_at: Optional[str] = Field(default=None, description="ISO 8601 created time from GitHub")
+    updated_at: Optional[str] = Field(default=None, description="ISO 8601 last updated time from GitHub")
+    comments: Optional[int] = Field(default=None, description="GitHub comment count")
 
 
 class RepoInfo(BaseModel):

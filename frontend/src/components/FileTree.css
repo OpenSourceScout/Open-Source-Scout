@@ -98,23 +98,6 @@
   padding: 4px 0;
 }
 
-.tree-content::-webkit-scrollbar {
-  width: 8px;
-}
-
-.tree-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.tree-content::-webkit-scrollbar-thumb {
-  background: var(--app-border);
-  border-radius: 4px;
-}
-
-.tree-content::-webkit-scrollbar-thumb:hover {
-  background: var(--app-muted);
-}
-
 /* Empty state */
 .empty-state {
   padding: 32px 16px;

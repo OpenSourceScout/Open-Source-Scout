@@ -133,19 +133,6 @@
   padding-right: 4px;
 }
 
-.repo-topics::-webkit-scrollbar {
-  width: 6px;
-}
-
-.repo-topics::-webkit-scrollbar-thumb {
-  background: #e0e0e0;
-  border-radius: 3px;
-}
-
-.repo-topics::-webkit-scrollbar-thumb:hover {
-  background: #cfcfcf;
-}
-
 .topic-tag {
   background: #f0f4ff;
   color: #667eea;

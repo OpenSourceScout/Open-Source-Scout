@@ -40,6 +40,24 @@ function getScoreColor(score) {
   return 'text-red-400'
 }
 
+function formatIssueDate(iso) {
+  if (!iso) return null
+  try {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return null
+    return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(d)
+  } catch {
+    return null
+  }
+}
+
+function bodyPreview(body, maxLen = 140) {
+  if (!body || !String(body).trim()) return null
+  const t = String(body).replace(/\s+/g, ' ').trim()
+  if (t.length <= maxLen) return t
+  return `${t.slice(0, maxLen)}…`
+}
+
 export default function IssueRanking() {
   const { analysisResult, setAnalysisResult, repoUrl, rankedRepos } = useOutletContext()
   const navigate = useNavigate()
@@ -117,9 +135,9 @@ export default function IssueRanking() {
       <header className="bg-app-surface border-b border-app-border px-6 py-4 shrink-0">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-lg font-semibold text-app-text">Issue Ranking</h1>
+            <h1 className="text-lg font-semibold text-app-text">Issue analysis</h1>
             <p className="text-sm text-app-muted">
-              {issues.length} issues analyzed and ranked by contribution potential
+              {issues.length} issues from the triage agent, ranked for contribution fit
             </p>
           </div>
           <select
@@ -140,6 +158,8 @@ export default function IssueRanking() {
           <div className="p-4 space-y-3">
             {filteredIssues.map((issue, index) => {
               const difficulty = getDifficultyFromLabels(issue.labels)
+              const descriptionPreview = bodyPreview(issue.body)
+              const openedAt = formatIssueDate(issue.created_at)
               return (
                 <div
                   key={issue.number || index}
@@ -160,7 +180,17 @@ export default function IssueRanking() {
                     <span className={`font-semibold ${getScoreColor(issue.score_total)}`}>{issue.score_total}/100</span>
                   </div>
                   <h3 className="font-medium text-app-text mb-1 line-clamp-2">{issue.title}</h3>
+                  {descriptionPreview && (
+                    <p className="text-xs text-app-muted/90 line-clamp-2 mb-1">{descriptionPreview}</p>
+                  )}
                   <p className="text-sm text-app-muted line-clamp-2">{issue.why?.join(' ') || ''}</p>
+                  {(openedAt || issue.comments != null) && (
+                    <p className="text-xs text-app-muted/80 mt-2">
+                      {openedAt && <span>Opened {openedAt}</span>}
+                      {openedAt && issue.comments != null && <span> · </span>}
+                      {issue.comments != null && <span>{issue.comments} comments</span>}
+                    </p>
+                  )}
 
                   {issue.labels && issue.labels.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
@@ -201,7 +231,43 @@ export default function IssueRanking() {
                   </span>
                 </div>
 
-                <h2 className="text-xl font-semibold text-app-text mb-3">{selectedIssue.title}</h2>
+                <div className="mb-4">
+                  <h2 className="text-xl font-semibold text-app-text mb-2">{selectedIssue.title}</h2>
+                  <p className="text-sm text-app-muted">
+                    Issue #{selectedIssue.number}
+                    {formatIssueDate(selectedIssue.created_at) && (
+                      <>
+                        {' '}
+                        · Opened {formatIssueDate(selectedIssue.created_at)}
+                      </>
+                    )}
+                    {formatIssueDate(selectedIssue.updated_at) && (
+                      <>
+                        {' '}
+                        · Updated {formatIssueDate(selectedIssue.updated_at)}
+                      </>
+                    )}
+                    {selectedIssue.comments != null && (
+                      <>
+                        {' '}
+                        · {selectedIssue.comments} comments
+                      </>
+                    )}
+                  </p>
+                </div>
+
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-app-text mb-2">Issue description</h3>
+                  <div className="bg-app-bg border border-app-border rounded-lg p-4 max-h-56 overflow-y-auto">
+                    {selectedIssue.body?.trim() ? (
+                      <pre className="text-sm text-app-muted whitespace-pre-wrap font-sans leading-relaxed">
+                        {selectedIssue.body}
+                      </pre>
+                    ) : (
+                      <p className="text-sm text-app-muted italic">No description on GitHub.</p>
+                    )}
+                  </div>
+                </div>
 
                 {selectedIssue.why && selectedIssue.why.length > 0 && (
                   <div className="mb-6">

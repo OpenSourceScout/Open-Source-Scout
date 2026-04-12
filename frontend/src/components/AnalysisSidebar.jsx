@@ -11,6 +11,7 @@ import {
   User,
   Package,
   FolderKanban,
+  PanelLeftClose,
 } from 'lucide-react'
 import ScoutLogo from './ScoutLogo'
 import { getMe } from '../api'
@@ -19,7 +20,7 @@ import { isAdmin } from '../auth'
 const NAV_ITEMS = [
   { path: '/analysis', label: 'Dashboard', Icon: LayoutDashboard },
   { path: '/analysis/repositories', label: 'Repositories', Icon: FolderOpen },
-  { path: '/analysis/issues', label: 'Issue Ranking', Icon: ClipboardList },
+  { path: '/analysis/issues', label: 'Issue analysis', Icon: ClipboardList },
   { path: '/analysis/code', label: 'Code Locator', Icon: MapPin },
   { path: '/analysis/briefing', label: 'Contributor Briefing', Icon: FileText },
   { path: '/analysis/qa-report', label: 'QA Report', Icon: ShieldCheck, adminOnly: true },
@@ -38,7 +39,7 @@ const navClass = ({ isActive }) =>
       : 'text-app-muted hover:bg-app-elevated hover:text-app-text border border-transparent'
   }`
 
-export default function AnalysisSidebar({ repoInfo, onBackToRepos, hasRankedRepos }) {
+export default function AnalysisSidebar({ repoInfo, onBackToRepos, hasRankedRepos, onCollapseNav }) {
   const navigate = useNavigate()
   const [user, setUser] = useState(null)
 
@@ -64,9 +65,25 @@ export default function AnalysisSidebar({ repoInfo, onBackToRepos, hasRankedRepo
     <aside className="w-64 bg-app-surface border-r border-app-border flex flex-col h-screen shrink-0">
       {/* Logo */}
       <div className="p-4 border-b border-app-border shrink-0">
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
-          <ScoutLogo className="h-8 w-8" />
-          <span className="font-semibold text-app-text">Open Source Scout</span>
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 cursor-pointer min-w-0" onClick={() => navigate('/')}>
+            <ScoutLogo className="h-8 w-8 shrink-0" />
+            <span className="font-semibold text-app-text truncate">Open Source Scout</span>
+          </div>
+          {onCollapseNav && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation()
+                onCollapseNav()
+              }}
+              className="shrink-0 p-1.5 rounded-lg text-app-muted hover:text-app-text hover:bg-app-elevated border border-transparent hover:border-app-border transition-colors"
+              title="Hide navigation"
+              aria-label="Hide navigation"
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 

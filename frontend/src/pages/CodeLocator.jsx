@@ -167,7 +167,7 @@ export default function CodeLocator() {
     return emptyState(
       'No Issue Selected',
       <>Select an issue and click <strong className="text-app-text">Analyze This Issue</strong> to see relevant code locations.</>,
-      'Go to Issue Ranking',
+      'Go to issue analysis',
       () => navigate('/analysis/issues')
     )
   }

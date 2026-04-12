@@ -50,6 +50,7 @@ def _stream(pipe, prefix: str, stop_event: threading.Event):
 #  Process launchers                                                            #
 # --------------------------------------------------------------------------- #
 ROOT = Path(__file__).parent
+BACKEND_PORT = 8003
 
 
 def _start_backend() -> subprocess.Popen:
@@ -63,10 +64,10 @@ def _start_backend() -> subprocess.Popen:
         "--reload-dir", "integrations",
         "--reload-dir", "utils",
         "--reload-dir", "tests",
-        "--port", "8001",
+        "--port", str(BACKEND_PORT),
         "app.api:app",
     ]
-    print(f"{CYAN}{BOLD}Starting backend{RESET}  -> http://localhost:8001")
+    print(f"{CYAN}{BOLD}Starting backend{RESET}  -> http://localhost:{BACKEND_PORT}")
     return subprocess.Popen(
         cmd,
         cwd=ROOT,

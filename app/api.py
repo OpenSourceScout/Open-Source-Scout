@@ -406,6 +406,10 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
                 score_total=sr.total,
                 score_breakdown=sr.breakdown,
                 why=sr.reasons[:4],
+                body=iss.body,
+                created_at=iss.created_at,
+                updated_at=iss.updated_at,
+                comments=iss.comments,
             )
             for iss, sr in ranked
         ]

@@ -101,7 +101,11 @@ Be encouraging but honest about difficulty levels."""
                 labels=issue.labels,
                 score_total=score_result.total,
                 score_breakdown=score_result.breakdown,
-                why=enhanced_reasons
+                why=enhanced_reasons,
+                body=issue.body,
+                created_at=issue.created_at,
+                updated_at=issue.updated_at,
+                comments=issue.comments,
             ))
         
         # Select the top issue
