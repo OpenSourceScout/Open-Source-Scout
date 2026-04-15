@@ -45,6 +45,7 @@ from app.db import (
     record_issue_analysis,
     record_tech_stack_search,
     rename_project,
+    save_user_github_token,
 )
 
 from integrations.github_client import GitHubClient
@@ -251,6 +252,65 @@ def _get_github_token_for_user(request: Request) -> str | None:
             except Exception:
                 pass
     return os.getenv("GITHUB_TOKEN")
+
+
+class SaveGitHubTokenRequest(BaseModel):
+    token: str
+
+
+@app.post("/api/user/github-token")
+def save_github_token(body: SaveGitHubTokenRequest, request: Request):
+    """
+    Save or update the authenticated user's GitHub Personal Access Token.
+    The token is validated against the GitHub API before saving.
+    """
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+
+    token = body.token.strip()
+    if not token:
+        raise HTTPException(status_code=400, detail="Token cannot be empty")
+
+    # Validate the token against GitHub and check it has public_repo scope
+    import requests as _requests
+    try:
+        probe = _requests.get(
+            "https://api.github.com/user",
+            headers={
+                "Authorization": f"token {token}",
+                "Accept": "application/vnd.github.v3+json",
+                "User-Agent": "Open-Source-Scout/1.0",
+            },
+            timeout=10,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not reach GitHub: {e}")
+
+    if probe.status_code == 401:
+        raise HTTPException(status_code=400, detail="Invalid GitHub token. Please check it and try again.")
+    if not probe.ok:
+        raise HTTPException(status_code=400, detail=f"GitHub rejected the token (HTTP {probe.status_code}).")
+
+    # X-OAuth-Scopes lists what the token is allowed to do
+    scopes = {s.strip() for s in probe.headers.get("X-OAuth-Scopes", "").split(",") if s.strip()}
+    gh_login = probe.json().get("login", "")
+
+    has_repo_access = bool(scopes & {"repo", "public_repo"})
+    scope_warning = None
+    if not has_repo_access:
+        scope_warning = (
+            "Token saved, but it is missing the 'public_repo' (or 'repo') scope. "
+            "Forking repositories will fail until you regenerate the token with that scope."
+        )
+
+    save_user_github_token(pool, uid, token)
+    return {
+        "ok": True,
+        "github_login": gh_login,
+        "scopes": sorted(scopes),
+        "has_fork_access": has_repo_access,
+        "warning": scope_warning,
+    }
 
 
 def _safe_record_activity(fn, *args, **kwargs) -> None:
@@ -1006,6 +1066,8 @@ def push_file(
                     status_code=403,
                     detail="You don't have push access to this repository. Please fork before pushing.",
                 )
+            elif "Cannot fork" in str(e):
+                raise HTTPException(status_code=403, detail=str(e))
             raise
         logger.info(f"Push successful: {result.get('branch_url')}")
         
@@ -1062,6 +1124,8 @@ def push_files_batch(
                     status_code=403,
                     detail="You don't have push access to this repository. Please fork before pushing.",
                 )
+            elif "Cannot fork" in str(e):
+                raise HTTPException(status_code=403, detail=str(e))
             raise
 
         pool = getattr(request.app.state, "db_pool", None)

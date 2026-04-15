@@ -159,7 +159,7 @@ def github_oauth_start(request: Request):
         {
             "client_id": client_id,
             "redirect_uri": redirect_uri,
-            "scope": "read:user user:email",
+            "scope": "public_repo read:user user:email",
             "state": state,
         }
     )

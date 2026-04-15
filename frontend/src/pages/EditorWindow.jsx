@@ -54,17 +54,7 @@ export default function EditorWindow() {
   const [pushing, setPushing] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
-  const [showForkDialog, setShowForkDialog] = useState(false)
-  const [forkChoiceLoading, setForkChoiceLoading] = useState(false)
-  const [forkInfo, setForkInfo] = useState(null)
-  const [editTarget, setEditTarget] = useState(() => {
-    try {
-      const key = `scout-session-${ownerParam || ''}-${repoParam || ''}-editTarget`
-      return sessionStorage.getItem(key) || 'original'
-    } catch {
-      return 'original'
-    }
-  })
+
   const [showReview, setShowReview] = useState(false)
   const [reviewFiles, setReviewFiles] = useState([]) // [{ path, original, modified }]
   const [reviewSelectedPath, setReviewSelectedPath] = useState(null)
@@ -185,36 +175,9 @@ export default function EditorWindow() {
     if (ownerParam && repoParam && pathParam) {
       loadFile(ownerParam, repoParam, pathParam, refParam)
     }
-  }, [ownerParam, repoParam, pathParam, refParam, loadFile, analysisDataParam, forkInfo])
+  }, [ownerParam, repoParam, pathParam, refParam, loadFile, analysisDataParam])
 
-  const handleForkChoice = async (choice) => {
-    setForkChoiceLoading(true)
-    try {
-      const response = await fetch(`/api/repos/${owner}/${repo}/fork-choice`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ choice }),
-      })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.detail || 'Fork choice failed')
-      }
-
-      const data = await response.json()
-      setForkInfo(data)
-      setEditTarget(choice)
-      try {
-        const key = `scout-session-${owner}-${repo}-editTarget`
-        sessionStorage.setItem(key, choice)
-      } catch {}
-      setShowForkDialog(false)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setForkChoiceLoading(false)
-    }
-  }
 
   const handleFileSelect = (filePath) => {
     setPath(filePath)
@@ -293,13 +256,12 @@ export default function EditorWindow() {
     setSuccess(null)
     try {
       const filesPayload = reviewFiles.map(f => ({ file_path: f.path, content: f.modified }))
-      const target_mode = editTarget === 'fork' ? 'fork' : 'original'
       const result = await pushFilesBatch(owner.trim(), repo.trim(), {
         files: filesPayload,
         branch_name: branchName.trim() || 'scout-edit',
         commit_message: commitMessage.trim() || 'Update via Open Source Scout',
         base_branch: branch.trim() || 'main',
-        target_mode,
+        target_mode: 'auto',
       })
       setSuccess({
         ...result,
@@ -313,13 +275,7 @@ export default function EditorWindow() {
       } catch {}
       setShowReview(false)
     } catch (err) {
-      const msg = err.message || 'Push failed'
-      // If user chose original but lacks access, force fork choice.
-      if (msg.toLowerCase().includes('fork before pushing') || msg.toLowerCase().includes('push access')) {
-        setShowForkDialog(true)
-      } else {
-        setError(msg)
-      }
+      setError(err.message || 'Push failed')
     } finally {
       setPushing(false)
     }
@@ -438,8 +394,6 @@ export default function EditorWindow() {
             <div className="review-header">
               <h2>Review changes</h2>
               <div className="review-meta">
-                <span className="text-xs text-app-muted">Target:</span>
-                <span className="text-xs font-mono">{editTarget === 'fork' ? 'Fork' : 'Original'}</span>
                 <span className="text-xs text-app-muted">Branch:</span>
                 <span className="text-xs font-mono">{branchName}</span>
               </div>
@@ -525,35 +479,7 @@ export default function EditorWindow() {
         </div>
       )}
 
-      {/* Fork Dialog */}
-      {showForkDialog && (
-        <div className="fork-dialog-overlay">
-          <div className="fork-dialog">
-            <h2>Edit Repository</h2>
-            <p>
-              Choose how you'd like to edit <code>{owner}/{repo}</code>:
-            </p>
-            <div className="fork-dialog-actions">
-              <button
-                onClick={() => handleForkChoice('fork')}
-                disabled={forkChoiceLoading}
-                className="fork-dialog-button fork-button"
-              >
-                {forkChoiceLoading ? 'Creating fork...' : '🍴 Fork Repository'}
-                <span className="fork-dialog-hint">Create a fork in your account</span>
-              </button>
-              <button
-                onClick={() => handleForkChoice('original')}
-                disabled={forkChoiceLoading}
-                className="fork-dialog-button original-button"
-              >
-                📝 Edit on Original
-                <span className="fork-dialog-hint">If you have write access</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Main Content */}
       <div className="editor-main-container">

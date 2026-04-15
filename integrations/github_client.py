@@ -639,6 +639,8 @@ class GitHubClient:
         )
         # 202 = fork is being created; 200 = fork already exists
         if resp.status_code not in (200, 202):
+            if resp.status_code in (403, 404):
+                raise PermissionError("Cannot fork the repository. Ensure your GitHub token is valid and has the 'public_repo' scope.")
             resp.raise_for_status()
         data = resp.json()
         fork_owner = data["owner"]["login"]
@@ -786,24 +788,39 @@ class GitHubClient:
         permissions = perm_resp.json().get("permissions", {})
         can_push = permissions.get("push", False)
 
+        # Read the token scopes from the response header GitHub always returns.
+        # Fine-grained PATs don't populate X-OAuth-Scopes, so we only block when
+        # the header is present AND confirms no repo access.
+        raw_scopes_header = perm_resp.headers.get("X-OAuth-Scopes", "")
+        if raw_scopes_header:
+            token_scopes = {s.strip() for s in raw_scopes_header.split(",") if s.strip()}
+            has_fork_scope = bool(token_scopes & {"repo", "public_repo"})
+        else:
+            # Fine-grained PAT or no header — assume it might work
+            has_fork_scope = True
+
         if target_mode not in ("original", "fork", "auto"):
             raise ValueError("target_mode must be 'original', 'fork', or 'auto'")
 
         target_owner = owner
         target_repo = repo
 
+        needs_fork = (target_mode == "fork") or (target_mode == "auto" and not can_push)
+
         if target_mode == "original":
             if not can_push:
                 raise PermissionError("NO_PUSH_ACCESS")
-        elif target_mode == "fork":
+        elif needs_fork:
+            # Gate on scopes BEFORE hitting the forks endpoint so the error is clear.
+            if not has_fork_scope:
+                raise PermissionError(
+                    "Cannot fork the repository. Your GitHub token is missing the "
+                    "'public_repo' scope. Go to Settings → API Keys, paste a token "
+                    "with 'public_repo' checked, and save it."
+                )
             fork_info = self.fork_repo(owner, repo)
             target_owner = fork_info["fork_owner"]
             target_repo = fork_info["fork_repo"]
-        else:  # auto
-            if not can_push:
-                fork_info = self.fork_repo(owner, repo)
-                target_owner = fork_info["fork_owner"]
-                target_repo = fork_info["fork_repo"]
 
         base_commit_sha = self._get_ref_sha(upstream_owner, upstream_repo, base_branch)
         base_tree_sha = self._get_commit_tree_sha(upstream_owner, upstream_repo, base_commit_sha)

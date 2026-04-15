@@ -169,6 +169,16 @@ def get_user_github_token(pool: ConnectionPool, user_id: int) -> str | None:
     return None
 
 
+def save_user_github_token(pool: ConnectionPool, user_id: int, token: str) -> None:
+    """Persist a GitHub PAT (or OAuth token) for the given user."""
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "update users set github_access_token = %s where id = %s",
+                (token, user_id),
+            )
+
+
 def upsert_user_from_github(
     pool: ConnectionPool,
     *,
