@@ -5,6 +5,7 @@ import { FileCode, Pencil, ChevronDown } from 'lucide-react'
 import { getFileContent, pushFile, pushFilesBatch } from '../api'
 import FileTree from '../components/FileTree'
 import ScoutLogo from '../components/ScoutLogo'
+import TerminalDock from '../components/TerminalDock'
 import { getLanguage } from '../utils/editorLanguage'
 import './EditorWindow.css'
 
@@ -58,6 +59,8 @@ export default function EditorWindow() {
   const [showReview, setShowReview] = useState(false)
   const [reviewFiles, setReviewFiles] = useState([]) // [{ path, original, modified }]
   const [reviewSelectedPath, setReviewSelectedPath] = useState(null)
+  // Terminal panel is hidden by default
+  const [showTerminalPanel, setShowTerminalPanel] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(280)
   const [rightPanelWidth, setRightPanelWidth] = useState(250)
   const isDragging = useRef(false)
@@ -372,6 +375,13 @@ export default function EditorWindow() {
               >
                 Clear
               </button>
+              <button
+                type="button"
+                onClick={() => setShowTerminalPanel((prev) => !prev)}
+                className="editor-terminal-toggle"
+              >
+                {showTerminalPanel ? 'Hide Terminal' : 'Show Terminal'}
+              </button>
               {modifiedFiles.size > 1 && (
                 <button
                   type="button"
@@ -597,6 +607,16 @@ export default function EditorWindow() {
               </div>
             )}
           </div>
+
+          {/* Resizable Terminal Panel */}
+          <ResizableTerminalPanel show={showTerminalPanel}>
+            <TerminalDock
+              owner={owner}
+              repo={repo}
+              refName={branch}
+              modifiedContentsKey={modifiedContentsKey}
+            />
+          </ResizableTerminalPanel>
         </div>
 
         {/* Right Panel - Metadata */}
@@ -666,6 +686,45 @@ export default function EditorWindow() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+function ResizableTerminalPanel({ show, children }) {
+  const [height, setHeight] = useState(320)
+  const dragging = useRef(false)
+  const startY = useRef(0)
+  const startHeight = useRef(320)
+
+  if (!show) return null
+
+  const onMouseMove = (e) => {
+    if (!dragging.current) return
+    let newHeight = startHeight.current - (startY.current - e.clientY)
+    newHeight = Math.max(180, Math.min(newHeight, 600))
+    setHeight(newHeight)
+  }
+
+  const onMouseUp = () => {
+    dragging.current = false
+    document.body.style.cursor = ''
+    window.removeEventListener('mousemove', onMouseMove)
+    window.removeEventListener('mouseup', onMouseUp)
+  }
+
+  const onMouseDown = (e) => {
+    dragging.current = true
+    startY.current = e.clientY
+    startHeight.current = height
+    document.body.style.cursor = 'ns-resize'
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }
+
+  return (
+    <div className="editor-terminal-panel" style={{ height: `${height}px` }}>
+      <div className="terminal-resize-handle" onMouseDown={onMouseDown} />
+      {children}
     </div>
   )
 }

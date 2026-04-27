@@ -18,6 +18,7 @@ export default defineConfig({
       '/api': {
         target: apiProxyTarget,
         changeOrigin: true,
+        ws: true,
         timeout: 600000, // 10 minutes for long-running analysis operations
       },
     },

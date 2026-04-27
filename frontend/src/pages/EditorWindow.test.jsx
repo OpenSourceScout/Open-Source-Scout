@@ -15,6 +15,15 @@ vi.mock('../api', () => ({
   getFileContent: (...args) => getFileContent(...args),
   pushFile: vi.fn(),
   pushFilesBatch: vi.fn(),
+  createTerminalSession: vi.fn(),
+  closeTerminalSession: vi.fn(),
+  createTerminalTab: vi.fn(),
+  getTerminalSuggestions: vi.fn(),
+  runTerminalSuggested: vi.fn(),
+  runTerminalCommand: vi.fn(),
+  getTerminalOutput: vi.fn(),
+  syncTerminalFiles: vi.fn(),
+  openTerminalSocket: vi.fn(),
 }))
 
 import EditorWindow from './EditorWindow'

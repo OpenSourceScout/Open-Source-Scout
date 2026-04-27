@@ -7,11 +7,13 @@ the Python backend without going through Streamlit.
 # ruff: noqa: E402
 
 import errno
+import asyncio
 import logging
 import os
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 # Ensure project root is on path (for uvicorn app.api:app)
 project_root = Path(__file__).parent.parent
@@ -20,7 +22,7 @@ sys.path.insert(0, str(project_root))
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, HTMLResponse
@@ -56,6 +58,12 @@ _readme_summary_cache: dict[str, tuple[str, float]] = {}
 README_SUMMARY_CACHE_TTL_SEC = 86400.0
 from core.orchestrator import ScoutOrchestrator
 from core.agents.pathfinder import PathfinderAgent
+from core.terminal_manager import (
+    SessionNotFoundError,
+    TerminalManager,
+    TerminalManagerError,
+    TerminalNotFoundError,
+)
 from utils.cache import CacheManager
 from utils.pdf_generator import PDFGenerator
 
@@ -79,12 +87,18 @@ def _startup():
         app.state.db_pool = None
         app.state.db_init_error = str(e)
 
+    app.state.terminal_manager = TerminalManager()
+
 
 @app.on_event("shutdown")
 def _shutdown():
     pool = getattr(app.state, "db_pool", None)
     if pool is not None:
         pool.close()
+
+    terminal_manager = getattr(app.state, "terminal_manager", None)
+    if terminal_manager is not None:
+        terminal_manager.close_all()
 
 
 app.include_router(auth_router)
@@ -203,6 +217,43 @@ class ForkChoiceRequest(BaseModel):
     analysis_id: str | None = None
 
 
+class TerminalCreateSessionRequest(BaseModel):
+    """Create a workspace-backed terminal session for a repository."""
+
+    owner: str
+    repo: str
+    ref: str = "HEAD"
+
+
+class TerminalCreateTabRequest(BaseModel):
+    """Create one terminal tab inside an existing session."""
+
+    label: str | None = None
+    cwd: str | None = None
+
+
+class TerminalSyncFilesRequest(BaseModel):
+    """Sync edited files from browser state into session workspace."""
+
+    files: list[dict[str, Any]]
+
+
+class TerminalRunSuggestedRequest(BaseModel):
+    """Run one command from the suggestion feed."""
+
+    terminal_id: str
+    command: str
+    cwd: str | None = None
+
+
+class TerminalRunCommandRequest(BaseModel):
+    """Run one manual command in an existing terminal tab."""
+
+    terminal_id: str
+    command: str
+    cwd: str | None = None
+
+
 def _to_jsonable(obj):
     """Convert Pydantic models and nested structures to JSON-serializable values."""
     return jsonable_encoder(obj)
@@ -234,6 +285,24 @@ def _require_pool(request: Request):
     if pool is None:
         raise HTTPException(status_code=500, detail="Database not initialized")
     return pool
+
+
+def _require_terminal_manager(request: Request) -> TerminalManager:
+    """Return terminal manager or raise 503 if unavailable."""
+    manager = getattr(request.app.state, "terminal_manager", None)
+    if manager is None:
+        raise HTTPException(status_code=503, detail="Terminal runtime is unavailable")
+    return manager
+
+
+def _raise_terminal_http_error(exc: Exception) -> None:
+    if isinstance(exc, SessionNotFoundError):
+        raise HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, TerminalNotFoundError):
+        raise HTTPException(status_code=404, detail=str(exc))
+    if isinstance(exc, TerminalManagerError):
+        raise HTTPException(status_code=400, detail=str(exc))
+    raise HTTPException(status_code=500, detail=str(exc))
 
 
 def _get_github_token_for_user(request: Request) -> str | None:
@@ -1151,6 +1220,218 @@ def push_files_batch(
     except Exception as e:
         logger.error(f"Error pushing batch to {owner}/{repo}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Editor terminal runtime (ephemeral, local workspace only)
+# ---------------------------------------------------------------------------
+
+
+@app.post("/api/terminal/sessions")
+def create_terminal_session(body: TerminalCreateSessionRequest, request: Request):
+    """Create a new terminal workspace session for a repository."""
+    manager = _require_terminal_manager(request)
+    try:
+        payload = manager.create_session(
+            owner=body.owner,
+            repo=body.repo,
+            ref=body.ref,
+            github_token=_get_github_token_for_user(request),
+        )
+        return payload
+    except Exception as e:
+        _raise_terminal_http_error(e)
+
+
+@app.delete("/api/terminal/sessions/{session_id}")
+def close_terminal_session(session_id: str, request: Request):
+    """Close a terminal session and delete its workspace."""
+    manager = _require_terminal_manager(request)
+    try:
+        manager.close_session(session_id)
+        return {"ok": True}
+    except Exception as e:
+        _raise_terminal_http_error(e)
+
+
+@app.post("/api/terminal/{session_id}/sync-files")
+def terminal_sync_files(session_id: str, body: TerminalSyncFilesRequest, request: Request):
+    """Sync edited browser files into the terminal workspace before running commands."""
+    manager = _require_terminal_manager(request)
+    try:
+        result = manager.sync_files(session_id, body.files)
+        return {"ok": True, **result}
+    except Exception as e:
+        _raise_terminal_http_error(e)
+
+
+@app.post("/api/terminal/{session_id}/terminals")
+def create_terminal_tab(session_id: str, body: TerminalCreateTabRequest, request: Request):
+    """Create one additional terminal tab inside a session."""
+    manager = _require_terminal_manager(request)
+    try:
+        terminal = manager.create_terminal(session_id, label=body.label, cwd=body.cwd)
+        return {"ok": True, "terminal": terminal}
+    except Exception as e:
+        _raise_terminal_http_error(e)
+
+
+@app.get("/api/terminal/{session_id}/terminals")
+def list_terminal_tabs(session_id: str, request: Request):
+    """List all terminals currently attached to a session."""
+    manager = _require_terminal_manager(request)
+    try:
+        terminals = manager.list_terminals(session_id)
+        return {"terminals": terminals}
+    except Exception as e:
+        _raise_terminal_http_error(e)
+
+
+@app.get("/api/terminal/{session_id}/suggestions")
+def list_terminal_suggestions(session_id: str, request: Request):
+    """Return run-step suggestions inferred from the workspace."""
+    manager = _require_terminal_manager(request)
+    try:
+        suggestions = manager.get_suggestions(session_id)
+        return {"suggestions": suggestions}
+    except Exception as e:
+        _raise_terminal_http_error(e)
+
+
+@app.post("/api/terminal/{session_id}/run-suggested")
+def run_terminal_suggested_command(
+    session_id: str,
+    body: TerminalRunSuggestedRequest,
+    request: Request,
+):
+    """Run exactly one suggested command in the active terminal."""
+    manager = _require_terminal_manager(request)
+    command = (body.command or "").strip()
+    if not manager.is_allowed_suggested_command(command):
+        raise HTTPException(status_code=400, detail="Suggested command is not allowed")
+
+    try:
+        result = manager.run_command(
+            session_id=session_id,
+            terminal_id=body.terminal_id,
+            command=command,
+            cwd=body.cwd,
+        )
+        return {"ok": True, **result}
+    except Exception as e:
+        _raise_terminal_http_error(e)
+
+
+@app.post("/api/terminal/{session_id}/run")
+def run_terminal_command(
+    session_id: str,
+    body: TerminalRunCommandRequest,
+    request: Request,
+):
+    """Run one manual command in the active terminal tab."""
+    manager = _require_terminal_manager(request)
+    command = (body.command or "").strip()
+    if not command:
+        raise HTTPException(status_code=400, detail="command is required")
+
+    try:
+        result = manager.run_command(
+            session_id=session_id,
+            terminal_id=body.terminal_id,
+            command=command,
+            cwd=body.cwd,
+        )
+        return {"ok": True, **result}
+    except Exception as e:
+        _raise_terminal_http_error(e)
+
+
+@app.get("/api/terminal/{session_id}/{terminal_id}/output")
+def get_terminal_output(
+    session_id: str,
+    terminal_id: str,
+    request: Request,
+    max_chunks: int = 300,
+):
+    """Poll terminal output chunks for environments where websocket drops occur."""
+    manager = _require_terminal_manager(request)
+    safe_max = max(1, min(max_chunks, 1000))
+    try:
+        chunks = manager.read_output(session_id, terminal_id, max_chunks=safe_max)
+        status = manager.get_terminal_status(session_id, terminal_id)
+        return {
+            "chunks": chunks,
+            "closed": status.get("closed", False),
+            "exit_code": status.get("exit_code"),
+        }
+    except Exception as e:
+        _raise_terminal_http_error(e)
+
+
+@app.websocket("/api/terminal/{session_id}/{terminal_id}")
+async def terminal_socket(websocket: WebSocket, session_id: str, terminal_id: str):
+    """Interactive terminal IO over websocket for near real-time streaming."""
+    manager = getattr(websocket.app.state, "terminal_manager", None)
+    await websocket.accept()
+
+    if manager is None:
+        await websocket.send_json({"type": "error", "message": "Terminal runtime is unavailable"})
+        await websocket.close(code=1011)
+        return
+
+    try:
+        history = manager.get_history(session_id, terminal_id)
+        if history:
+            await websocket.send_json({"type": "output", "data": history, "history": True})
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.close(code=1008)
+        return
+
+    try:
+        while True:
+            chunks = manager.read_output(session_id, terminal_id)
+            if chunks:
+                await websocket.send_json({"type": "output", "data": "".join(chunks)})
+
+            try:
+                message = await asyncio.wait_for(websocket.receive_json(), timeout=0.15)
+            except asyncio.TimeoutError:
+                continue
+            except WebSocketDisconnect:
+                break
+
+            msg_type = str(message.get("type") or "").lower()
+            if msg_type == "input":
+                manager.send_input(session_id, terminal_id, str(message.get("data") or ""))
+            elif msg_type == "command":
+                manager.run_command(
+                    session_id,
+                    terminal_id,
+                    str(message.get("command") or ""),
+                    cwd=message.get("cwd"),
+                )
+            elif msg_type == "ping":
+                await websocket.send_json({"type": "pong"})
+            elif msg_type == "close":
+                break
+            else:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "message": "Unsupported message type. Use input|command|ping|close.",
+                    }
+                )
+    except Exception as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+    finally:
+        try:
+            chunks = manager.read_output(session_id, terminal_id)
+            if chunks:
+                await websocket.send_json({"type": "output", "data": "".join(chunks)})
+        except Exception:
+            pass
+        await websocket.close()
 
 
 # ---------------------------------------------------------------------------

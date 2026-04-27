@@ -304,3 +304,105 @@ export async function makeForkChoice(owner, repo, choice, issueNumber = null) {
   }
   return res.json()
 }
+
+// --- Terminal endpoints ---
+
+export async function createTerminalSession({ owner, repo, ref = 'HEAD' }) {
+  const res = await apiFetch('/terminal/sessions', {
+    method: 'POST',
+    body: JSON.stringify({ owner, repo, ref }),
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to create terminal session')
+  }
+  return res.json()
+}
+
+export async function closeTerminalSession(sessionId) {
+  const res = await apiFetch(`/terminal/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to close terminal session')
+  }
+  return res.json()
+}
+
+export async function syncTerminalFiles(sessionId, files) {
+  const res = await apiFetch(`/terminal/${encodeURIComponent(sessionId)}/sync-files`, {
+    method: 'POST',
+    body: JSON.stringify({ files }),
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to sync files')
+  }
+  return res.json()
+}
+
+export async function createTerminalTab(sessionId, { label = null, cwd = null } = {}) {
+  const res = await apiFetch(`/terminal/${encodeURIComponent(sessionId)}/terminals`, {
+    method: 'POST',
+    body: JSON.stringify({ label, cwd }),
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to create terminal tab')
+  }
+  return res.json()
+}
+
+export async function listTerminalTabs(sessionId) {
+  const res = await apiFetch(`/terminal/${encodeURIComponent(sessionId)}/terminals`)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to list terminals')
+  }
+  return res.json()
+}
+
+export async function getTerminalSuggestions(sessionId) {
+  const res = await apiFetch(`/terminal/${encodeURIComponent(sessionId)}/suggestions`)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load terminal suggestions')
+  }
+  return res.json()
+}
+
+export async function runTerminalSuggested(sessionId, payload) {
+  const res = await apiFetch(`/terminal/${encodeURIComponent(sessionId)}/run-suggested`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to run suggested command')
+  }
+  return res.json()
+}
+
+export async function runTerminalCommand(sessionId, payload) {
+  const res = await apiFetch(`/terminal/${encodeURIComponent(sessionId)}/run`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to run terminal command')
+  }
+  return res.json()
+}
+
+export async function getTerminalOutput(sessionId, terminalId, maxChunks = 300) {
+  const res = await apiFetch(
+    `/terminal/${encodeURIComponent(sessionId)}/${encodeURIComponent(terminalId)}/output?max_chunks=${encodeURIComponent(maxChunks)}`,
+  )
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to fetch terminal output')
+  }
+  return res.json()
+}
+
+export function openTerminalSocket(sessionId, terminalId) {
+  if (typeof window === 'undefined') {
+    throw new Error('WebSocket terminal is only available in browser context')
+  }
+  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
+  const url = `${scheme}://${window.location.host}${API_BASE}/terminal/${encodeURIComponent(sessionId)}/${encodeURIComponent(terminalId)}`
+  return new WebSocket(url)
+}

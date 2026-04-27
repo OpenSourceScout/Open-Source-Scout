@@ -1,3 +1,30 @@
+.editor-terminal-toggle {
+  background: #0ea5e9;
+  color: #00131d;
+  border: none;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 18px;
+  margin-left: 12px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.editor-terminal-toggle:hover {
+  background: #38bdf8;
+  color: #0b0f14;
+}
+
+.editor-terminal-panel {
+  border-top: 1px solid var(--app-border);
+  background: #0b1117;
+  min-height: 180px;
+  max-height: 600px;
+  box-shadow: 0 -2px 12px rgba(0,0,0,0.12);
+  border-radius: 0 0 10px 10px;
+  overflow: hidden;
+  position: relative;
+}
 .editor-window-container {
   display: flex;
   flex-direction: column;
@@ -337,6 +364,14 @@
 .editor-wrapper {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+}
+
+.editor-terminal-panel {
+  flex-shrink: 0;
+  min-height: 320px;
+  max-height: 52vh;
+  border-top: 1px solid var(--app-border);
   overflow: hidden;
 }
 
