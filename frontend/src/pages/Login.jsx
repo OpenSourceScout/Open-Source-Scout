@@ -6,7 +6,7 @@ export default function Login() {
   const handleGithubClick = (e) => {
     e.preventDefault()
     window.location.href = '/api/auth/github'
-  }
+  } 
 
   return (
     <div className="min-h-screen bg-app-bg flex items-center justify-center px-4 text-app-text">

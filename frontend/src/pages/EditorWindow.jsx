@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react'
 import { useSearchParams, useLocation } from 'react-router-dom'
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react'
 import { FileCode, Pencil, ChevronDown } from 'lucide-react'
@@ -690,41 +690,68 @@ export default function EditorWindow() {
   )
 }
 
+function clampTerminalPanelHeight(h) {
+  const minH = 140
+  const maxH = Math.max(minH + 40, Math.floor(typeof window !== 'undefined' ? window.innerHeight * 0.75 : 720))
+  return Math.max(minH, Math.min(h, maxH))
+}
+
 function ResizableTerminalPanel({ show, children }) {
-  const [height, setHeight] = useState(320)
+  const [height, setHeight] = useState(() => clampTerminalPanelHeight(280))
   const dragging = useRef(false)
   const startY = useRef(0)
-  const startHeight = useRef(320)
+  const startHeight = useRef(280)
+
+  useLayoutEffect(() => {
+    setHeight((prev) => clampTerminalPanelHeight(prev))
+  }, [])
+
+  useEffect(() => {
+    const onResize = () => setHeight((prev) => clampTerminalPanelHeight(prev))
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   if (!show) return null
 
   const onMouseMove = (e) => {
     if (!dragging.current) return
-    let newHeight = startHeight.current - (startY.current - e.clientY)
-    newHeight = Math.max(180, Math.min(newHeight, 600))
-    setHeight(newHeight)
+    e.preventDefault()
+    const delta = startY.current - e.clientY
+    setHeight(clampTerminalPanelHeight(startHeight.current + delta))
   }
 
   const onMouseUp = () => {
+    if (!dragging.current) return
     dragging.current = false
     document.body.style.cursor = ''
+    document.body.style.userSelect = ''
     window.removeEventListener('mousemove', onMouseMove)
     window.removeEventListener('mouseup', onMouseUp)
   }
 
   const onMouseDown = (e) => {
+    if (e.button !== 0) return
+    e.preventDefault()
     dragging.current = true
     startY.current = e.clientY
     startHeight.current = height
     document.body.style.cursor = 'ns-resize'
-    window.addEventListener('mousemove', onMouseMove)
+    document.body.style.userSelect = 'none'
+    window.addEventListener('mousemove', onMouseMove, { passive: false })
     window.addEventListener('mouseup', onMouseUp)
   }
 
   return (
     <div className="editor-terminal-panel" style={{ height: `${height}px` }}>
-      <div className="terminal-resize-handle" onMouseDown={onMouseDown} />
-      {children}
+      <div
+        className="terminal-resize-handle"
+        onMouseDown={onMouseDown}
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize terminal panel"
+      />
+      <div className="editor-terminal-panel-body">{children}</div>
     </div>
   )
 }

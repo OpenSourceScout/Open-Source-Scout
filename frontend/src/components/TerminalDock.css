@@ -1,17 +1,19 @@
 .terminal-resize-handle {
-  height: 7px;
+  flex-shrink: 0;
+  height: 8px;
   background: linear-gradient(90deg, #23272e 60%, #0ea5e9 100%);
   cursor: ns-resize;
+  touch-action: none;
   border-top: 1px solid #222b36;
   border-bottom: 1px solid #222b36;
   width: 100%;
   z-index: 2;
   position: relative;
-  margin-bottom: 2px;
-  border-radius: 0 0 8px 8px;
+  border-radius: 0;
 }
 
 .terminal-command-row {
+  flex-shrink: 0;
   display: flex;
   gap: 8px;
   padding: 10px;
@@ -36,6 +38,11 @@
   box-sizing: border-box;
 }
 
+.terminal-command-input:focus {
+  border-color: rgba(96, 165, 250, 0.7);
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.25);
+}
+
 .terminal-tab.add {
   width: 32px;
   padding: 7px 0;
@@ -57,13 +64,16 @@
 .terminal-dock {
   display: flex;
   flex-direction: column;
-  min-height: 320px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
   background: linear-gradient(180deg, #111419 0%, #0b0f14 100%);
-  border-top: 1px solid var(--app-border);
   color: #d8e1ea;
 }
 
 .terminal-dock-header {
+  flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -140,12 +150,15 @@
 }
 
 .terminal-empty-state {
+  flex: 1;
+  min-height: 0;
   padding: 20px 16px;
   display: flex;
   gap: 12px;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
+  overflow: auto;
 }
 
 .terminal-empty-state p {
@@ -163,6 +176,7 @@
 }
 
 .terminal-toolbar {
+  flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -208,6 +222,7 @@
 }
 
 .terminal-suggestion-strip {
+  flex-shrink: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(90deg, rgba(251, 191, 36, 0.12), rgba(251, 191, 36, 0.03));
   padding: 10px 12px;
@@ -246,11 +261,12 @@
 
 .terminal-output {
   flex: 1;
-  min-height: 170px;
-  max-height: 330px;
-  overflow: auto;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
   padding: 12px;
   background: #06090d;
+  -webkit-overflow-scrolling: touch;
 }
 
 .terminal-output pre {
@@ -261,30 +277,6 @@
   font-family: 'Consolas', 'Menlo', 'Monaco', monospace;
   white-space: pre-wrap;
   word-break: break-word;
-}
-
-.terminal-command-row {
-  display: flex;
-  gap: 8px;
-  padding: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.terminal-command-input {
-  flex: 1;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: #0b1117;
-  color: #e2e8f0;
-  border-radius: 7px;
-  padding: 9px 10px;
-  font-size: 13px;
-  outline: none;
-}
-
-.terminal-command-input:focus {
-  border-color: rgba(96, 165, 250, 0.7);
-  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.25);
 }
 
 .terminal-primary,
@@ -316,6 +308,7 @@
 }
 
 .terminal-status {
+  flex-shrink: 0;
   padding: 8px 12px;
   font-size: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
@@ -333,14 +326,15 @@
 
 .terminal-run-steps {
   flex: 1;
-  min-height: 170px;
-  max-height: 330px;
-  overflow: auto;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
   padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   background: #070c12;
+  -webkit-overflow-scrolling: touch;
 }
 
 .terminal-step-card {
@@ -395,13 +389,5 @@
 
   .terminal-suggestion-actions {
     grid-column: 1 / 2;
-  }
-
-  .terminal-output {
-    max-height: 260px;
-  }
-
-  .terminal-run-steps {
-    max-height: 260px;
   }
 }
