@@ -1,7 +1,7 @@
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
-import { ClipboardList, FileText, ArrowLeft } from 'lucide-react'
-import { reAnalyzeIssue } from '../api'
+import { ClipboardList, FileText, ArrowLeft, Lock } from 'lucide-react'
+import { reAnalyzeIssue, selectProjectIssue } from '../api'
 
 function getDifficultyFromLabels(labels) {
   if (!labels || labels.length === 0) return null
@@ -59,7 +59,7 @@ function bodyPreview(body, maxLen = 140) {
 }
 
 export default function IssueRanking() {
-  const { analysisResult, setAnalysisResult, repoUrl, rankedRepos } = useOutletContext()
+  const { analysisResult, setAnalysisResult, repoUrl, rankedRepos, activeProjectId, issueLocked, setIssueLocked } = useOutletContext()
   const navigate = useNavigate()
   const [selectedIssue, setSelectedIssue] = useState(null)
   const [filterDifficulty, setFilterDifficulty] = useState('all')
@@ -101,6 +101,22 @@ export default function IssueRanking() {
         agent3_output: result.agent3_output,
         testing_output: result.testing_output,
       })
+      // Persist the selected issue to the project in DB
+      if (activeProjectId) {
+        try {
+          await selectProjectIssue(activeProjectId, {
+            issue_number: issue.number,
+            issue_title: issue.title,
+            target_issue: result.target_issue,
+          })
+          if (setIssueLocked) setIssueLocked(true)
+        } catch (lockErr) {
+          // 409 means already locked — that's fine
+          if (!lockErr.message?.includes('already locked')) {
+            console.warn('Could not lock issue in project:', lockErr)
+          }
+        }
+      }
       navigate('/analysis/code')
     } catch (err) {
       setAnalyzeError(err.message || 'Re-analysis failed. Please try again.')
@@ -319,7 +335,7 @@ export default function IssueRanking() {
                     <button
                       type="button"
                       onClick={() => handleViewCode(selectedIssue)}
-                      disabled={analyzingIssue === selectedIssue.number}
+                      disabled={analyzingIssue === selectedIssue.number || issueLocked}
                       className="flex-1 bg-accent-500 text-[#0b0f14] py-2 rounded-lg font-semibold hover:bg-accent-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                       {analyzingIssue === selectedIssue.number ? (
@@ -333,6 +349,11 @@ export default function IssueRanking() {
                             />
                           </svg>
                           Analyzing...
+                        </>
+                      ) : issueLocked ? (
+                        <>
+                          <Lock className="w-4 h-4" />
+                          Issue Locked
                         </>
                       ) : (
                         'Analyze This Issue'

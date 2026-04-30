@@ -406,3 +406,49 @@ export function openTerminalSocket(sessionId, terminalId) {
   const url = `${scheme}://${window.location.host}${API_BASE}/terminal/${encodeURIComponent(sessionId)}/${encodeURIComponent(terminalId)}`
   return new WebSocket(url)
 }
+
+// --- Project step persistence ---
+
+export async function selectProjectIssue(projectId, { issue_number, issue_title, target_issue }) {
+  const res = await apiFetch(`/projects/${projectId}/select-issue`, {
+    method: 'PATCH',
+    body: JSON.stringify({ issue_number, issue_title, target_issue }),
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to lock issue selection')
+  }
+  return res.json()
+}
+
+export async function saveProjectCodeLocator(projectId, codeLocatorOutput) {
+  const res = await apiFetch(`/projects/${projectId}/code-locator`, {
+    method: 'PATCH',
+    body: JSON.stringify({ code_locator_output: codeLocatorOutput }),
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to save code locator output')
+  }
+  return res.json()
+}
+
+export async function saveProjectBriefing(projectId, briefingOutput) {
+  const res = await apiFetch(`/projects/${projectId}/briefing`, {
+    method: 'PATCH',
+    body: JSON.stringify({ briefing_output: briefingOutput }),
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to save briefing')
+  }
+  return res.json()
+}
+
+export async function saveProjectTesting(projectId, testingOutput) {
+  const res = await apiFetch(`/projects/${projectId}/testing`, {
+    method: 'PATCH',
+    body: JSON.stringify({ testing_output: testingOutput }),
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to save testing output')
+  }
+  return res.json()
+}

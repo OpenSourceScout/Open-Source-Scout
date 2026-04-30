@@ -1,7 +1,7 @@
 import { useOutletContext, useNavigate, useLocation } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { MapPin, FileCode, Package, AlertTriangle, Pencil } from 'lucide-react'
-import { getFileContent } from '../api'
+import { getFileContent, saveProjectCodeLocator } from '../api'
 
 const BINARY_EXTENSIONS = [
   '.exe',
@@ -62,6 +62,7 @@ export default function CodeLocator() {
   const context = useOutletContext()
   const analysisResult = context?.analysisResult
   const repoInfo = context?.repoInfo
+  const activeProjectId = context?.activeProjectId
 
   const location = useLocation()
   const navigate = useNavigate()
@@ -82,6 +83,21 @@ export default function CodeLocator() {
       setSelectedFile(codeLocations[0])
     }
   }, [codeLocations])
+
+  // Persist code locator output to DB when available
+  const savedCodeLocatorRef = useRef(false)
+  useEffect(() => {
+    if (
+      activeProjectId &&
+      analysisResult?.agent2_output &&
+      !savedCodeLocatorRef.current
+    ) {
+      savedCodeLocatorRef.current = true
+      saveProjectCodeLocator(activeProjectId, analysisResult.agent2_output).catch(
+        (err) => console.warn('Could not persist code locator output:', err)
+      )
+    }
+  }, [activeProjectId, analysisResult?.agent2_output])
 
   const handleFileSelect = async (loc) => {
     setSelectedFile(loc)
