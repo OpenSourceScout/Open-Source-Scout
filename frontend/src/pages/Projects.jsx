@@ -12,6 +12,11 @@ import {
   Search,
   Code,
   AlertTriangle,
+  CheckCircle2,
+  ClipboardList,
+  MapPin,
+  FileText,
+  ShieldCheck,
 } from 'lucide-react'
 import { getProjects, renameProject, deleteProject, getProjectById } from '../api'
 
@@ -88,11 +93,21 @@ export default function Projects() {
     setLoadingProjectId(project.id)
     try {
       const full = await getProjectById(project.id)
-      const analysisResult = full.analysis_result || null
+
+      // Reconstruct analysisResult from per-step DB columns
+      const baseResult = full.analysis_result || {}
+      const analysisResult = {
+        ...baseResult,
+        // Override with per-step stored data if available
+        ...(full.target_issue ? { target_issue: full.target_issue } : {}),
+        ...(full.code_locator_output ? { agent2_output: full.code_locator_output } : {}),
+        ...(full.briefing_output ? { agent3_output: full.briefing_output } : {}),
+        ...(full.testing_output ? { testing_output: full.testing_output } : {}),
+      }
       const repoUrl = full.repo_url || null
 
       // Store in session for AnalysisLayout to pick up
-      if (analysisResult) {
+      if (analysisResult && Object.keys(analysisResult).length > 0) {
         sessionStorage.setItem('scout_analysisResult', JSON.stringify(analysisResult))
       }
       if (repoUrl) {
@@ -107,6 +122,8 @@ export default function Projects() {
         state: {
           result: analysisResult,
           repoUrl,
+          activeProjectId: full.id,
+          issueLocked: !!full.issue_locked,
         },
       })
     } catch (e) {
@@ -365,6 +382,31 @@ export default function Projects() {
                             Issue #{project.selected_issue_number}
                           </span>
                         )}
+                      </div>
+
+                      {/* Step completion indicators */}
+                      <div className="flex flex-wrap items-center gap-2 mb-4">
+                        {[
+                          { key: 'has_target_issue', label: 'Issue Selected', Icon: ClipboardList },
+                          { key: 'has_code_locator', label: 'Code Located', Icon: MapPin },
+                          { key: 'has_briefing', label: 'Briefing', Icon: FileText },
+                          { key: 'has_testing', label: 'QA Done', Icon: ShieldCheck },
+                        ].map(({ key, label, Icon }) => {
+                          const done = !!project[key]
+                          return (
+                            <span
+                              key={key}
+                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium border ${
+                                done
+                                  ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
+                                  : 'bg-app-bg text-app-muted/60 border-app-border'
+                              }`}
+                            >
+                              {done ? <CheckCircle2 className="w-3 h-3" /> : <Icon className="w-3 h-3" />}
+                              {label}
+                            </span>
+                          )
+                        })}
                       </div>
 
                       {/* Open project button */}

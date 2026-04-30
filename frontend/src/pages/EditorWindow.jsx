@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react'
 import { useSearchParams, useLocation } from 'react-router-dom'
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react'
-import { FileCode, Pencil, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { FileCode, Pencil, ChevronDown, PanelLeftClose, PanelLeftOpen, Download } from 'lucide-react'
 import { getFileContent, pushFile, pushFilesBatch } from '../api'
 import FileTree from '../components/FileTree'
 import ScoutLogo from '../components/ScoutLogo'
@@ -341,6 +341,21 @@ export default function EditorWindow() {
     setSuccess(null)
   }
 
+  // Briefing content for download button
+  const briefingMarkdown = analysisDataParam?.agent3_output?.briefing_markdown || null
+  const handleDownloadBriefing = () => {
+    if (!briefingMarkdown) return
+    const blob = new Blob([briefingMarkdown], { type: 'text/markdown' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `contributor_briefing_${repo || 'repo'}.md`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  }
+
   const startDraggingSidebar = (e) => {
     isDragging.current = true
     dragStartX.current = e.clientX
@@ -425,6 +440,17 @@ export default function EditorWindow() {
               >
                 Clear
               </button>
+              {briefingMarkdown && (
+                <button
+                  type="button"
+                  onClick={handleDownloadBriefing}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-app-muted border border-app-border rounded-lg hover:border-primary-500/40 hover:text-primary-400 transition-colors"
+                  title="Download contributor briefing as Markdown"
+                >
+                  <Download className="w-4 h-4" />
+                  Briefing
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setShowTerminalPanel((prev) => !prev)}
