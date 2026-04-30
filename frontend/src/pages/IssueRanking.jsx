@@ -1,7 +1,7 @@
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { ClipboardList, FileText, ArrowLeft, Lock } from 'lucide-react'
-import { reAnalyzeIssue, selectProjectIssue, saveProjectCodeLocator, saveProjectBriefing, saveProjectTesting } from '../api'
+import { reAnalyzeIssue, selectProjectIssue, saveProjectCodeLocator, saveProjectBriefing, saveProjectTesting, saveProjectAnalysisResult } from '../api'
 
 function getDifficultyFromLabels(labels) {
   if (!labels || labels.length === 0) return null
@@ -132,6 +132,17 @@ export default function IssueRanking() {
             (err) => console.warn('Could not persist testing output:', err)
           )
         }
+        // Save the full merged analysis result as a reliable fallback
+        const mergedResult = {
+          ...analysisResult,
+          target_issue: result.target_issue,
+          agent2_output: result.agent2_output,
+          agent3_output: result.agent3_output,
+          testing_output: result.testing_output,
+        }
+        saveProjectAnalysisResult(activeProjectId, mergedResult).catch(
+          (err) => console.warn('Could not persist full analysis result:', err)
+        )
       }
       navigate('/analysis/code')
     } catch (err) {

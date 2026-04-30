@@ -52,6 +52,7 @@ from app.db import (
     update_project_code_locator,
     update_project_briefing,
     update_project_testing,
+    update_project_analysis_result,
 )
 
 from integrations.github_client import GitHubClient
@@ -911,6 +912,22 @@ def save_testing_endpoint(project_id: int, body: SaveTestingRequest, request: Re
     uid = _require_user_id(request)
     pool = _require_pool(request)
     result = update_project_testing(pool, uid, project_id, body.testing_output)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
+class SaveAnalysisResultRequest(BaseModel):
+    """Overwrite the monolithic analysis_result JSONB."""
+    analysis_result: dict
+
+
+@app.patch("/api/projects/{project_id}/analysis-result")
+def save_analysis_result_endpoint(project_id: int, body: SaveAnalysisResultRequest, request: Request):
+    """Save the full merged analysis result back to the project."""
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+    result = update_project_analysis_result(pool, uid, project_id, body.analysis_result)
     if result is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return result

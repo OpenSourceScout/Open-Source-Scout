@@ -516,6 +516,29 @@ def rename_project(
             return _jsonable_row(row) if row else None
 
 
+def update_project_analysis_result(
+    pool: ConnectionPool,
+    user_id: int,
+    project_id: int,
+    analysis_result: dict,
+) -> dict[str, Any] | None:
+    """Overwrite the monolithic analysis_result JSONB with the latest merged state."""
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update user_projects
+                set analysis_result = %s::jsonb,
+                    updated_at = now()
+                where id = %s and user_id = %s
+                returning id, updated_at
+                """,
+                (Json(analysis_result), project_id, user_id),
+            )
+            row = fetch_one_dict(cur)
+            return _jsonable_row(row) if row else None
+
+
 def delete_project(
     pool: ConnectionPool, user_id: int, project_id: int
 ) -> bool:

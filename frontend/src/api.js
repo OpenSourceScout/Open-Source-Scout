@@ -452,3 +452,14 @@ export async function saveProjectTesting(projectId, testingOutput) {
   }
   return res.json()
 }
+
+export async function saveProjectAnalysisResult(projectId, analysisResult) {
+  const res = await apiFetch(`/projects/${projectId}/analysis-result`, {
+    method: 'PATCH',
+    body: JSON.stringify({ analysis_result: analysisResult }),
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to save analysis result')
+  }
+  return res.json()
+}
