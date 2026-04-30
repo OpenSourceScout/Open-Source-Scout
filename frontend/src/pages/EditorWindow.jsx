@@ -341,8 +341,21 @@ export default function EditorWindow() {
     setSuccess(null)
   }
 
-  // Briefing content for download button
-  const briefingMarkdown = analysisDataParam?.agent3_output?.briefing_markdown || null
+  // Briefing content for download button — try multiple sources
+  const briefingMarkdown = useMemo(() => {
+    // 1. From the analysis data passed to editor
+    const fromParam = analysisDataParam?.agent3_output?.briefing_markdown
+    if (fromParam) return fromParam
+    // 2. From the main analysis session
+    try {
+      const raw = sessionStorage.getItem('scout_analysisResult')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        return parsed?.agent3_output?.briefing_markdown || null
+      }
+    } catch { /* ignore */ }
+    return null
+  }, [analysisDataParam])
   const handleDownloadBriefing = () => {
     if (!briefingMarkdown) return
     const blob = new Blob([briefingMarkdown], { type: 'text/markdown' })
