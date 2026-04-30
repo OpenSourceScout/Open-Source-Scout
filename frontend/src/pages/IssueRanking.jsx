@@ -1,7 +1,7 @@
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { ClipboardList, FileText, ArrowLeft, Lock } from 'lucide-react'
-import { reAnalyzeIssue, selectProjectIssue } from '../api'
+import { reAnalyzeIssue, selectProjectIssue, saveProjectCodeLocator, saveProjectBriefing, saveProjectTesting } from '../api'
 
 function getDifficultyFromLabels(labels) {
   if (!labels || labels.length === 0) return null
@@ -101,7 +101,7 @@ export default function IssueRanking() {
         agent3_output: result.agent3_output,
         testing_output: result.testing_output,
       })
-      // Persist the selected issue to the project in DB
+      // Persist all outputs to the project in DB
       if (activeProjectId) {
         try {
           await selectProjectIssue(activeProjectId, {
@@ -115,6 +115,22 @@ export default function IssueRanking() {
           if (!lockErr.message?.includes('already locked')) {
             console.warn('Could not lock issue in project:', lockErr)
           }
+        }
+        // Persist agent outputs (fire-and-forget, non-blocking)
+        if (result.agent2_output) {
+          saveProjectCodeLocator(activeProjectId, result.agent2_output).catch(
+            (err) => console.warn('Could not persist code locator output:', err)
+          )
+        }
+        if (result.agent3_output) {
+          saveProjectBriefing(activeProjectId, result.agent3_output).catch(
+            (err) => console.warn('Could not persist briefing output:', err)
+          )
+        }
+        if (result.testing_output) {
+          saveProjectTesting(activeProjectId, result.testing_output).catch(
+            (err) => console.warn('Could not persist testing output:', err)
+          )
         }
       }
       navigate('/analysis/code')
