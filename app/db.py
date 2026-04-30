@@ -98,6 +98,7 @@ def init_schema(pool: ConnectionPool) -> None:
         with conn.cursor() as cur:
             cur.execute(schema_sql)
             _ensure_github_oauth_columns(cur)
+            _ensure_project_step_columns(cur)
 
 
 def _ensure_github_oauth_columns(cur) -> None:
@@ -129,6 +130,25 @@ def _ensure_github_oauth_columns(cur) -> None:
         end
         $$;
         """
+    )
+
+
+def _ensure_project_step_columns(cur) -> None:
+    """Add per-step persistence columns to user_projects (safe migration)."""
+    cur.execute(
+        "alter table user_projects add column if not exists issue_locked boolean not null default false"
+    )
+    cur.execute(
+        "alter table user_projects add column if not exists target_issue jsonb"
+    )
+    cur.execute(
+        "alter table user_projects add column if not exists code_locator_output jsonb"
+    )
+    cur.execute(
+        "alter table user_projects add column if not exists briefing_output jsonb"
+    )
+    cur.execute(
+        "alter table user_projects add column if not exists testing_output jsonb"
     )
 
 
@@ -442,6 +462,11 @@ def get_user_projects(
                 """
                 select id, name, project_type, tech_stack, repo_url,
                        repo_full_name, selected_issue_number, selected_issue_title,
+                       issue_locked,
+                       target_issue is not null as has_target_issue,
+                       code_locator_output is not null as has_code_locator,
+                       briefing_output is not null as has_briefing,
+                       testing_output is not null as has_testing,
                        created_at, updated_at
                 from user_projects
                 where user_id = %s
@@ -461,6 +486,8 @@ def get_project(
                 """
                 select id, user_id, name, project_type, tech_stack, repo_url,
                        repo_full_name, selected_issue_number, selected_issue_title,
+                       issue_locked, target_issue, code_locator_output,
+                       briefing_output, testing_output,
                        analysis_result, created_at, updated_at
                 from user_projects
                 where id = %s and user_id = %s
@@ -499,3 +526,113 @@ def delete_project(
                 (project_id, user_id),
             )
             return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Project step persistence
+# ---------------------------------------------------------------------------
+
+
+def update_project_selected_issue(
+    pool: ConnectionPool,
+    user_id: int,
+    project_id: int,
+    *,
+    issue_number: int,
+    issue_title: str | None,
+    target_issue: dict | None = None,
+) -> dict[str, Any] | None:
+    """Lock the selected issue for a project. Returns None if already locked or not found."""
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            # Only update if not already locked
+            cur.execute(
+                """
+                update user_projects
+                set selected_issue_number = %s,
+                    selected_issue_title = %s,
+                    target_issue = %s::jsonb,
+                    issue_locked = true,
+                    updated_at = now()
+                where id = %s and user_id = %s and issue_locked = false
+                returning id, selected_issue_number, selected_issue_title, issue_locked, updated_at
+                """,
+                (
+                    issue_number,
+                    issue_title,
+                    Json(target_issue) if target_issue else None,
+                    project_id,
+                    user_id,
+                ),
+            )
+            row = fetch_one_dict(cur)
+            return _jsonable_row(row) if row else None
+
+
+def update_project_code_locator(
+    pool: ConnectionPool,
+    user_id: int,
+    project_id: int,
+    code_locator_output: dict,
+) -> dict[str, Any] | None:
+    """Store Agent 2 (Archaeologist) output for a project."""
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update user_projects
+                set code_locator_output = %s::jsonb,
+                    updated_at = now()
+                where id = %s and user_id = %s
+                returning id, updated_at
+                """,
+                (Json(code_locator_output), project_id, user_id),
+            )
+            row = fetch_one_dict(cur)
+            return _jsonable_row(row) if row else None
+
+
+def update_project_briefing(
+    pool: ConnectionPool,
+    user_id: int,
+    project_id: int,
+    briefing_output: dict,
+) -> dict[str, Any] | None:
+    """Store Agent 3 (Senior Dev) output for a project."""
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update user_projects
+                set briefing_output = %s::jsonb,
+                    updated_at = now()
+                where id = %s and user_id = %s
+                returning id, updated_at
+                """,
+                (Json(briefing_output), project_id, user_id),
+            )
+            row = fetch_one_dict(cur)
+            return _jsonable_row(row) if row else None
+
+
+def update_project_testing(
+    pool: ConnectionPool,
+    user_id: int,
+    project_id: int,
+    testing_output: dict,
+) -> dict[str, Any] | None:
+    """Store Agent 4 (Testing/QA) output for a project."""
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update user_projects
+                set testing_output = %s::jsonb,
+                    updated_at = now()
+                where id = %s and user_id = %s
+                returning id, updated_at
+                """,
+                (Json(testing_output), project_id, user_id),
+            )
+            row = fetch_one_dict(cur)
+            return _jsonable_row(row) if row else None

@@ -48,6 +48,10 @@ from app.db import (
     record_tech_stack_search,
     rename_project,
     save_user_github_token,
+    update_project_selected_issue,
+    update_project_code_locator,
+    update_project_briefing,
+    update_project_testing,
 )
 
 from integrations.github_client import GitHubClient
@@ -820,6 +824,96 @@ def delete_project_endpoint(project_id: int, request: Request):
     if not deleted:
         raise HTTPException(status_code=404, detail="Project not found")
     return {"ok": True}
+
+
+# --- Project step persistence endpoints ---
+
+
+class SelectIssueRequest(BaseModel):
+    """Lock a specific issue for a project."""
+    issue_number: int
+    issue_title: str | None = None
+    target_issue: dict | None = None
+
+
+class SaveCodeLocatorRequest(BaseModel):
+    """Store Agent 2 (Archaeologist) output."""
+    code_locator_output: dict
+
+
+class SaveBriefingRequest(BaseModel):
+    """Store Agent 3 (Senior Dev) output."""
+    briefing_output: dict
+
+
+class SaveTestingRequest(BaseModel):
+    """Store Agent 4 (Testing/QA) output."""
+    testing_output: dict
+
+
+@app.patch("/api/projects/{project_id}/select-issue")
+def select_issue_endpoint(project_id: int, body: SelectIssueRequest, request: Request):
+    """
+    Lock the selected issue for a project.
+
+    Once locked, the user cannot change the selected issue for this project.
+    Returns 409 if the issue is already locked.
+    """
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+    result = update_project_selected_issue(
+        pool,
+        uid,
+        project_id,
+        issue_number=body.issue_number,
+        issue_title=body.issue_title,
+        target_issue=body.target_issue,
+    )
+    if result is None:
+        # Could be not found OR already locked
+        project = get_project(pool, uid, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if project.get("issue_locked"):
+            raise HTTPException(
+                status_code=409,
+                detail="Issue is already locked for this project. Delete the project and create a new one to select a different issue.",
+            )
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
+@app.patch("/api/projects/{project_id}/code-locator")
+def save_code_locator_endpoint(project_id: int, body: SaveCodeLocatorRequest, request: Request):
+    """Persist Agent 2 (Archaeologist) output for a project."""
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+    result = update_project_code_locator(pool, uid, project_id, body.code_locator_output)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
+@app.patch("/api/projects/{project_id}/briefing")
+def save_briefing_endpoint(project_id: int, body: SaveBriefingRequest, request: Request):
+    """Persist Agent 3 (Senior Dev) output for a project."""
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+    result = update_project_briefing(pool, uid, project_id, body.briefing_output)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
+
+
+@app.patch("/api/projects/{project_id}/testing")
+def save_testing_endpoint(project_id: int, body: SaveTestingRequest, request: Request):
+    """Persist Agent 4 (Testing/QA) output for a project."""
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+    result = update_project_testing(pool, uid, project_id, body.testing_output)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return result
 
 
 @app.get("/api/repos/{owner}/{repo}/tree")
