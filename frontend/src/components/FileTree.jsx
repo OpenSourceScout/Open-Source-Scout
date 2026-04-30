@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { ChevronRight, ChevronDown, FileCode, Folder, FolderOpen, AlertCircle } from 'lucide-react'
 import './FileTree.css'
 
@@ -80,7 +80,7 @@ export default function FileTree({
               type: 'file',
               path: file.path,
               size: file.size || 0,
-              highlighted: file.highlighted === true,  // Use backend's highlighted flag directly
+              highlighted: file.highlighted === true || highlightedFiles.includes(file.path),
               modified: modifiedFiles.includes(file.path),
             }
           } else {
@@ -148,6 +148,25 @@ export default function FileTree({
     }
     setExpandedDirs(newExpanded)
   }
+
+  // Auto-expand directories that contain highlighted files
+  useEffect(() => {
+    if (highlightedFiles.length === 0) {
+      setExpandedDirs(new Set(['']))
+      return
+    }
+    
+    const dirsToExpand = new Set([''])
+    highlightedFiles.forEach(filePath => {
+      const parts = filePath.split('/').filter(p => p.length > 0)
+      let currentPath = ''
+      for (let i = 0; i < parts.length - 1; i++) {
+        currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i]
+        dirsToExpand.add(currentPath)
+      }
+    })
+    setExpandedDirs(dirsToExpand)
+  }, [highlightedFiles])
 
   const handleFileClick = (filePath) => {
     setSelectedFile(filePath)
@@ -245,7 +264,6 @@ export default function FileTree({
   return (
     <div className="file-tree-container">
       <div className="tree-header">
-        <h3 className="tree-title">Repository</h3>
         <div className="tree-stats">
           <span className="stat-line">
             {highlightedCount}/{totalCount}

@@ -25,7 +25,9 @@ export default function CodeLocator({ results }) {
     }
     const analysisKey = `scout-editor-analysis-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
     try {
-      sessionStorage.setItem(analysisKey, JSON.stringify(payload))
+      const serialized = JSON.stringify(payload)
+      sessionStorage.setItem(analysisKey, serialized)
+      localStorage.setItem(analysisKey, serialized)
       params.set('analysisKey', analysisKey)
     } catch (e) {
       console.error('Could not store analysis for editor tab', e)

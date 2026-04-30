@@ -1,13 +1,28 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react'
 import { useSearchParams, useLocation } from 'react-router-dom'
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react'
-import { FileCode, Pencil, ChevronDown } from 'lucide-react'
+import { FileCode, Pencil, ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { getFileContent, pushFile, pushFilesBatch } from '../api'
 import FileTree from '../components/FileTree'
 import ScoutLogo from '../components/ScoutLogo'
 import TerminalDock from '../components/TerminalDock'
 import { getLanguage } from '../utils/editorLanguage'
 import './EditorWindow.css'
+
+function extractHighlightedPathsFromAnalysis(analysis) {
+  if (!analysis || typeof analysis !== 'object') return []
+
+  const hits = analysis?.agent2_output?.hits
+  if (!Array.isArray(hits)) return []
+
+  return Array.from(
+    new Set(
+      hits
+        .map((hit) => (typeof hit?.path === 'string' ? hit.path.trim() : ''))
+        .filter(Boolean)
+    )
+  )
+}
 
 export default function EditorWindow() {
   const [searchParams] = useSearchParams()
@@ -21,7 +36,7 @@ export default function EditorWindow() {
   const analysisFromTabOpen = useMemo(() => {
     if (!analysisKey) return null
     try {
-      const raw = sessionStorage.getItem(analysisKey)
+      const raw = sessionStorage.getItem(analysisKey) || localStorage.getItem(analysisKey)
       if (!raw) return null
       return JSON.parse(raw)
     } catch {
@@ -34,6 +49,10 @@ export default function EditorWindow() {
     analysisFromTabOpen ??
     location.state?.analysisData ??
     location.state?.analysisResult
+  const fallbackHighlightedFiles = useMemo(
+    () => extractHighlightedPathsFromAnalysis(analysisDataParam),
+    [analysisDataParam]
+  )
 
   const [owner, setOwner] = useState(ownerParam || '')
   const [repo, setRepo] = useState(repoParam || '')
@@ -61,6 +80,8 @@ export default function EditorWindow() {
   const [reviewSelectedPath, setReviewSelectedPath] = useState(null)
   // Terminal panel is hidden by default
   const [showTerminalPanel, setShowTerminalPanel] = useState(false)
+  const [showRepoPanel, setShowRepoPanel] = useState(true)
+  const [showRightPanel, setShowRightPanel] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState(280)
   const [rightPanelWidth, setRightPanelWidth] = useState(250)
   const isDragging = useRef(false)
@@ -145,14 +166,26 @@ export default function EditorWindow() {
         }
         
         const data = await response.json()
-        setFileTree(data.files || [])
-        setHighlightedCount(data.highlighted_count || 0)
-        
-        // Extract highlighted files from the response
-        const highlighted = data.files
+        const highlightedFromTree = data.files
           ?.filter(f => f.highlighted === true && f.type === 'file')
           .map(f => f.path) || []
-        setHighlightedFiles(highlighted)
+        const combinedHighlighted = Array.from(new Set([
+          ...highlightedFromTree,
+          ...fallbackHighlightedFiles,
+        ]))
+
+        const highlightedSet = new Set(combinedHighlighted)
+        const normalizedFiles = (data.files || []).map((file) => {
+          if (file?.type !== 'file') return file
+          return {
+            ...file,
+            highlighted: file.highlighted === true || highlightedSet.has(file.path),
+          }
+        })
+
+        setFileTree(normalizedFiles)
+        setHighlightedFiles(combinedHighlighted)
+        setHighlightedCount(Math.max(data.highlighted_count || 0, combinedHighlighted.length))
         
         // Debug logging
         console.debug('Tree API Response:', {
@@ -166,12 +199,29 @@ export default function EditorWindow() {
         console.debug(`Loaded ${data.files?.length || 0} files, ${data.highlighted_count || 0} highlighted`)
       } catch (err) {
         console.error('Failed to load file tree:', err)
+
+        if (fallbackHighlightedFiles.length > 0) {
+          const fallbackFiles = fallbackHighlightedFiles.map((filePath) => ({
+            path: filePath,
+            type: 'file',
+            size: 0,
+            highlighted: true,
+          }))
+          setFileTree(fallbackFiles)
+          setHighlightedFiles(fallbackHighlightedFiles)
+          setHighlightedCount(fallbackHighlightedFiles.length)
+          setError(
+            `GitHub file tree is rate-limited right now (${err.message}). Showing Code Locator highlighted files only.`
+          )
+          return
+        }
+
         setError(`Error loading file tree: ${err.message}`)
       }
     }
 
     loadFileTree()
-  }, [ownerParam, repoParam, refParam, analysisDataParam])
+  }, [ownerParam, repoParam, refParam, analysisDataParam, fallbackHighlightedFiles])
 
   // Load initial file if provided
   useEffect(() => {
@@ -494,24 +544,44 @@ export default function EditorWindow() {
       {/* Main Content */}
       <div className="editor-main-container">
         {/* Left Sidebar - File Tree */}
-        <div className="editor-sidebar" style={{ width: `${sidebarWidth}px` }}>
-          {ownerParam && repoParam && (
-            <FileTree
-              files={fileTree}
-              highlightedFiles={highlightedFiles}
-              highlightedCount={highlightedCount}
-              modifiedFiles={Array.from(modifiedFiles)}
-              onFileSelect={handleFileSelect}
-              onlyShowHighlighted={false}
-            />
-          )}
-        </div>
+        {showRepoPanel && (
+          <div className="editor-sidebar" style={{ width: `${sidebarWidth}px` }}>
+            <div className="repo-panel-header">
+              <div className="repo-panel-title-wrap">
+                <span className="repo-panel-kicker">Repository</span>
+                <span className="repo-panel-subtitle">File tree</span>
+              </div>
+              <button
+                type="button"
+                className="repo-collapse-btn"
+                onClick={() => setShowRepoPanel(false)}
+                title="Collapse repository panel"
+                aria-label="Collapse repository panel"
+              >
+                <PanelLeftClose size={16} />
+                {/* <span></span> */}
+              </button>
+            </div>
+            {ownerParam && repoParam && (
+              <FileTree
+                files={fileTree}
+                highlightedFiles={highlightedFiles}
+                highlightedCount={highlightedCount}
+                modifiedFiles={Array.from(modifiedFiles)}
+                onFileSelect={handleFileSelect}
+                onlyShowHighlighted={false}
+              />
+            )}
+          </div>
+        )}
 
         {/* Sidebar Divider */}
-        <div
-          className="editor-divider vertical"
-          onMouseDown={startDraggingSidebar}
-        />
+        {showRepoPanel && (
+          <div
+            className="editor-divider vertical"
+            onMouseDown={startDraggingSidebar}
+          />
+        )}
 
         {/* Center - Monaco Editor */}
         <div className="editor-center">
@@ -620,9 +690,21 @@ export default function EditorWindow() {
         </div>
 
         {/* Right Panel - Metadata */}
+        {showRightPanel && (
         <div className="editor-right-panel" style={{ width: `${rightPanelWidth}px` }}>
+          <div className="right-panel-header">
+            <h3 className="panel-section-title" style={{margin: 0}}>File Info</h3>
+            <button
+              type="button"
+              onClick={() => setShowRightPanel(false)}
+              className="panel-collapse-btn"
+              title="Collapse panel"
+            >
+              ✕
+            </button>
+          </div>
           <div className="right-panel-content">
-            <h3 className="panel-section-title">File Info</h3>
+            <div className="panel-section-title" style={{marginTop: 0}}>Details</div>
             
             {path ? (
               <div className="panel-section">
@@ -685,6 +767,29 @@ export default function EditorWindow() {
             )}
           </div>
         </div>
+        )}
+        {!showRightPanel && (
+          <button
+            type="button"
+            onClick={() => setShowRightPanel(true)}
+            className="panel-expand-btn"
+            title="Expand panel"
+          >
+            ◀
+          </button>
+        )}
+        {!showRepoPanel && (
+          <button
+            type="button"
+            onClick={() => setShowRepoPanel(true)}
+            className="repo-expand-btn"
+            title="Expand repository panel"
+            aria-label="Expand repository panel"
+          >
+            <PanelLeftOpen size={16} />
+            <span>Repo</span>
+          </button>
+        )}
       </div>
     </div>
   )
