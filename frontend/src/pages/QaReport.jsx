@@ -1,5 +1,7 @@
 import { useOutletContext, useNavigate } from 'react-router-dom'
+import { useEffect, useRef } from 'react'
 import { ShieldCheck, AlertTriangle, CheckCircle2, XCircle, Lightbulb, RefreshCw, ClipboardList } from 'lucide-react'
+import { saveProjectTesting } from '../api'
 
 function getScoreColor(score) {
   if (score >= 80) return 'text-emerald-400'
@@ -14,10 +16,25 @@ function getScoreBarColor(score) {
 }
 
 export default function QaReport() {
-  const { analysisResult, repoInfo } = useOutletContext()
+  const { analysisResult, repoInfo, activeProjectId } = useOutletContext()
   const navigate = useNavigate()
 
   const testing = analysisResult?.testing_output
+
+  // Persist testing output to DB when available
+  const savedTestingRef = useRef(false)
+  useEffect(() => {
+    if (
+      activeProjectId &&
+      testing &&
+      !savedTestingRef.current
+    ) {
+      savedTestingRef.current = true
+      saveProjectTesting(activeProjectId, testing).catch(
+        (err) => console.warn('Could not persist testing output:', err)
+      )
+    }
+  }, [activeProjectId, testing])
 
   const empty = (title, body, btn) => (
     <div className="flex items-center justify-center h-full min-h-[50vh] bg-app-bg">

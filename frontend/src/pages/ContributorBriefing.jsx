@@ -1,5 +1,5 @@
 import { useOutletContext, useNavigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -17,7 +17,7 @@ import {
   PanelRightClose,
   ChevronLeft,
 } from 'lucide-react'
-import { exportPdf } from '../api'
+import { exportPdf, saveProjectBriefing } from '../api'
 
 const briefingProseClass =
   'prose prose-invert prose-base max-w-none ' +
@@ -46,6 +46,7 @@ export default function ContributorBriefing() {
     repoInfo,
     analysisNavOpen = true,
     toggleAnalysisNav,
+    activeProjectId,
   } = outlet
   const navigate = useNavigate()
   const [exporting, setExporting] = useState(false)
@@ -67,6 +68,21 @@ export default function ContributorBriefing() {
       setPrBody(briefing.pr_draft.pr_body || '')
     }
   }, [briefing.pr_draft])
+
+  // Persist briefing output to DB when available
+  const savedBriefingRef = useRef(false)
+  useEffect(() => {
+    if (
+      activeProjectId &&
+      analysisResult?.agent3_output &&
+      !savedBriefingRef.current
+    ) {
+      savedBriefingRef.current = true
+      saveProjectBriefing(activeProjectId, analysisResult.agent3_output).catch(
+        (err) => console.warn('Could not persist briefing output:', err)
+      )
+    }
+  }, [activeProjectId, analysisResult?.agent3_output])
 
   useEffect(() => {
     if (!repoInfo?.owner || !repoInfo?.name) {
