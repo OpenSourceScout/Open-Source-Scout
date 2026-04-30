@@ -45,6 +45,36 @@ export default function AnalysisLayout() {
     }
   })
 
+  // Project-level state for step persistence
+  const [activeProjectId, setActiveProjectId] = useState(() => {
+    try {
+      const v = sessionStorage.getItem('scout_activeProjectId')
+      return v ? parseInt(v, 10) : null
+    } catch {
+      return null
+    }
+  })
+  const [issueLocked, setIssueLocked] = useState(() => {
+    try {
+      return sessionStorage.getItem('scout_issueLocked') === '1'
+    } catch {
+      return false
+    }
+  })
+
+  // Persist activeProjectId and issueLocked to sessionStorage
+  useEffect(() => {
+    if (activeProjectId != null) {
+      sessionStorage.setItem('scout_activeProjectId', String(activeProjectId))
+    } else {
+      sessionStorage.removeItem('scout_activeProjectId')
+    }
+  }, [activeProjectId])
+
+  useEffect(() => {
+    sessionStorage.setItem('scout_issueLocked', issueLocked ? '1' : '0')
+  }, [issueLocked])
+
   const toggleAnalysisNav = useCallback(() => {
     setAnalysisNavOpen((prev) => {
       const next = !prev
@@ -86,6 +116,13 @@ export default function AnalysisLayout() {
         setRankedRepos(location.state.rankedRepos)
         sessionStorage.setItem('scout_rankedRepos', JSON.stringify(location.state.rankedRepos))
       }
+      // Pick up project context from navigation state
+      if (location.state.activeProjectId != null) {
+        setActiveProjectId(location.state.activeProjectId)
+      }
+      if (location.state.issueLocked != null) {
+        setIssueLocked(!!location.state.issueLocked)
+      }
     }
   }, [location.state])
 
@@ -102,10 +139,14 @@ export default function AnalysisLayout() {
     sessionStorage.removeItem('scout_repoInfo')
     sessionStorage.removeItem('scout_repoUrl')
     sessionStorage.removeItem('scout_rankedRepos')
+    sessionStorage.removeItem('scout_activeProjectId')
+    sessionStorage.removeItem('scout_issueLocked')
     setAnalysisResultRaw(null)
     setRepoInfo(null)
     setRepoUrl(null)
     setRankedRepos(null)
+    setActiveProjectId(null)
+    setIssueLocked(false)
   }
 
   return (
@@ -144,9 +185,14 @@ export default function AnalysisLayout() {
             rankedRepos,
             analysisNavOpen,
             toggleAnalysisNav,
+            activeProjectId,
+            setActiveProjectId,
+            issueLocked,
+            setIssueLocked,
           }}
         />
       </main>
     </div>
   )
 }
+
