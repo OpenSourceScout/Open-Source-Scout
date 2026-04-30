@@ -97,21 +97,23 @@ export default function Dashboard() {
       const result = await runAnalyze({ repo_url: repoUrl, beginner_only: beginnerOnly })
       setAnalysisResult(result)
 
-      // Auto-create project in background
+      // Auto-create project in background and capture its ID
       const repoMatch = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/)
       const repoFullName = repoMatch ? `${repoMatch[1]}/${repoMatch[2]}` : repoUrl
       const repoName = repoMatch ? repoMatch[2] : repoUrl
+      let createdProjectId = null
       try {
-        await createProject({
+        const proj = await createProject({
           name: repoName,
           project_type: 'repo_url',
           repo_url: repoUrl,
           repo_full_name: repoFullName,
           analysis_result: result,
         })
+        createdProjectId = proj?.id || null
       } catch (_) { /* limit reached or other error — non-blocking */ }
 
-      navigate('/analysis', { state: { result, repoUrl } })
+      navigate('/analysis', { state: { result, repoUrl, activeProjectId: createdProjectId } })
     } catch (err) {
       setError(typeof err === 'object' ? (err.message || JSON.stringify(err)) : String(err))
     } finally {
@@ -126,10 +128,11 @@ export default function Dashboard() {
     try {
       const result = await runAnalyze({ repo_url: repo.url })
 
-      // Auto-create project in background
+      // Auto-create project in background and capture its ID
       const repoName = repo.full_name.split('/')[1] || repo.full_name
+      let createdProjectId = null
       try {
-        await createProject({
+        const proj = await createProject({
           name: repoName,
           project_type: 'tech_stack',
           tech_stack: techTags.length > 0 ? techTags : undefined,
@@ -137,9 +140,10 @@ export default function Dashboard() {
           repo_full_name: repo.full_name,
           analysis_result: result,
         })
+        createdProjectId = proj?.id || null
       } catch (_) { /* limit reached or other error — non-blocking */ }
 
-      navigate('/analysis', { state: { result, repoUrl: repo.url, rankedRepos } })
+      navigate('/analysis', { state: { result, repoUrl: repo.url, rankedRepos, activeProjectId: createdProjectId } })
     } catch (err) {
       setError(typeof err === 'object' ? (err.message || JSON.stringify(err)) : String(err))
     } finally {
