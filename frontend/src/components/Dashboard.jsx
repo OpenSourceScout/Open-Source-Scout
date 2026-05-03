@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
 import { Search, Rocket, Settings, User, Github, ExternalLink, FolderKanban } from 'lucide-react'
-import { searchReposByTechStack, runAnalyze, createProject } from '../api'
+import { searchReposByTechStack, runAnalyze, createProject, getMe } from '../api'
 import ScoutLogo from './ScoutLogo'
 
 const QUICK_ADD_TAGS = ['Python', 'JavaScript', 'React', 'Node.js', 'TypeScript', 'Go', 'Java', 'Rust']
@@ -56,6 +56,15 @@ export default function Dashboard() {
   const [rankedRepos, setRankedRepos] = useState(null)
   const [selectedRepo, setSelectedRepo] = useState(null)
   const [analysisResult, setAnalysisResult] = useState(null)
+  const [user, setUser] = useState(null)
+
+  useEffect(() => {
+    getMe().then(setUser).catch(() => setUser(null))
+  }, [])
+
+  const displayName = user?.display_name || user?.email?.split('@')[0] || 'Developer'
+  const userEmail = user?.email || ''
+  const monogram = displayName.charAt(0).toUpperCase()
 
   const addTag = (tag) => {
     if (tag && !techTags.includes(tag)) {
@@ -457,12 +466,12 @@ export default function Dashboard() {
               to="/profile"
               className="flex items-center gap-3 flex-1 px-2 py-1.5 rounded-lg hover:bg-app-elevated transition-colors duration-200"
             >
-              <div className="w-8 h-8 bg-app-elevated border border-app-border rounded-full flex items-center justify-center text-app-muted shrink-0">
-                <User className="w-4 h-4" />
+              <div className="w-8 h-8 rounded-full bg-primary-500/20 border border-primary-500/30 flex items-center justify-center shrink-0 text-sm font-bold text-primary-400 uppercase">
+                {monogram}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-app-text truncate">Developer</p>
-                <p className="text-xs text-app-muted truncate">View Profile</p>
+                <p className="text-sm font-medium text-app-text truncate">{displayName}</p>
+                {userEmail && <p className="text-xs text-app-muted truncate">{userEmail}</p>}
               </div>
             </Link>
             <Link
