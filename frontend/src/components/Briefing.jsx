@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
-import { FileDown, FileText, ClipboardList, FlaskConical, AlertTriangle } from 'lucide-react'
+import { FileDown, FileText, ClipboardList, FlaskConical, AlertTriangle, Download } from 'lucide-react'
 import { exportPdf } from '../api'
 import './Briefing.css'
 
 export default function Briefing({ results }) {
   const agent3 = results?.agent3_output
   const [copyMsg, setCopyMsg] = useState(null)
+  const [exporting, setExporting] = useState(false)
 
   if (!results?.success || !agent3) {
     return (
@@ -28,6 +29,7 @@ export default function Briefing({ results }) {
   }
 
   const handleDownloadPdf = async () => {
+    setExporting(true)
     try {
       const blob = await exportPdf(agent3.briefing_markdown)
       const url = URL.createObjectURL(blob)
@@ -38,6 +40,8 @@ export default function Briefing({ results }) {
       URL.revokeObjectURL(url)
     } catch (err) {
       alert(err.message)
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -56,8 +60,10 @@ ${pr.pr_body}`
   return (
     <div className="briefing">
       <div className="briefing-actions">
-        <button className="btn" onClick={handleDownloadMd}><FileDown className="w-4 h-4 inline mr-1" /> Download Markdown</button>
-        <button className="btn" onClick={handleDownloadPdf}><FileText className="w-4 h-4 inline mr-1" /> Download PDF</button>
+        <button className="btn" onClick={handleDownloadPdf} disabled={exporting}>
+          <FileDown className="w-4 h-4 inline mr-1" /> {exporting ? 'Exporting…' : 'Download PDF'}
+        </button>
+        <button className="btn" onClick={handleDownloadMd}><Download className="w-4 h-4 inline mr-1" /> Download Markdown</button>
         <button className="btn" onClick={handleCopyPR}>
           <ClipboardList className="w-4 h-4 inline mr-1" /> Copy PR Draft {copyMsg && `(${copyMsg})`}
         </button>

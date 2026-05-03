@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } from 'react'
 import { useSearchParams, useLocation } from 'react-router-dom'
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react'
-import { FileCode, Pencil, ChevronDown, PanelLeftClose, PanelLeftOpen, Download } from 'lucide-react'
-import { getFileContent, pushFile, pushFilesBatch } from '../api'
+import { FileCode, Pencil, ChevronDown, PanelLeftClose, PanelLeftOpen, Download, FileDown } from 'lucide-react'
+import { getFileContent, pushFile, pushFilesBatch, exportPdf } from '../api'
 import FileTree from '../components/FileTree'
 import ScoutLogo from '../components/ScoutLogo'
 import TerminalDock from '../components/TerminalDock'
@@ -72,6 +72,7 @@ export default function EditorWindow() {
   // UI state
   const [loading, setLoading] = useState(false)
   const [pushing, setPushing] = useState(false)
+  const [exportingBriefing, setExportingBriefing] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
 
@@ -356,17 +357,25 @@ export default function EditorWindow() {
     } catch { /* ignore */ }
     return null
   }, [analysisDataParam])
-  const handleDownloadBriefing = () => {
+  const handleDownloadBriefing = async () => {
     if (!briefingMarkdown) return
-    const blob = new Blob([briefingMarkdown], { type: 'text/markdown' })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `contributor_briefing_${repo || 'repo'}.md`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    window.URL.revokeObjectURL(url)
+    setExportingBriefing(true)
+    try {
+      const blob = await exportPdf(briefingMarkdown)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `contributor_briefing_${repo || 'repo'}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Briefing PDF export failed:', err)
+      setError('Failed to export briefing as PDF: ' + err.message)
+    } finally {
+      setExportingBriefing(false)
+    }
   }
 
   const startDraggingSidebar = (e) => {
@@ -457,11 +466,24 @@ export default function EditorWindow() {
                 <button
                   type="button"
                   onClick={handleDownloadBriefing}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-app-muted border border-app-border rounded-lg hover:border-primary-500/40 hover:text-primary-400 transition-colors"
-                  title="Download contributor briefing as Markdown"
+                  disabled={exportingBriefing}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-app-muted border border-app-border rounded-lg hover:border-primary-500/40 hover:text-primary-400 transition-colors disabled:opacity-40"
+                  title="Download contributor briefing as PDF"
                 >
-                  <Download className="w-4 h-4" />
-                  Briefing
+                  {exportingBriefing ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Exporting…
+                    </>
+                  ) : (
+                    <>
+                      <FileDown className="w-4 h-4" />
+                      Briefing PDF
+                    </>
+                  )}
                 </button>
               )}
               <button
