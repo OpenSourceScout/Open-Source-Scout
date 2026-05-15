@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, useOutletContext, Navigate } from 'react-router-dom'
-import { LayoutDashboard, FolderOpen, Check, Star, Wrench, Monitor } from 'lucide-react'
+import { FolderOpen } from 'lucide-react'
 import LandingPage from './components/LandingPage.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import AnalysisLayout from './components/AnalysisLayout.jsx'
