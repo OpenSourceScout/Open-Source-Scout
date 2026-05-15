@@ -56,3 +56,13 @@ Thumbs.db
 # Frontend build output — built by Railway during deploy, not committed
 frontend/dist/
 frontend/node_modules/
+
+# Test output artifacts
+*_test_results.txt
+*_e2e_results.txt
+test-results/
+
+# Debug artifacts
+commits.txt
+backend_debug.log
+verify_*.py

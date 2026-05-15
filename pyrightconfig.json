@@ -1,0 +1,10 @@
+{
+    "exclude": [
+        "**/.cache",
+        "**/.venv",
+        "**/venv",
+        "**/node_modules",
+        "**/frontend",
+        "**/.agents"
+    ]
+}

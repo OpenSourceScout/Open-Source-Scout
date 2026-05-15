@@ -80,10 +80,10 @@ You need **two terminals** - one for the backend, one for the frontend.
 **Terminal 1 - Start the FastAPI backend:**
 ```bash
 # Using uv (recommended)
-uv run uvicorn app.api:app --reload --port 8001
+uv run uvicorn app.api:app --reload --port 8003
 
 # Or using pip (with venv activated)
-python -m uvicorn app.api:app --reload --port 8001
+python -m uvicorn app.api:app --reload --port 8003
 ```
 
 **Terminal 2 - Start the React frontend:**
@@ -110,23 +110,11 @@ cp .env.example .env
 cd frontend && npm install && cd ..
 
 # Run (in separate terminals)
-# Terminal 1: uv run uvicorn app.api:app --reload --port 8001
+# Terminal 1: uv run uvicorn app.api:app --reload --port 8003
 # Terminal 2: cd frontend && npm run dev
 
 # Open http://localhost:5173
 ```
-
-### Running the Streamlit App (Legacy)
-
-```bash
-# Using uv
-uv run streamlit run app/main.py
-
-# Or using pip (with venv activated)
-streamlit run app/main.py
-```
-
-The app will open at `http://localhost:8501`
 
 ### API Endpoints
 
@@ -219,7 +207,6 @@ A modern HTTP client with good documentation and clear issues.
 ```
 Open-Source-Scout/
 ├── app/
-│   ├── main.py              # Streamlit UI (legacy)
 │   └── api.py               # FastAPI backend (REST)
 ├── frontend/                 # React + Vite + Tailwind CSS
 │   ├── src/
@@ -311,4 +298,4 @@ Contributions are welcome! Feel free to:
 
 ---
 
-Built with ❤️ using Streamlit, Groq, and the GitHub API.
+Built with ❤️ using FastAPI, React, and the GitHub API.
