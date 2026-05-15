@@ -34,7 +34,7 @@ def test_gold_keywords_include_issue_terms():
 
 def test_gold_search_top_hit_is_expected_file():
     assert GOLD_ROOT.is_dir()
-    issue_title = "Fix compute_fee edge case for amount_cents"
+    # issue_title = "Fix compute_fee edge case for amount_cents"
     searcher = CodeSearcher(GOLD_ROOT)
     results = searcher.search("compute_fee", max_results=20)
     assert results, "search should find the symbol"

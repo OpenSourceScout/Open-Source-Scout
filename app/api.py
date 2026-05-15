@@ -476,11 +476,6 @@ def run_analyze(body: AnalyzeRequest, request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/test-post")
-def test_post(request: Request):
-    print("Test POST hit!", flush=True)
-    return {"success": True}
-
 
 @app.post("/api/re-analyze-issue")
 def re_analyze_issue(body: ReAnalyzeRequest, request: Request):

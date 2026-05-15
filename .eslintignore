@@ -1,0 +1,7 @@
+.cache/
+.venv/
+venv/
+node_modules/
+dist/
+build/
+.agents/
