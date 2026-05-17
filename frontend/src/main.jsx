@@ -5,6 +5,7 @@ import { FolderOpen } from 'lucide-react'
 import LandingPage from './components/LandingPage.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import AnalysisLayout from './components/AnalysisLayout.jsx'
+import MemoryCitationPill from './components/MemoryCitationPill.jsx'
 import Login from './pages/Login.jsx'
 import Signup from './pages/Signup.jsx'
 import OAuthCallback from './pages/OAuthCallback.jsx'
@@ -16,9 +17,13 @@ import EditorWindow from './pages/EditorWindow.jsx'
 import Profile from './pages/Profile.jsx'
 import Projects from './pages/Projects.jsx'
 import AnalysisDashboard from './pages/AnalysisDashboard.jsx'
+import DecisionTrace from './pages/DecisionTrace.jsx'
+import AgentMemory from './pages/AgentMemory.jsx'
 import SettingsPage from './pages/Settings.jsx'
 import './index.css'
 import { isLoggedIn, isAdmin } from './auth'
+import { feedbackRepoSelection, feedbackThumbs } from './api'
+import { ThumbsUp, ThumbsDown } from 'lucide-react'
 
 // RepositoriesView - shows ranked repos from tech stack search
 function RepositoriesView() {
@@ -42,11 +47,17 @@ function RepositoriesView() {
 
   return (
     <div className="p-6 bg-app-bg min-h-full">
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-app-text">Discovered Repositories</h2>
-        <p className="text-app-muted text-sm">
-          {rankedRepos.ranked_repos.length} repositories matched your tech stack: {rankedRepos.tech_stack?.join(', ')}
-        </p>
+      <div className="mb-6 flex flex-wrap items-start gap-3 justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-app-text">Discovered Repositories</h2>
+          <p className="text-app-muted text-sm">
+            {rankedRepos.ranked_repos.length} repositories matched your tech stack: {rankedRepos.tech_stack?.join(', ')}
+          </p>
+        </div>
+        <MemoryCitationPill
+          recalledMemoryIds={rankedRepos.recalled_memory_ids}
+          memorySummary={rankedRepos.memory_summary}
+        />
       </div>
 
       <div className="space-y-6">
@@ -145,6 +156,35 @@ function RepositoriesView() {
                     Currently Selected
                   </span>
                 )}
+                <button
+                  type="button"
+                  onClick={() => feedbackRepoSelection({ repo_url: repo.url, action: 'skipped' })}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 border border-app-border rounded-lg text-app-muted hover:bg-app-elevated transition-colors text-sm font-medium"
+                >
+                  Skip
+                </button>
+                <div className="flex items-center gap-1 border border-app-border rounded-lg p-1 bg-app-bg">
+                  <button
+                    type="button"
+                    title="Good match"
+                    onClick={() =>
+                      feedbackThumbs({ target_type: 'repo', target_id: repo.full_name, vote: 'up' })
+                    }
+                    className="p-2 rounded-md text-app-muted hover:text-emerald-400 hover:bg-app-elevated"
+                  >
+                    <ThumbsUp className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Poor match"
+                    onClick={() =>
+                      feedbackThumbs({ target_type: 'repo', target_id: repo.full_name, vote: 'down' })
+                    }
+                    className="p-2 rounded-md text-app-muted hover:text-red-400 hover:bg-app-elevated"
+                  >
+                    <ThumbsDown className="w-4 h-4" />
+                  </button>
+                </div>
                 <a
                   href={repo.url}
                   target="_blank"
@@ -194,6 +234,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="issues" element={<IssueRanking />} />
           <Route path="code" element={<CodeLocator />} />
           <Route path="briefing" element={<ContributorBriefing />} />
+          <Route path="decision-trace" element={<DecisionTrace />} />
+          <Route path="agent-memory" element={<AgentMemory />} />
           <Route path="qa-report" element={<RequireAdmin><QaReport /></RequireAdmin>} />
         </Route>
         <Route path="/editor" element={<RequireAuth><EditorWindow /></RequireAuth>} />

@@ -12,6 +12,8 @@ import {
   Package,
   FolderKanban,
   PanelLeftClose,
+  Gauge,
+  Brain,
 } from 'lucide-react'
 import ScoutLogo from './ScoutLogo'
 import { getMe } from '../api'
@@ -23,6 +25,8 @@ const NAV_ITEMS = [
   { path: '/analysis/issues', label: 'Issue analysis', Icon: ClipboardList },
   { path: '/analysis/code', label: 'Code Locator', Icon: MapPin },
   { path: '/analysis/briefing', label: 'Contributor Briefing', Icon: FileText },
+  { path: '/analysis/decision-trace', label: 'Decision Trace', Icon: Gauge },
+  { path: '/analysis/agent-memory', label: 'Agent Memory', Icon: Brain },
   { path: '/analysis/qa-report', label: 'QA Report', Icon: ShieldCheck, adminOnly: true },
 ]
 
