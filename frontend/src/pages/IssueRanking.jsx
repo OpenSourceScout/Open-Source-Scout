@@ -1,7 +1,17 @@
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
-import { ClipboardList, FileText, ArrowLeft, Lock } from 'lucide-react'
-import { reAnalyzeIssue, selectProjectIssue, saveProjectCodeLocator, saveProjectBriefing, saveProjectTesting, saveProjectAnalysisResult } from '../api'
+import { ClipboardList, FileText, ArrowLeft, Lock, RefreshCw, ThumbsUp, ThumbsDown } from 'lucide-react'
+import {
+  reAnalyzeIssue,
+  selectProjectIssue,
+  saveProjectCodeLocator,
+  saveProjectBriefing,
+  saveProjectTesting,
+  saveProjectAnalysisResult,
+  feedbackIssueInteraction,
+  feedbackThumbs,
+} from '../api'
+import MemoryCitationPill from '../components/MemoryCitationPill'
 
 function getDifficultyFromLabels(labels) {
   if (!labels || labels.length === 0) return null
@@ -68,6 +78,13 @@ export default function IssueRanking() {
 
   const issues = analysisResult?.agent1_output?.ranked_issues || []
 
+  const lockedIssueNumber = (() => {
+    const fromTarget = analysisResult?.target_issue?.number
+    if (fromTarget != null && fromTarget > 0) return fromTarget
+    const fromAgent = analysisResult?.agent1_output?.selected_issue_number
+    return fromAgent != null && fromAgent > 0 ? fromAgent : null
+  })()
+
   const filteredIssues =
     filterDifficulty === 'all'
       ? issues
@@ -75,6 +92,20 @@ export default function IssueRanking() {
           const diff = getDifficultyFromLabels(i.labels)
           return diff === filterDifficulty
         })
+
+  const blockedDifferentIssue =
+    !!selectedIssue &&
+    issueLocked &&
+    lockedIssueNumber != null &&
+    selectedIssue.number !== lockedIssueNumber
+
+  const analyzeIssueDisabled =
+    !!selectedIssue && (analyzingIssue === selectedIssue.number || blockedDifferentIssue)
+
+  const primaryAnalyzeClasses =
+    'flex-1 bg-accent-500 text-[#0b0f14] py-2 rounded-lg font-semibold hover:bg-accent-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2'
+  const mutedLockedAnalyzeClasses =
+    'flex-1 bg-app-bg border border-app-border text-app-muted py-2 rounded-lg font-semibold cursor-not-allowed flex items-center justify-center gap-2'
 
   const handleIssueSelect = (issue) => {
     setSelectedIssue(issue)
@@ -88,6 +119,7 @@ export default function IssueRanking() {
     }
     setAnalyzingIssue(issue.number)
     setAnalyzeError(null)
+    feedbackIssueInteraction({ issue_url: issue.url, action: 'opened' })
     try {
       const result = await reAnalyzeIssue({
         repo_url: repoUrl,
@@ -96,6 +128,7 @@ export default function IssueRanking() {
       })
       setAnalysisResult({
         ...analysisResult,
+        cascadeflow_run: result.cascadeflow_run ?? analysisResult?.cascadeflow_run,
         target_issue: result.target_issue,
         agent2_output: result.agent2_output,
         agent3_output: result.agent3_output,
@@ -135,6 +168,7 @@ export default function IssueRanking() {
         // Save the full merged analysis result as a reliable fallback
         const mergedResult = {
           ...analysisResult,
+          cascadeflow_run: result.cascadeflow_run ?? analysisResult?.cascadeflow_run,
           target_issue: result.target_issue,
           agent2_output: result.agent2_output,
           agent3_output: result.agent3_output,
@@ -177,11 +211,17 @@ export default function IssueRanking() {
     <div className="h-full flex flex-col bg-app-bg text-app-text">
       <header className="bg-app-surface border-b border-app-border px-6 py-4 shrink-0">
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-lg font-semibold text-app-text">Issue analysis</h1>
-            <p className="text-sm text-app-muted">
-              {issues.length} issues from the triage agent, ranked for contribution fit
-            </p>
+          <div className="flex flex-wrap items-center gap-3 justify-between">
+            <div>
+              <h1 className="text-lg font-semibold text-app-text">Issue analysis</h1>
+              <p className="text-sm text-app-muted">
+                {issues.length} issues from the triage agent, ranked for contribution fit
+              </p>
+            </div>
+            <MemoryCitationPill
+              recalledMemoryIds={analysisResult?.agent1_output?.recalled_memory_ids}
+              memorySummary={analysisResult?.agent1_output?.memory_summary}
+            />
           </div>
           <select
             value={filterDifficulty}
@@ -235,6 +275,37 @@ export default function IssueRanking() {
                     </p>
                   )}
 
+                  <div className="flex items-center gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      title="Good suggestion"
+                      onClick={() =>
+                        feedbackThumbs({
+                          target_type: 'issue',
+                          target_id: issue.url || String(issue.number),
+                          vote: 'up',
+                        })
+                      }
+                      className="rounded-md border border-app-border p-1.5 text-app-muted hover:text-emerald-400 bg-app-bg"
+                    >
+                      <ThumbsUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Poor suggestion"
+                      onClick={() =>
+                        feedbackThumbs({
+                          target_type: 'issue',
+                          target_id: issue.url || String(issue.number),
+                          vote: 'down',
+                        })
+                      }
+                      className="rounded-md border border-app-border p-1.5 text-app-muted hover:text-red-400 bg-app-bg"
+                    >
+                      <ThumbsDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
                   {issue.labels && issue.labels.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-2">
                       {issue.labels.slice(0, 3).map((label, i) => (
@@ -261,7 +332,7 @@ export default function IssueRanking() {
           {selectedIssue ? (
             <div className="p-6">
               <div className="bg-app-surface rounded-xl border border-app-border p-6">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-start justify-between mb-4 gap-3 flex-wrap">
                   <span
                     className={`px-3 py-1 rounded-full text-sm font-medium ${getDifficultyColor(
                       getDifficultyFromLabels(selectedIssue.labels)
@@ -269,9 +340,16 @@ export default function IssueRanking() {
                   >
                     {getDifficultyFromLabels(selectedIssue.labels) || 'Standard'}
                   </span>
-                  <span className={`text-2xl font-bold ${getScoreColor(selectedIssue.score_total)}`}>
-                    {selectedIssue.score_total}/100
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <MemoryCitationPill
+                      recalledMemoryIds={analysisResult?.agent1_output?.recalled_memory_ids}
+                      memorySummary={analysisResult?.agent1_output?.memory_summary}
+                      compact
+                    />
+                    <span className={`text-2xl font-bold ${getScoreColor(selectedIssue.score_total)}`}>
+                      {selectedIssue.score_total}/100
+                    </span>
+                  </div>
                 </div>
 
                 <div className="mb-4">
@@ -362,8 +440,8 @@ export default function IssueRanking() {
                     <button
                       type="button"
                       onClick={() => handleViewCode(selectedIssue)}
-                      disabled={analyzingIssue === selectedIssue.number || issueLocked}
-                      className="flex-1 bg-accent-500 text-[#0b0f14] py-2 rounded-lg font-semibold hover:bg-accent-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      disabled={analyzeIssueDisabled}
+                      className={blockedDifferentIssue ? mutedLockedAnalyzeClasses : primaryAnalyzeClasses}
                     >
                       {analyzingIssue === selectedIssue.number ? (
                         <>
@@ -377,10 +455,15 @@ export default function IssueRanking() {
                           </svg>
                           Analyzing...
                         </>
-                      ) : issueLocked ? (
+                      ) : blockedDifferentIssue ? (
                         <>
-                          <Lock className="w-4 h-4" />
-                          Issue Locked
+                          <Lock className="w-4 h-4 shrink-0" />
+                          Locked to #{lockedIssueNumber}
+                        </>
+                      ) : issueLocked && lockedIssueNumber === selectedIssue.number ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 shrink-0" />
+                          Re-analyze this issue
                         </>
                       ) : (
                         'Analyze This Issue'
@@ -397,6 +480,21 @@ export default function IssueRanking() {
                       </a>
                     )}
                   </div>
+                  {issueLocked &&
+                    lockedIssueNumber != null &&
+                    selectedIssue.number !== lockedIssueNumber && (
+                      <p className="text-xs text-app-muted leading-relaxed">
+                        This saved project is tied to issue #{lockedIssueNumber}. To work on a different issue, start a{' '}
+                        <button
+                          type="button"
+                          className="text-primary-400 hover:underline font-medium"
+                          onClick={() => navigate('/dashboard')}
+                        >
+                          new analysis from the dashboard
+                        </button>
+                        .
+                      </p>
+                    )}
                   {analyzeError && (
                     <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">{analyzeError}</div>
                   )}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { Search, Rocket, Settings, User, Github, ExternalLink, FolderKanban } from 'lucide-react'
-import { searchReposByTechStack, runAnalyze, createProject, getMe } from '../api'
+import { Search, Rocket, Settings, User, Github, ExternalLink, FolderKanban, ThumbsUp, ThumbsDown } from 'lucide-react'
+import { searchReposByTechStack, runAnalyze, createProject, getMe, feedbackRepoSelection, feedbackThumbs } from '../api'
 import ScoutLogo from './ScoutLogo'
 
 const QUICK_ADD_TAGS = ['Python', 'JavaScript', 'React', 'Node.js', 'TypeScript', 'Go', 'Java', 'Rust']
@@ -134,6 +134,7 @@ export default function Dashboard() {
     setSelectedRepo(repo)
     setLoading(true)
     setError(null)
+    feedbackRepoSelection({ repo_url: repo.url, action: 'selected' })
     try {
       const result = await runAnalyze({ repo_url: repo.url })
 
@@ -294,6 +295,35 @@ export default function Dashboard() {
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                   {isAnalyzingThis ? 'Analyzing...' : 'Analyze Repository'}
                 </button>
+                <button
+                  type="button"
+                  onClick={() => feedbackRepoSelection({ repo_url: repo.url, action: 'skipped' })}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 border border-app-border rounded-lg text-app-muted hover:bg-app-elevated transition-colors text-sm font-medium"
+                >
+                  Skip
+                </button>
+                <div className="flex items-center gap-1 border border-app-border rounded-lg p-1 bg-app-bg">
+                  <button
+                    type="button"
+                    title="Helpful match"
+                    onClick={() =>
+                      feedbackThumbs({ target_type: 'repo', target_id: repo.full_name, vote: 'up' })
+                    }
+                    className="p-2 rounded-md text-app-muted hover:text-emerald-400 hover:bg-app-elevated"
+                  >
+                    <ThumbsUp className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Not a good match"
+                    onClick={() =>
+                      feedbackThumbs({ target_type: 'repo', target_id: repo.full_name, vote: 'down' })
+                    }
+                    className="p-2 rounded-md text-app-muted hover:text-red-400 hover:bg-app-elevated"
+                  >
+                    <ThumbsDown className="w-4 h-4" />
+                  </button>
+                </div>
                 <a
                   href={repo.url}
                   target="_blank"

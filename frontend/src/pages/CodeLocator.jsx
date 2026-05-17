@@ -2,6 +2,7 @@ import { useOutletContext, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
 import { MapPin, FileCode, Package, AlertTriangle, Pencil } from 'lucide-react'
 import { getFileContent, saveProjectCodeLocator } from '../api'
+import MemoryCitationPill from '../components/MemoryCitationPill'
 
 const BINARY_EXTENSIONS = [
   '.exe',
@@ -202,6 +203,12 @@ export default function CodeLocator() {
                 <span className="text-primary-400"> for issue #{issueNumber}</span>
               )}
             </p>
+            <div className="mt-2">
+              <MemoryCitationPill
+                recalledMemoryIds={analysisResult?.agent2_output?.recalled_memory_ids}
+                memorySummary={analysisResult?.agent2_output?.memory_summary}
+              />
+            </div>
             {targetIssue && (
               <div className="mt-2 text-sm text-app-text space-y-1">
                 <p className="font-medium leading-snug">{targetIssue.title}</p>
