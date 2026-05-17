@@ -13,6 +13,8 @@ from core.schemas import (
     RepoScoreBreakdown,
 )
 
+ANON_HEADERS = {"X-User-Id": "pytest-slide-anon"}
+
 
 @pytest.fixture
 def client():
@@ -74,6 +76,7 @@ class TestSearchReposIntegration:
             PA.return_value.run.return_value = out
             r = client.post(
                 "/api/search-repos",
+                headers=ANON_HEADERS,
                 json={"tech_stack": ["python"], "fast_model": "openai/gpt-oss-120b"},
             )
         assert r.status_code == 200
@@ -92,6 +95,7 @@ class TestAnalyzeRateLimitHandling:
             Orch.return_value.run_phase1.side_effect = fail
             r = client.post(
                 "/api/analyze",
+                headers=ANON_HEADERS,
                 json={"repo_url": "https://github.com/a/b"},
             )
         assert r.status_code in (429, 500)
@@ -111,6 +115,7 @@ class TestReAnalyzeErrors:
             Gh.return_value.get_issue.side_effect = RuntimeError("not found")
             r = client.post(
                 "/api/re-analyze-issue",
+                headers=ANON_HEADERS,
                 json={
                     "repo_url": "https://github.com/a/b",
                     "issue_number": 99999,

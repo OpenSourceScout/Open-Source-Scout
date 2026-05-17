@@ -9,6 +9,8 @@ from fastapi.testclient import TestClient
 from app.api import app
 from core.schemas import Agent1Output, GitHubRepo, RankedIssue, RepoInfo, ScoreBreakdown
 
+ANON_HEADERS = {"X-User-Id": "pytest-anonymous-user"}
+
 
 @pytest.fixture
 def client():
@@ -26,7 +28,7 @@ class TestHealth:
 
 class TestSearchReposValidation:
     def test_empty_tech_stack_400(self, client):
-        r = client.post("/api/search-repos", json={"tech_stack": []})
+        r = client.post("/api/search-repos", json={"tech_stack": []}, headers=ANON_HEADERS)
         assert r.status_code == 400
         assert "technology" in r.json()["detail"].lower()
 
@@ -44,6 +46,7 @@ class TestAnalyzePhase1Mocked:
             Gq.return_value = MagicMock()
             r = client.post(
                 "/api/analyze",
+                headers=ANON_HEADERS,
                 json={
                     "repo_url": "https://github.com/a/b",
                     "beginner_only": True,
@@ -106,6 +109,7 @@ class TestAnalyzePhase1Mocked:
             Gq.return_value = MagicMock()
             r = client.post(
                 "/api/analyze",
+                headers=ANON_HEADERS,
                 json={"repo_url": "https://github.com/a/b"},
             )
         assert r.status_code == 200
