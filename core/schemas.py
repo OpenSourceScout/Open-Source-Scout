@@ -36,6 +36,8 @@ class PathfinderOutput(BaseModel):
     tech_stack: List[str] = Field(description="User's input tech stack")
     ranked_repos: List[RankedRepo] = Field(description="Top ranked repositories")
     search_queries_used: List[str] = Field(default_factory=list, description="Search queries used")
+    recalled_memory_ids: List[str] = Field(default_factory=list)
+    memory_summary: str = Field(default="", description="Human-readable memory influence summary")
 
 
 # ==================== Agent 1: Triage Nurse ====================
@@ -77,6 +79,8 @@ class Agent1Output(BaseModel):
     repo: RepoInfo = Field(description="Repository information")
     ranked_issues: List[RankedIssue] = Field(description="Top ranked issues")
     selected_issue_number: int = Field(description="The selected issue number for next step")
+    recalled_memory_ids: List[str] = Field(default_factory=list)
+    memory_summary: str = Field(default="", description="Human-readable memory influence summary")
 
 
 # ==================== Agent 2: Archaeologist ====================
@@ -98,6 +102,8 @@ class Agent2Output(BaseModel):
     call_trace_hint: List[str] = Field(default_factory=list, description="Suggested call trace")
     confidence: str = Field(description="Confidence level: High, Medium, or Low")
     next_files_to_check: List[str] = Field(default_factory=list, description="Additional files to review")
+    recalled_memory_ids: List[str] = Field(default_factory=list)
+    memory_summary: str = Field(default="", description="Human-readable memory influence summary")
 
 
 # ==================== Agent 3: Senior Dev ====================
@@ -116,6 +122,8 @@ class Agent3Output(BaseModel):
     pr_draft: PRDraft = Field(description="Draft PR content")
     test_commands: List[str] = Field(default_factory=list, description="Commands to run tests")
     risk_notes: List[str] = Field(default_factory=list, description="Potential risks to watch for")
+    recalled_memory_ids: List[str] = Field(default_factory=list)
+    memory_summary: str = Field(default="", description="Human-readable memory influence summary")
 
 
 # ==================== Agent 4: Testing Agent ====================

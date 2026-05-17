@@ -9,6 +9,8 @@ from core.agents.base import BaseAgent
 from core.schemas import (
     RankedRepo, RepoScoreBreakdown, PathfinderOutput
 )
+from core.memory.hindsight_client import get_scout_hindsight
+from core.runtime.groq_context import pipeline_user_id_var
 from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B
 
 
@@ -76,8 +78,34 @@ Be encouraging and help users find projects where they can make meaningful contr
         Returns:
             PathfinderOutput with ranked repositories
         """
+        self.activate_agent_llm_context()
         self.log(f"Searching repositories for tech stack: {', '.join(tech_stack)}")
-        
+
+        recalled_memory_ids: list[str] = []
+        memory_summary = ""
+        user_memory_section = ""
+        uid = pipeline_user_id_var.get()
+        if uid:
+            try:
+                hx = get_scout_hindsight()
+                memories = hx.recall_sync(
+                    uid,
+                    f"past tech stack preferences and repo history for stack: {','.join(tech_stack)}",
+                    top_k=10,
+                )
+                recalled_memory_ids = [
+                    str(m.get("memory_id") or "") for m in memories if m.get("memory_id")
+                ]
+                recalled_memory_ids = [x for x in recalled_memory_ids if x]
+                if memories:
+                    lines = "\n".join(f"- {(m.get('text') or '')[:400]}" for m in memories[:10])
+                    user_memory_section = f"\n\n## What I know about this user\n{lines}\n"
+                    memory_summary = (
+                        f"Influenced by {len(recalled_memory_ids)} past memories about your preferences"
+                    )
+            except Exception as e:
+                self.log(f"Hindsight recall skipped: {e}", level="warning")
+
         # Normalize tech stack
         normalized_stack = [t.strip().lower() for t in tech_stack if t.strip()]
         
@@ -85,7 +113,9 @@ Be encouraging and help users find projects where they can make meaningful contr
             return PathfinderOutput(
                 tech_stack=tech_stack,
                 ranked_repos=[],
-                search_queries_used=[]
+                search_queries_used=[],
+                recalled_memory_ids=recalled_memory_ids,
+                memory_summary=memory_summary,
             )
         
         # Generate search queries based on tech stack
@@ -114,21 +144,26 @@ Be encouraging and help users find projects where they can make meaningful contr
             return PathfinderOutput(
                 tech_stack=tech_stack,
                 ranked_repos=[],
-                search_queries_used=search_queries
+                search_queries_used=search_queries,
+                recalled_memory_ids=recalled_memory_ids,
+                memory_summary=memory_summary,
             )
         
         # Score and rank repositories
         ranked_repos = self._score_and_rank_repos(
-            unique_repos, 
+            unique_repos,
             normalized_stack,
             github_client,
-            top_n
+            top_n,
+            user_memory_section,
         )
         
         return PathfinderOutput(
             tech_stack=tech_stack,
             ranked_repos=ranked_repos,
-            search_queries_used=search_queries
+            search_queries_used=search_queries,
+            recalled_memory_ids=recalled_memory_ids,
+            memory_summary=memory_summary,
         )
     
     def _generate_search_queries(self, tech_stack: List[str]) -> List[str]:
@@ -193,7 +228,8 @@ Be encouraging and help users find projects where they can make meaningful contr
         repos: list,
         user_stack: List[str],
         github_client,
-        top_n: int
+        top_n: int,
+        user_memory_section: str = "",
     ) -> List[RankedRepo]:
         """Score repositories and return top N ranked."""
         scored_repos = []
@@ -212,7 +248,7 @@ Be encouraging and help users find projects where they can make meaningful contr
         ranked = []
         for repo, score_result in scored_repos[:top_n]:
             # Get enhanced description from LLM
-            why_match = self._generate_match_reasons(repo, user_stack, score_result)
+            why_match = self._generate_match_reasons(repo, user_stack, score_result, user_memory_section)
             
             ranked.append(RankedRepo(
                 full_name=repo.full_name,
@@ -359,7 +395,8 @@ Be encouraging and help users find projects where they can make meaningful contr
         self,
         repo,
         user_stack: List[str],
-        score_result: dict
+        score_result: dict,
+        user_memory_section: str = "",
     ) -> List[str]:
         """Generate human-readable reasons why this repo matches the user."""
         try:
@@ -372,6 +409,7 @@ Stars: {repo.stargazers_count}
 Open Issues: {repo.open_issues_count}
 
 User's Tech Stack: {', '.join(user_stack)}
+{user_memory_section}
 
 Score Breakdown:
 - Tech Match: {score_result['tech_match']}/40

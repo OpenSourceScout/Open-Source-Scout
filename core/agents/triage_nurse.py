@@ -9,6 +9,8 @@ from core.schemas import (
     GitHubIssue, GitHubRepo, Agent1Output,
     RankedIssue, RepoInfo
 )
+from core.memory.hindsight_client import get_scout_hindsight
+from core.runtime.groq_context import pipeline_user_id_var
 from core.scoring import IssueScorer
 from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B
 
@@ -70,8 +72,37 @@ Be encouraging but honest about difficulty levels."""
         Returns:
             Agent1Output with ranked issues
         """
+        self.activate_agent_llm_context()
         self.log(f"Analyzing {len(issues)} issues for {repo.full_name}")
-        
+
+        recalled_memory_ids: list[str] = []
+        memory_summary = ""
+        patterns_section = ""
+        uid = pipeline_user_id_var.get()
+        repo_language = (repo.language or "").strip()
+        if not repo_language and repo.languages:
+            repo_language = next(iter(repo.languages.keys()), "")
+        if uid:
+            try:
+                hx = get_scout_hindsight()
+                memories = hx.recall_sync(
+                    uid,
+                    f"issue completion patterns in {repo_language}: labels, size, complexity",
+                    top_k=8,
+                )
+                recalled_memory_ids = [
+                    str(m.get("memory_id") or "") for m in memories if m.get("memory_id")
+                ]
+                recalled_memory_ids = [x for x in recalled_memory_ids if x]
+                if memories:
+                    lines = "\n".join(f"- {(m.get('text') or '')[:400]}" for m in memories[:8])
+                    patterns_section = f"\n\n## User completion patterns\n{lines}\n"
+                    memory_summary = (
+                        f"Influenced by {len(recalled_memory_ids)} past memories about issue preferences"
+                    )
+            except Exception as e:
+                self.log(f"Hindsight recall skipped: {e}", level="warning")
+
         if not issues:
             # Return empty result if no issues
             return Agent1Output(
@@ -82,7 +113,9 @@ Be encouraging but honest about difficulty levels."""
                     languages=list(repo.languages.keys())[:5] if repo.languages else None
                 ),
                 ranked_issues=[],
-                selected_issue_number=0
+                selected_issue_number=0,
+                recalled_memory_ids=recalled_memory_ids,
+                memory_summary=memory_summary,
             )
         
         # Score all issues
@@ -92,7 +125,7 @@ Be encouraging but honest about difficulty levels."""
         ranked_issues = []
         for issue, score_result in ranked:
             # Get LLM to enhance the reasons
-            enhanced_reasons = self._enhance_reasons(issue, score_result.reasons)
+            enhanced_reasons = self._enhance_reasons(issue, score_result.reasons, patterns_section)
             
             ranked_issues.append(RankedIssue(
                 number=issue.number,
@@ -121,13 +154,16 @@ Be encouraging but honest about difficulty levels."""
                 languages=list(repo.languages.keys())[:5] if repo.languages else None
             ),
             ranked_issues=ranked_issues,
-            selected_issue_number=selected
+            selected_issue_number=selected,
+            recalled_memory_ids=recalled_memory_ids,
+            memory_summary=memory_summary,
         )
     
     def _enhance_reasons(
         self,
         issue: GitHubIssue,
-        base_reasons: List[str]
+        base_reasons: List[str],
+        patterns_section: str = "",
     ) -> List[str]:
         """Use LLM to enhance scoring reasons."""
         try:
@@ -143,6 +179,7 @@ Labels: {', '.join(issue.labels) if issue.labels else 'None'}
 
 Base analysis notes:
 {chr(10).join('- ' + r for r in base_reasons)}
+{patterns_section}
 {feedback_ctx}
 Respond with a JSON object containing a "reasons" array of 3-4 short, specific bullet points. Each should be one sentence. Focus on actionability and encouragement.
 

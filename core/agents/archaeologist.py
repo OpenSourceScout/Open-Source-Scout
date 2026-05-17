@@ -3,10 +3,13 @@ Agent 2: Archaeologist - Code locator and tracer.
 """
 from typing import List, Optional
 from pathlib import Path
+from urllib.parse import urlparse
 import json
 
 from core.agents.base import BaseAgent
 from core.schemas import GitHubIssue, Agent2Output, CodeHit
+from core.memory.hindsight_client import get_scout_hindsight
+from core.runtime.groq_context import pipeline_user_id_var
 from integrations.groq_client import GroqClient
 from utils.code_search import CodeSearcher
 from utils.text_chunking import extract_keywords, truncate_to_tokens
@@ -64,8 +67,40 @@ When uncertain, indicate lower confidence rather than guessing."""
         Returns:
             Agent2Output with code locations
         """
+        self.activate_agent_llm_context()
         self.log(f"Searching codebase for issue #{issue.number}")
-        
+
+        recalled_memory_ids: list[str] = []
+        memory_summary = ""
+        known_facts_section = ""
+        uid = pipeline_user_id_var.get()
+        owner_guess, repo_guess = "", ""
+        path_parts = urlparse(issue.html_url).path.strip("/").split("/")
+        if len(path_parts) >= 2:
+            owner_guess, repo_guess = path_parts[0], path_parts[1]
+        if uid and owner_guess and repo_guess:
+            try:
+                hx = get_scout_hindsight()
+                memories = hx.recall_sync(
+                    uid,
+                    f"prior facts about repo {owner_guess}/{repo_guess}: structure, conventions",
+                    top_k=5,
+                )
+                recalled_memory_ids = [
+                    str(m.get("memory_id") or "") for m in memories if m.get("memory_id")
+                ]
+                recalled_memory_ids = [x for x in recalled_memory_ids if x]
+                if memories:
+                    lines = "\n".join(f"- {(m.get('text') or '')[:500]}" for m in memories[:5])
+                    known_facts_section = (
+                        f"\n\n## Known facts about this repo (from prior analyses)\n{lines}\n"
+                    )
+                    memory_summary = (
+                        f"Influenced by {len(recalled_memory_ids)} memories about repository conventions"
+                    )
+            except Exception as e:
+                self.log(f"Hindsight recall skipped: {e}", level="warning")
+
         # Initialize searcher
         searcher = CodeSearcher(repo_path)
         
@@ -76,7 +111,9 @@ When uncertain, indicate lower confidence rather than guessing."""
         self.log(f"Extracted keywords: {keywords}")
         
         # Get LLM to suggest search strategies
-        search_strategies = self._get_search_strategy(issue, keywords, file_tree)
+        search_strategies = self._get_search_strategy(
+            issue, keywords, file_tree, known_facts_section
+        )
         
         # Perform searches
         all_results = []
@@ -139,16 +176,20 @@ When uncertain, indicate lower confidence rather than guessing."""
         
         # Use LLM to analyze and enhance findings
         enhanced_output = self._analyze_findings(
-            issue, hits, keywords, search_strategies
+            issue, hits, keywords, search_strategies, known_facts_section
         )
-        
-        return enhanced_output
+
+        out_dict = enhanced_output.model_dump()
+        out_dict["recalled_memory_ids"] = recalled_memory_ids
+        out_dict["memory_summary"] = memory_summary
+        return Agent2Output(**out_dict)
     
     def _get_search_strategy(
         self,
         issue: GitHubIssue,
         keywords: List[str],
-        file_tree: List[str]
+        file_tree: List[str],
+        known_facts_section: str = "",
     ) -> List[str]:
         """Get LLM-suggested search queries."""
         try:
@@ -167,6 +208,7 @@ Keywords extracted: {', '.join(keywords)}
 
 Sample files in repo:
 {chr(10).join(sample_files[:30])}
+{known_facts_section}
 {feedback_ctx}
 Respond with a JSON object containing a "queries" array of search terms/patterns to find the relevant code.
 Include:
@@ -213,7 +255,8 @@ Example: {{"queries": ["handleSubmit", "ValidationError", "user_input", "form.py
         issue: GitHubIssue,
         hits: List[CodeHit],
         keywords: List[str],
-        strategies: List[str]
+        strategies: List[str],
+        known_facts_section: str = "",
     ) -> Agent2Output:
         """Use LLM to analyze and enhance code findings."""
         try:
@@ -232,6 +275,7 @@ Issue description:
 
 Code locations found:
 {hits_summary}
+{known_facts_section}
 {feedback_ctx}
 Based on this analysis, provide:
 1. For each file hit, explain WHY it's relevant (be specific)

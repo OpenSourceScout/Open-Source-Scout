@@ -6,9 +6,11 @@ import json
 
 from core.agents.base import BaseAgent
 from core.schemas import (
-    GitHubIssue, GitHubRepo, Agent1Output, Agent2Output, 
+    GitHubIssue, GitHubRepo, Agent1Output, Agent2Output,
     Agent3Output, PRDraft
 )
+from core.memory.hindsight_client import get_scout_hindsight
+from core.runtime.groq_context import pipeline_user_id_var
 from integrations.groq_client import GroqClient
 
 
@@ -68,13 +70,42 @@ Explain the 'why' behind each step."""
         Returns:
             Agent3Output with briefing document and PR draft
         """
+        self.activate_agent_llm_context()
         self.log(f"Generating briefing for issue #{issue.number}")
-        
+
+        recalled_memory_ids: list[str] = []
+        memory_summary = ""
+        style_preamble = ""
+        uid = pipeline_user_id_var.get()
+        if uid:
+            try:
+                hx = get_scout_hindsight()
+                reflect_ctx = {
+                    "fix_summary": f"#{issue.number}: {issue.title}",
+                    "file_changes": [h.path for h in agent2_output.hits[:15]],
+                    "language": repo.language or "",
+                }
+                ref = hx.reflect_sync(
+                    uid,
+                    "What fix-plan tone, PR description style, and commit-message convention "
+                    "does this user prefer?",
+                    reflect_ctx,
+                )
+                recalled_memory_ids = list(ref.get("cited_memory_ids") or [])
+                ans = (ref.get("answer") or "").strip()
+                if ans:
+                    style_preamble = f"## User Style Preamble\n{ans}\n\n"
+                    memory_summary = (
+                        f"Influenced by reflection citing {len(recalled_memory_ids)} memories"
+                    )
+            except Exception as e:
+                self.log(f"Hindsight reflect skipped: {e}", level="warning")
+
         # Build the context for the LLM
         context = self._build_context(repo, issue, agent1_output, agent2_output)
-        
+
         # Generate the briefing document
-        briefing = self._generate_briefing(context)
+        briefing = self._generate_briefing(context, style_preamble)
         
         # Generate PR draft
         pr_draft = self._generate_pr_draft(issue, agent2_output)
@@ -89,7 +120,9 @@ Explain the 'why' behind each step."""
             briefing_markdown=briefing,
             pr_draft=pr_draft,
             test_commands=test_commands,
-            risk_notes=risk_notes
+            risk_notes=risk_notes,
+            recalled_memory_ids=recalled_memory_ids,
+            memory_summary=memory_summary,
         )
     
     def _build_context(
@@ -145,13 +178,14 @@ Explain the 'why' behind each step."""
             }
         }
     
-    def _generate_briefing(self, context: dict) -> str:
+    def _generate_briefing(self, context: dict, style_preamble: str = "") -> str:
         """Generate the contributor briefing document."""
         feedback_ctx = self._get_feedback_prompt()
         prompt = f"""Write a Contributor Briefing as Markdown for a new open-source contributor.
 
 You MUST strictly follow this exact Markdown template. Do NOT omit the `#`, `##`, or `- **` Markdown symbols! Do NOT wrap your response in ```markdown tags. Output the raw text.
 
+{style_preamble}
 TEMPLATE:
 # Contributor Briefing: <Issue Title>
 

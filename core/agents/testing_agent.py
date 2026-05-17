@@ -73,6 +73,7 @@ class TestingAgent(BaseAgent):
         pathfinder_output: Optional[PathfinderOutput] = None,
     ) -> TestingAgentOutput:
         """Validate all upstream agent outputs and return a QA report."""
+        self.activate_agent_llm_context()
         self.log("Starting QA validation of pipeline outputs")
 
         # Phase 1: Structural validation (deterministic)
