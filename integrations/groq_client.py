@@ -13,7 +13,11 @@ from pydantic import BaseModel
 import requests
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
-from core.runtime.agent_profiles import kpi_weights_for_agent, model_pool_for_agent
+from core.runtime.agent_profiles import (
+    GROQ_API_KEY_ENV,
+    kpi_weights_for_agent,
+    model_pool_for_agent,
+)
 from core.runtime.cascadeflow_init import get_cascadeflow_mode
 from core.runtime.groq_context import next_groq_step_index, trace_metadata
 
@@ -78,6 +82,17 @@ _LATENCY_PRIOR_LOGICAL: dict[str, float] = {
 }
 
 
+def groq_api_key_for_agent(agent_name: str) -> Optional[str]:
+    """Resolve Groq API key for an agent; falls back to GROQ_API_KEY."""
+    name = (agent_name or "").strip()
+    env_var = GROQ_API_KEY_ENV.get(name)
+    if env_var:
+        key = os.getenv(env_var)
+        if key:
+            return key
+    return os.getenv("GROQ_API_KEY")
+
+
 class GroqClient:
     """Client for Groq API with retry logic and structured outputs."""
 
@@ -99,14 +114,25 @@ class GroqClient:
     DEFAULT_FAST_MODEL = "openai/gpt-oss-120b"
     DEFAULT_POWERFUL_MODEL = "llama-3.3-70b"
 
-    def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or os.getenv("GROQ_API_KEY")
+    def __init__(self, api_key: Optional[str] = None, *, agent_name: Optional[str] = None):
+        if api_key is not None:
+            self.api_key = api_key
+        else:
+            self.api_key = groq_api_key_for_agent(agent_name or "")
         if not self.api_key:
-            raise ValueError("GROQ_API_KEY is required")
+            env_hint = GROQ_API_KEY_ENV.get((agent_name or "").strip(), "GROQ_API_KEY")
+            raise ValueError(
+                f"Groq API key required: set {env_hint} or GROQ_API_KEY"
+            )
 
         self.session = requests.Session()
         self.session.headers["Authorization"] = f"Bearer {self.api_key}"
         self.session.headers["Content-Type"] = "application/json"
+
+    @classmethod
+    def for_agent(cls, agent_name: str) -> "GroqClient":
+        """Build a client using the dedicated API key for this agent."""
+        return cls(agent_name=agent_name)
 
     def _logical_key_for(self, model: Optional[str]) -> str:
         if not model:

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Brain, Trash2 } from 'lucide-react'
+import { Brain, RefreshCw, Trash2 } from 'lucide-react'
 import { fetchMemorySummary, resetMemoryBank } from '../api'
 
 function freshnessBadge(f) {
@@ -22,17 +22,25 @@ export default function AgentMemory() {
   const [resetStep, setResetStep] = useState(0)
   const [resetting, setResetting] = useState(false)
 
-  const load = () => {
+  const load = useCallback(() => {
+    setError(null)
     setLoading(true)
     fetchMemorySummary()
       .then(setData)
       .catch((e) => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false))
-  }
+  }, [])
 
   useEffect(() => {
     load()
-  }, [])
+    const interval = setInterval(load, 30000)
+    const onFocus = () => load()
+    window.addEventListener('focus', onFocus)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [load])
 
   const observations = data?.observations || []
   const mental = data?.mental_models || []
@@ -78,16 +86,35 @@ export default function AgentMemory() {
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard')}
-          className="rounded-lg border border-app-border px-4 py-2 text-sm text-app-muted hover:border-primary-500/40 hover:text-primary-400"
-        >
-          ← Dashboard
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-app-border px-4 py-2 text-sm text-app-muted hover:border-primary-500/40 hover:text-primary-400 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard')}
+            className="rounded-lg border border-app-border px-4 py-2 text-sm text-app-muted hover:border-primary-500/40 hover:text-primary-400"
+          >
+            ← Dashboard
+          </button>
+        </div>
       </header>
 
-      {loading && <p className="text-app-muted text-sm">Loading memory…</p>}
+      {data?.hindsight_enabled === false && (
+        <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          Hindsight is not active on the server. Set <span className="font-mono">HINDSIGHT_API_URL</span> and{' '}
+          <span className="font-mono">HINDSIGHT_API_KEY</span> in <span className="font-mono">.env</span>, then restart
+          the backend (<span className="font-mono">uvicorn</span>).
+        </div>
+      )}
+
+      {loading && !data && <p className="text-app-muted text-sm">Loading memory…</p>}
       {error && (
         <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
       )}

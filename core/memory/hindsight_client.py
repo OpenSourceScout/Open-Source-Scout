@@ -5,12 +5,14 @@ import asyncio
 import json
 import logging
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, TypeVar
 
 T = TypeVar("T")
 
 _HINDSIGHT_SYNC_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="hindsight-sync")
+_thread_local = threading.local()
 
 from core.identity import bank_id_for_user
 
@@ -121,7 +123,7 @@ _scout_singleton: Any | None = None
 
 
 def _run_sync_sdk(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
-    """Run hindsight-client sync helpers without nesting inside uvicorn's event loop."""
+    """Run hindsight-client sync helpers off uvicorn's event loop (isolated aiohttp per thread)."""
     try:
         asyncio.get_running_loop()
         in_loop = True
@@ -133,9 +135,26 @@ def _run_sync_sdk(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     return future.result(timeout=120.0)
 
 
+def _needs_isolated_sdk_client() -> bool:
+    """Shared Hindsight aiohttp sessions must not cross asyncio loops / worker threads."""
+    try:
+        asyncio.get_running_loop()
+        return True
+    except RuntimeError:
+        return threading.current_thread() is not threading.main_thread()
+
+
+def _hindsight_env_configured() -> bool:
+    base_url = (os.getenv("HINDSIGHT_API_URL") or "").strip()
+    api_key = (os.getenv("HINDSIGHT_API_KEY") or "").strip()
+    return bool(base_url and api_key and HindsightSDK)
+
+
 def get_scout_hindsight() -> ScoutHindsightClient:
     global _scout_singleton
     if _scout_singleton is None:
+        _scout_singleton = ScoutHindsightClient()
+    elif not _scout_singleton.enabled and _hindsight_env_configured():
         _scout_singleton = ScoutHindsightClient()
     return _scout_singleton
 
@@ -148,25 +167,42 @@ class ScoutHindsightClient:
     """
 
     def __init__(self) -> None:
-        base_url = (os.getenv("HINDSIGHT_API_URL") or "").strip().rstrip("/")
-        api_key = (os.getenv("HINDSIGHT_API_KEY") or "").strip() or None
-        self.enabled = bool(base_url and api_key and HindsightSDK)
+        self._base_url = (os.getenv("HINDSIGHT_API_URL") or "").strip().rstrip("/")
+        self._api_key = (os.getenv("HINDSIGHT_API_KEY") or "").strip() or None
+        self.enabled = bool(self._base_url and self._api_key and HindsightSDK)
         self._client = (
-            HindsightSDK(base_url=base_url, api_key=api_key, timeout=60.0)
+            HindsightSDK(base_url=self._base_url, api_key=self._api_key, timeout=60.0)
             if self.enabled
             else None
         )
         self._banks_configured: set[str] = set()
 
+    def _sdk_for_sync(self) -> Any:
+        """Hindsight SDK bound to the current thread/loop (avoids aiohttp timeout errors)."""
+        if not self._client:
+            return None
+        if not _needs_isolated_sdk_client():
+            return self._client
+        isolated = getattr(_thread_local, "hindsight_sdk", None)
+        if isolated is None:
+            isolated = HindsightSDK(
+                base_url=self._base_url,
+                api_key=self._api_key,
+                timeout=60.0,
+            )
+            _thread_local.hindsight_sdk = isolated
+        return isolated
+
     def bank_for_user(self, user_id: str) -> str:
         return bank_id_for_user(user_id)
 
     def _ensure_bank(self, bank_id: str) -> None:
-        if not self._client:
+        sdk = self._sdk_for_sync()
+        if not sdk:
             return
         if bank_id not in self._banks_configured:
             try:
-                self._client.create_bank(
+                sdk.create_bank(
                     bank_id=bank_id,
                     name="Scout user bank",
                     mission=SCOUT_MISSION,
@@ -177,13 +213,13 @@ class ScoutHindsightClient:
                 )
             except Exception:
                 try:
-                    self._client.get_bank_config(bank_id)
+                    sdk.get_bank_config(bank_id)
                 except Exception as e:
                     logger.warning("Hindsight bank missing for %s: %s", bank_id, e)
                     return
 
             try:
-                listed = self._client.list_directives(bank_id=bank_id)
+                listed = sdk.list_directives(bank_id=bank_id)
                 existing_names: set[str] = set()
                 dirs = getattr(listed, "directives", None) or getattr(listed, "items", None) or []
                 for d in dirs:
@@ -209,7 +245,7 @@ class ScoutHindsightClient:
         if not self.enabled:
             return bid
         try:
-            self._ensure_bank(bid)
+            await asyncio.to_thread(_run_sync_sdk, self._ensure_bank, bid)
         except Exception as e:
             logger.warning("Hindsight get_or_create_bank failed: %s", e)
         return bid
@@ -219,7 +255,7 @@ class ScoutHindsightClient:
         if not self.enabled:
             return bid
         try:
-            self._ensure_bank(bid)
+            _run_sync_sdk(self._ensure_bank, bid)
         except Exception as e:
             logger.warning("Hindsight get_or_create_bank_sync failed: %s", e)
         return bid
@@ -271,7 +307,7 @@ class ScoutHindsightClient:
         bank_id = self.bank_for_user(user_id)
         self._ensure_bank(bank_id)
         meta_flat = {str(k): str(v) for k, v in metadata.items()}
-        self._client.retain(
+        self._sdk_for_sync().retain(
             bank_id=bank_id,
             content=fact_text,
             context=kind,
@@ -342,7 +378,7 @@ class ScoutHindsightClient:
         _ = strategy
         bank_id = self.bank_for_user(user_id)
         self._ensure_bank(bank_id)
-        resp = self._client.recall(
+        resp = self._sdk_for_sync().recall(
             bank_id=bank_id,
             query=query,
             max_tokens=min(8192, max(512, top_k * 512)),
@@ -405,7 +441,7 @@ class ScoutHindsightClient:
         bank_id = self.bank_for_user(user_id)
         self._ensure_bank(bank_id)
         ctx_text = json.dumps(context, default=str)[:12000]
-        resp = self._client.reflect(
+        resp = self._sdk_for_sync().reflect(
             bank_id=bank_id,
             query=question,
             context=ctx_text,
@@ -435,11 +471,12 @@ class ScoutHindsightClient:
             logger.warning("Hindsight reset_bank_sync failed: %s", e)
 
     def _reset_bank_sync_impl(self, user_id: str) -> None:
-        if not self._client:
+        sdk = self._sdk_for_sync()
+        if not sdk:
             return
         bank_id = self.bank_for_user(user_id)
         try:
-            self._client.delete_bank(bank_id)
+            sdk.delete_bank(bank_id)
         except Exception as e:
             logger.warning("Hindsight delete_bank failed: %s", e)
         self._banks_configured.discard(bank_id)
@@ -463,7 +500,7 @@ class ScoutHindsightClient:
         return out
 
     def _memory_summary_payload_sync(self, user_id: str) -> dict[str, Any]:
-        """Sync memory summary (safe from FastAPI sync routes — no asyncio.run)."""
+        """Sync memory summary (runs on hindsight worker thread when called from uvicorn)."""
         if not self.enabled or not self._client:
             return {
                 "observations": [],
@@ -471,6 +508,7 @@ class ScoutHindsightClient:
                 "recent_facts": [],
                 "totals": {"facts": 0, "observations": 0, "mental_models": 0},
             }
+        sdk = self._sdk_for_sync()
         bank_id = self.bank_for_user(user_id)
         try:
             self._ensure_bank(bank_id)
@@ -482,7 +520,7 @@ class ScoutHindsightClient:
         mental_models: list[dict[str, Any]] = []
 
         try:
-            obs_resp = self._client.list_memories(bank_id=bank_id, type="observation", limit=50)
+            obs_resp = sdk.list_memories(bank_id=bank_id, type="observation", limit=50)
             items = getattr(obs_resp, "memories", None) or getattr(obs_resp, "items", None) or []
             for m in items[:15]:
                 mid, text, _, ts = _memory_unit_fields(m)
@@ -498,8 +536,8 @@ class ScoutHindsightClient:
             logger.warning("list observations failed: %s", e)
 
         try:
-            mm = self._client.list_mental_models(bank_id=bank_id)
-            mm_items = getattr(mm, "mental_models", None) or getattr(mm, "items", None) or []
+            mm = sdk.list_mental_models(bank_id=bank_id)
+            mm_items = getattr(mm, "items", None) or getattr(mm, "mental_models", None) or []
             for model in mm_items[:20]:
                 mid, title, ca = _mental_model_fields(model)
                 mental_models.append(
@@ -513,7 +551,7 @@ class ScoutHindsightClient:
             logger.warning("list mental models failed: %s", e)
 
         try:
-            f_resp = self._client.list_memories(bank_id=bank_id, limit=40)
+            f_resp = sdk.list_memories(bank_id=bank_id, limit=40)
             items = getattr(f_resp, "memories", None) or getattr(f_resp, "items", None) or []
             for m in items[-20:]:
                 mid, text, typ, ts = _memory_unit_fields(m)
@@ -543,12 +581,11 @@ class ScoutHindsightClient:
         """Async wrapper for callers inside an existing event loop."""
         if not self.enabled or not self._client:
             return self._memory_summary_payload_sync(user_id)
-        bank_id = self.bank_for_user(user_id)
         try:
             await self.get_or_create_bank(user_id)
         except Exception:
             pass
-        return self._memory_summary_payload_sync(user_id)
+        return await asyncio.to_thread(_run_sync_sdk, self._memory_summary_payload_sync, user_id)
 
     def fetch_memory_sync(self, user_id: str, ids: list[str]) -> list[dict[str, str]]:
         if not self.enabled or not self._client or not ids:
@@ -560,17 +597,20 @@ class ScoutHindsightClient:
             return [{"memory_id": mid, "text": ""} for mid in ids]
 
     def _fetch_memory_sync_impl(self, user_id: str, ids: list[str]) -> list[dict[str, str]]:
+        sdk = self._sdk_for_sync()
+        if not sdk:
+            return []
         bank_id = self.bank_for_user(user_id)
         try:
             self._ensure_bank(bank_id)
         except Exception:
             pass
         out: list[dict[str, str]] = []
-        timeout = getattr(self._client, "_timeout", 60.0)
+        timeout = getattr(sdk, "_timeout", 60.0)
         for mid in ids:
             try:
                 raw = asyncio.run(
-                    self._client.memory.get_memory(
+                    sdk.memory.get_memory(
                         bank_id=bank_id,
                         memory_id=mid,
                         _request_timeout=timeout,

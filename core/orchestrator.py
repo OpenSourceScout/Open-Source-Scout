@@ -82,7 +82,7 @@ class ScoutOrchestrator:
     def __init__(
         self,
         github_client: GitHubClient,
-        groq_client: GroqClient,
+        groq_client: Optional[GroqClient] = None,
         cache_manager: Optional[CacheManager] = None,
         fast_model: str = "openai/gpt-oss-120b",
         powerful_model: str = "llama-3.3-70b",
@@ -90,16 +90,21 @@ class ScoutOrchestrator:
         testing_model: Optional[str] = None,
     ):
         self.github = github_client
-        self.groq = groq_client
         self.cache = cache_manager or CacheManager()
 
         triage_m = triage_model or MODEL_LLAMA_4_SCOUT_17B
         testing_m = testing_model or MODEL_LLAMA_4_SCOUT_17B
 
-        self.agent1 = TriageNurseAgent(groq_client, model=triage_m)
-        self.agent2 = ArchaeologistAgent(groq_client, model=fast_model)
-        self.agent3 = SeniorDevAgent(groq_client, model=powerful_model)
-        self.testing_agent = TestingAgent(groq_client, model=testing_m)
+        def _client(agent_name: str) -> GroqClient:
+            if groq_client is not None:
+                return groq_client
+            return GroqClient.for_agent(agent_name)
+
+        self.groq = _client("Triage Nurse")
+        self.agent1 = TriageNurseAgent(_client("Triage Nurse"), model=triage_m)
+        self.agent2 = ArchaeologistAgent(_client("Archaeologist"), model=fast_model)
+        self.agent3 = SeniorDevAgent(_client("Senior Dev"), model=powerful_model)
+        self.testing_agent = TestingAgent(_client("Testing Agent"), model=testing_m)
 
         self._status_callback: Optional[Callable[[str], None]] = None
 

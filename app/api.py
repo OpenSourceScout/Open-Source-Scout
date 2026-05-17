@@ -564,11 +564,9 @@ def run_analyze(
         set_pipeline_run_context(uuid4().hex[:12], user_ctx.user_id)
         with cascadeflow_budget_run(budget_usd) as cascade_session:
             github_client = GitHubClient(token=_get_github_token_for_user(request))
-            groq_client = GroqClient()
             cache_manager = CacheManager()
             orchestrator = ScoutOrchestrator(
                 github_client=github_client,
-                groq_client=groq_client,
                 cache_manager=cache_manager,
                 fast_model=body.fast_model,
                 powerful_model=body.powerful_model,
@@ -617,10 +615,8 @@ def re_analyze_issue(
         set_pipeline_run_context(uuid4().hex[:12], user_ctx.user_id)
         with cascadeflow_budget_run(budget_usd) as cascade_session:
             github_client = GitHubClient(token=_get_github_token_for_user(request))
-            groq_client = GroqClient()
             orchestrator = ScoutOrchestrator(
                 github_client=github_client,
-                groq_client=groq_client,
                 fast_model=body.fast_model,
                 powerful_model=body.powerful_model,
             )
@@ -799,9 +795,9 @@ def search_repos_by_tech_stack(
         set_pipeline_run_context(uuid4().hex[:12], user_ctx.user_id)
         with cascadeflow_budget_run(budget_usd) as cascade_session:
             github_client = GitHubClient(token=_get_github_token_for_user(request))
-            groq_client = GroqClient()
-
-            pathfinder = PathfinderAgent(groq_client, model=body.fast_model)
+            pathfinder = PathfinderAgent(
+                GroqClient.for_agent("Pathfinder"), model=body.fast_model
+            )
             results = pathfinder.run(
                 tech_stack=body.tech_stack,
                 github_client=github_client,
@@ -879,6 +875,9 @@ def memory_summary(user_ctx: UserContext = Depends(get_current_user)):
         pt = dict(t)
         pt["total_entries"] = total_mem
         payload["totals"] = pt
+        payload["bank_id"] = user_ctx.bank_id
+        payload["hindsight_enabled"] = hx.enabled
+        payload["user_id"] = user_ctx.user_id
     return payload
 
 
@@ -1331,7 +1330,7 @@ def get_readme_summary(request: Request, owner: str, repo: str):
             _readme_summary_cache[cache_key] = (msg, now)
             return {"summary": msg}
 
-        groq_client = GroqClient()
+        groq_client = GroqClient.for_agent("Triage Nurse")
         prompt = (
             "Please summarize the following repository README into a concise and well-formatted "
             "technical overview. "

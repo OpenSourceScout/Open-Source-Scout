@@ -15,6 +15,15 @@ AGENT_CANONICAL_NAMES = (
     "Testing Agent",
 )
 
+# One Groq API key per agent (different accounts) to spread rate limits.
+GROQ_API_KEY_ENV: Dict[str, str] = {
+    "Pathfinder": "GROQ_API_KEY_PATHFINDER",
+    "Triage Nurse": "GROQ_API_KEY_TRIAGE_NURSE",
+    "Archaeologist": "GROQ_API_KEY_ARCHAEOLOGIST",
+    "Senior Dev": "GROQ_API_KEY_SENIOR_DEV",
+    "Testing Agent": "GROQ_API_KEY_TESTING_AGENT",
+}
+
 KPI_WEIGHTS: Dict[str, Dict[str, float]] = {
     "Pathfinder": {"cost": 0.60, "latency": 0.30, "quality": 0.10},
     "Triage Nurse": {"cost": 0.30, "latency": 0.50, "quality": 0.20},
