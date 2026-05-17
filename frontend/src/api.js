@@ -3,6 +3,23 @@ import { encodeRepoFilePathForApi } from './utils/repoPaths'
 
 const API_BASE = '/api';
 
+const ANON_USER_KEY = 'os_anon_user_id'
+
+/** Stable anonymous id for per-user agent memory when JWT auth is not used. */
+export function ensureAnonUserId() {
+  if (typeof window === 'undefined') return ''
+  try {
+    let id = localStorage.getItem(ANON_USER_KEY)
+    if (!id) {
+      id = crypto.randomUUID()
+      localStorage.setItem(ANON_USER_KEY, id)
+    }
+    return id
+  } catch {
+    return ''
+  }
+}
+
 // Different timeouts for different operations
 const TIMEOUTS = {
   default: 30000,      // 30 seconds for quick operations
@@ -61,6 +78,8 @@ async function apiFetch(path, options = {}, timeoutMs = TIMEOUTS.default) {
   const token = getAccessToken()
   const headers = new Headers(options.headers || {})
   if (token) headers.set('Authorization', `Bearer ${token}`)
+  const anon = ensureAnonUserId()
+  if (anon && !headers.has('X-User-Id')) headers.set('X-User-Id', anon)
   if (!headers.has('Content-Type') && options.body) headers.set('Content-Type', 'application/json')
   
   try {
@@ -462,4 +481,57 @@ export async function saveProjectAnalysisResult(projectId, analysisResult) {
     throw new Error((await responseErrorDetail(res)) || 'Failed to save analysis result')
   }
   return res.json()
+}
+
+export function feedbackRepoSelection(payload) {
+  apiFetch('/feedback/repo-selection', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }).catch((err) => console.warn('[feedback repo-selection]', err))
+}
+
+export function feedbackIssueInteraction(payload) {
+  apiFetch('/feedback/issue-interaction', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }).catch((err) => console.warn('[feedback issue-interaction]', err))
+}
+
+export function feedbackExport(payload) {
+  apiFetch('/feedback/export', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }).catch((err) => console.warn('[feedback export]', err))
+}
+
+export function feedbackThumbs(payload) {
+  apiFetch('/feedback/thumbs', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }).catch((err) => console.warn('[feedback thumbs]', err))
+}
+
+export async function fetchMemorySummary() {
+  const res = await apiFetch('/memory/summary')
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load memory summary')
+  }
+  return res.json()
+}
+
+export async function fetchMemoryByIds(ids) {
+  if (!ids || ids.length === 0) return { memories: [] }
+  const q = encodeURIComponent(ids.join(','))
+  const res = await apiFetch(`/memory/by-ids?ids=${q}`)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load memories')
+  }
+  return res.json()
+}
+
+export async function resetMemoryBank() {
+  const res = await apiFetch('/memory/reset?confirm=true', { method: 'POST' })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to reset memory')
+  }
 }
