@@ -135,14 +135,18 @@ export async function getMe() {
   return res.json()
 }
 
-export async function searchReposByTechStack({ tech_stack, fast_model }) {
+export async function searchReposByTechStack({ tech_stack, fast_model, fresh = true }) {
   const res = await apiFetch(`/search-repos`, {
     method: 'POST',
     body: JSON.stringify({
       tech_stack,
       fast_model: fast_model || 'meta-llama/llama-4-scout-17b-16e-instruct',
+      fresh,
+      client_request_id: typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : String(Date.now()),
     }),
-  });
+  }, TIMEOUTS.analysis);
   if (!res.ok) {
     throw new Error((await responseErrorDetail(res)) || 'Repository search failed')
   }
@@ -483,11 +487,15 @@ export async function saveProjectAnalysisResult(projectId, analysisResult) {
   return res.json()
 }
 
-export function feedbackRepoSelection(payload) {
-  apiFetch('/feedback/repo-selection', {
+export async function feedbackRepoSelection(payload) {
+  const res = await apiFetch('/feedback/repo-selection', {
     method: 'POST',
     body: JSON.stringify(payload),
-  }).catch((err) => console.warn('[feedback repo-selection]', err))
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Feedback failed')
+  }
+  return res.json()
 }
 
 export function feedbackIssueInteraction(payload) {
@@ -504,11 +512,31 @@ export function feedbackExport(payload) {
   }).catch((err) => console.warn('[feedback export]', err))
 }
 
-export function feedbackThumbs(payload) {
-  apiFetch('/feedback/thumbs', {
+export async function feedbackThumbs(payload) {
+  const res = await apiFetch('/feedback/thumbs', {
     method: 'POST',
     body: JSON.stringify(payload),
-  }).catch((err) => console.warn('[feedback thumbs]', err))
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Feedback failed')
+  }
+  return res.json()
+}
+
+export async function getReadmeSummary(owner, repo, { fresh = false } = {}) {
+  const q = fresh ? '?fresh=true' : ''
+  const res = await apiFetch(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme-summary${q}`,
+  )
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load README summary')
+  }
+  const data = await res.json()
+  const summary = data?.summary
+  if (typeof summary !== 'string' || !summary.trim()) {
+    throw new Error('README summary was empty')
+  }
+  return summary
 }
 
 export async function fetchMemorySummary() {
