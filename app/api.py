@@ -192,6 +192,8 @@ class SearchReposRequest(BaseModel):
     tech_stack: list[str]
     fast_model: str = MODEL_LLAMA_4_SCOUT_17B
     cascadeflow_budget_usd: float | None = None
+    fresh: bool = True
+    client_request_id: str = ""
 
 
 class ExportPdfRequest(BaseModel):
@@ -802,6 +804,7 @@ def search_repos_by_tech_stack(
                 tech_stack=body.tech_stack,
                 github_client=github_client,
                 top_n=5,
+                client_request_id=(body.client_request_id or "").strip(),
             )
             pool = getattr(request.app.state, "db_pool", None)
             uid = _optional_user_id(request)
@@ -1298,8 +1301,18 @@ def get_file_content(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _groq_client_for_readme() -> GroqClient:
+    """Prefer Pathfinder key, then other agent keys, then GROQ_API_KEY."""
+    for agent in ("Pathfinder", "Triage Nurse", "Senior Dev", "Archaeologist"):
+        try:
+            return GroqClient.for_agent(agent)
+        except ValueError:
+            continue
+    return GroqClient()
+
+
 @app.get("/api/repos/{owner}/{repo}/readme-summary")
-def get_readme_summary(request: Request, owner: str, repo: str):
+def get_readme_summary(request: Request, owner: str, repo: str, fresh: bool = False):
     """
     Fetch repository README and generate an LLM summary.
     """
@@ -1307,6 +1320,8 @@ def get_readme_summary(request: Request, owner: str, repo: str):
     repo = repo.strip()
     cache_key = f"{owner}/{repo}".lower()
     now = time.time()
+    if fresh:
+        _readme_summary_cache.pop(cache_key, None)
     cached = _readme_summary_cache.get(cache_key)
     if cached is not None:
         summary_text, stored_at = cached
@@ -1330,7 +1345,7 @@ def get_readme_summary(request: Request, owner: str, repo: str):
             _readme_summary_cache[cache_key] = (msg, now)
             return {"summary": msg}
 
-        groq_client = GroqClient.for_agent("Triage Nurse")
+        groq_client = _groq_client_for_readme()
         prompt = (
             "Please summarize the following repository README into a concise and well-formatted "
             "technical overview. "
@@ -1340,12 +1355,36 @@ def get_readme_summary(request: Request, owner: str, repo: str):
             "3. You MUST use DOUBLE NEWLINES (\\n\\n) between EVERY single line, sentence, and section title. No two lines of text should touch each other. "
             f"README:\n{content[:20000]}"
         )
-        
-        summary = groq_client.complete(
-            prompt=prompt,
-            model=MODEL_README_SUMMARY,
-            max_tokens=1500
-        )
+
+        from integrations.groq_client import GroqAPIError
+
+        readme_models = [
+            MODEL_README_SUMMARY,
+            MODEL_LLAMA_4_SCOUT_17B,
+            "openai/gpt-oss-20b",
+            "llama-3.3-70b",
+        ]
+        summary = None
+        last_err = None
+        for model_id in readme_models:
+            try:
+                summary = groq_client.complete(
+                    prompt=prompt,
+                    model=model_id,
+                    max_tokens=1500,
+                    agent_name="Pathfinder",
+                )
+                break
+            except GroqAPIError as e:
+                last_err = e
+                if "model_not_found" not in str(e).lower() and "does not exist" not in str(e).lower():
+                    raise
+                continue
+        if summary is None:
+            raise last_err or ValueError("No Groq model available for README summary")
+        if not isinstance(summary, str) or not summary.strip():
+            raise ValueError("LLM returned an empty README summary")
+        summary = summary.strip()
         _readme_summary_cache[cache_key] = (summary, time.time())
         return {"summary": summary}
     except RetryError as e:

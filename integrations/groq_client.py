@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 MODEL_LLAMA_4_SCOUT_17B = "meta-llama/llama-4-scout-17b-16e-instruct"
-MODEL_README_SUMMARY = "llama-3.1-8b"
+# Use a model Groq still serves (8b-instant was removed for many accounts).
+MODEL_README_SUMMARY = MODEL_LLAMA_4_SCOUT_17B
 
 
 try:
@@ -103,7 +104,7 @@ class GroqClient:
         "openai/gpt-oss-120b": "openai/gpt-oss-120b",
         MODEL_LLAMA_4_SCOUT_17B: MODEL_LLAMA_4_SCOUT_17B,
         "llama-3.3-70b": "llama-3.3-70b-versatile",
-        "llama-3.1-8b": "meta-llama/llama-3.1-8b-instant",
+        "llama-3.1-8b": "llama-3.1-8b-instant",
         "gemma2-9b": "gemma2-9b-it",
         "mixtral-8x7b": "mixtral-8x7b-32768",
         "llama-3.3-70b-specdec": "llama-3.3-70b-specdec",
