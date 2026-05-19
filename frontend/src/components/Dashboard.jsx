@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { Search, Rocket, Settings, User, Github, ExternalLink, FolderKanban, ThumbsUp, ThumbsDown } from 'lucide-react'
-import { searchReposByTechStack, runAnalyze, createProject, getMe, feedbackRepoSelection, feedbackThumbs } from '../api'
+import { Search, Rocket, Settings, User, Github, ExternalLink, FolderKanban } from 'lucide-react'
+import { searchReposByTechStack, runAnalyze, createProject, getMe, feedbackRepoSelection } from '../api'
 import ScoutLogo from './ScoutLogo'
+import PathfinderSearchLoader from './PathfinderSearchLoader'
+import AgentPipelineLoader from './AgentPipelineLoader'
+import { RepoFeedbackBar } from './RepoFeedbackActions'
 
 const QUICK_ADD_TAGS = ['Python', 'JavaScript', 'React', 'Node.js', 'TypeScript', 'Go', 'Java', 'Rust']
 
@@ -88,9 +91,20 @@ export default function Dashboard() {
     if (techTags.length === 0) return
     setLoading(true)
     setError(null)
+    setRankedRepos(null)
     try {
-      const result = await searchReposByTechStack({ tech_stack: techTags })
+      sessionStorage.removeItem('scout_rankedRepos')
+    } catch {
+      /* ignore */
+    }
+    try {
+      const result = await searchReposByTechStack({ tech_stack: techTags, fresh: true })
       setRankedRepos(result)
+      try {
+        sessionStorage.setItem('scout_rankedRepos', JSON.stringify(result))
+      } catch {
+        /* ignore */
+      }
     } catch (err) {
       setError(typeof err === 'object' ? (err.message || JSON.stringify(err)) : String(err))
     } finally {
@@ -185,6 +199,14 @@ export default function Dashboard() {
           <h2 className="text-xl font-semibold tracking-tight text-app-text">Discovered Repositories</h2>
           <p className="text-app-muted text-sm mt-1">
             {rankedRepos.ranked_repos.length} repositories match your tech stack
+            {rankedRepos.search_meta?.generated_at && (
+              <span className="block text-xs text-app-muted/80 mt-1">
+                Live search · {rankedRepos.search_meta.repos_discovered} repos scanned
+                {rankedRepos.search_meta.llm_personalization_calls > 0
+                  ? ` · ${rankedRepos.search_meta.llm_personalization_calls} AI personalizations`
+                  : ''}
+              </span>
+            )}
           </p>
         </div>
         <button
@@ -295,35 +317,7 @@ export default function Dashboard() {
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                   {isAnalyzingThis ? 'Analyzing...' : 'Analyze Repository'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => feedbackRepoSelection({ repo_url: repo.url, action: 'skipped' })}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 border border-app-border rounded-lg text-app-muted hover:bg-app-elevated transition-colors text-sm font-medium"
-                >
-                  Skip
-                </button>
-                <div className="flex items-center gap-1 border border-app-border rounded-lg p-1 bg-app-bg">
-                  <button
-                    type="button"
-                    title="Helpful match"
-                    onClick={() =>
-                      feedbackThumbs({ target_type: 'repo', target_id: repo.full_name, vote: 'up' })
-                    }
-                    className="p-2 rounded-md text-app-muted hover:text-emerald-400 hover:bg-app-elevated"
-                  >
-                    <ThumbsUp className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    title="Not a good match"
-                    onClick={() =>
-                      feedbackThumbs({ target_type: 'repo', target_id: repo.full_name, vote: 'down' })
-                    }
-                    className="p-2 rounded-md text-app-muted hover:text-red-400 hover:bg-app-elevated"
-                  >
-                    <ThumbsDown className="w-4 h-4" />
-                  </button>
-                </div>
+                <RepoFeedbackBar repo={repo} />
                 <a
                   href={repo.url}
                   target="_blank"
@@ -365,7 +359,11 @@ export default function Dashboard() {
             </button>
             <button
               type="button"
-              onClick={() => setInputMode('repo')}
+              onClick={() => {
+                setInputMode('repo')
+                setRankedRepos(null)
+                setSelectedRepo(null)
+              }}
               className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors duration-200 ${
                 inputMode === 'repo'
                   ? 'bg-app-elevated text-app-text shadow-sm border border-app-border'
@@ -536,7 +534,20 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {rankedRepos ? renderRepoResults() : renderWaitingState()}
+        {loading && (inputMode === 'repo' || selectedRepo) ? (
+          <AgentPipelineLoader
+            repoLabel={
+              selectedRepo?.full_name ||
+              (repoUrl.trim().match(/github\.com\/([^/]+\/[^/]+)/)?.[1] ?? '')
+            }
+          />
+        ) : loading && inputMode === 'tech' ? (
+          <PathfinderSearchLoader techStack={techTags} />
+        ) : inputMode === 'tech' && rankedRepos ? (
+          renderRepoResults()
+        ) : (
+          renderWaitingState()
+        )}
       </main>
     </div>
   )
