@@ -2,12 +2,13 @@
 Agent 0: Pathfinder - Repository discovery and ranking based on user's tech stack.
 """
 from typing import List, Optional, Dict
+from datetime import datetime, timezone
 import json
 import re
 
 from core.agents.base import BaseAgent
 from core.schemas import (
-    RankedRepo, RepoScoreBreakdown, PathfinderOutput
+    RankedRepo, RepoScoreBreakdown, PathfinderOutput, PathfinderSearchMeta
 )
 from core.memory.hindsight_client import get_scout_hindsight
 from core.runtime.groq_context import pipeline_user_id_var
@@ -65,7 +66,8 @@ Be encouraging and help users find projects where they can make meaningful contr
         self,
         tech_stack: List[str],
         github_client,
-        top_n: int = 5
+        top_n: int = 5,
+        client_request_id: str = "",
     ) -> PathfinderOutput:
         """
         Search and rank repositories based on user's tech stack.
@@ -79,6 +81,7 @@ Be encouraging and help users find projects where they can make meaningful contr
             PathfinderOutput with ranked repositories
         """
         self.activate_agent_llm_context()
+        self._llm_personalization_calls = 0
         self.log(f"Searching repositories for tech stack: {', '.join(tech_stack)}")
 
         recalled_memory_ids: list[str] = []
@@ -110,12 +113,15 @@ Be encouraging and help users find projects where they can make meaningful contr
         normalized_stack = [t.strip().lower() for t in tech_stack if t.strip()]
         
         if not normalized_stack:
-            return PathfinderOutput(
-                tech_stack=tech_stack,
-                ranked_repos=[],
-                search_queries_used=[],
-                recalled_memory_ids=recalled_memory_ids,
-                memory_summary=memory_summary,
+            return self._finalize_output(
+                tech_stack,
+                [],
+                [],
+                recalled_memory_ids,
+                memory_summary,
+                repos_discovered=0,
+                queries_run=0,
+                client_request_id=client_request_id,
             )
         
         # Generate search queries based on tech stack
@@ -141,12 +147,15 @@ Be encouraging and help users find projects where they can make meaningful contr
         self.log(f"Found {len(unique_repos)} unique repositories")
         
         if not unique_repos:
-            return PathfinderOutput(
-                tech_stack=tech_stack,
-                ranked_repos=[],
-                search_queries_used=search_queries,
-                recalled_memory_ids=recalled_memory_ids,
-                memory_summary=memory_summary,
+            return self._finalize_output(
+                tech_stack,
+                [],
+                search_queries,
+                recalled_memory_ids,
+                memory_summary,
+                repos_discovered=0,
+                queries_run=min(len(search_queries), 5),
+                client_request_id=client_request_id,
             )
         
         # Score and rank repositories
@@ -158,12 +167,42 @@ Be encouraging and help users find projects where they can make meaningful contr
             user_memory_section,
         )
         
+        return self._finalize_output(
+            tech_stack,
+            ranked_repos,
+            search_queries,
+            recalled_memory_ids,
+            memory_summary,
+            repos_discovered=len(unique_repos),
+            queries_run=min(len(search_queries), 5),
+            client_request_id=client_request_id,
+        )
+
+    def _finalize_output(
+        self,
+        tech_stack: List[str],
+        ranked_repos: List[RankedRepo],
+        search_queries: List[str],
+        recalled_memory_ids: List[str],
+        memory_summary: str,
+        *,
+        repos_discovered: int,
+        queries_run: int,
+        client_request_id: str,
+    ) -> PathfinderOutput:
         return PathfinderOutput(
             tech_stack=tech_stack,
             ranked_repos=ranked_repos,
             search_queries_used=search_queries,
             recalled_memory_ids=recalled_memory_ids,
             memory_summary=memory_summary,
+            search_meta=PathfinderSearchMeta(
+                repos_discovered=repos_discovered,
+                search_queries_run=queries_run,
+                llm_personalization_calls=getattr(self, "_llm_personalization_calls", 0),
+                generated_at=datetime.now(timezone.utc).isoformat(),
+                client_request_id=client_request_id or "",
+            ),
         )
     
     def _generate_search_queries(self, tech_stack: List[str]) -> List[str]:
@@ -433,9 +472,11 @@ Example format:
                 model=self.model,
                 system_prompt=self.role_prompt,
                 temperature=0.3,
-                max_tokens=300
+                max_tokens=300,
+                agent_name=self.name,
             )
-            
+            self._llm_personalization_calls = getattr(self, "_llm_personalization_calls", 0) + 1
+
             # Parse JSON response
             json_match = re.search(r'\{[^{}]*"reasons"[^{}]*\}', response, re.DOTALL)
             if json_match:

@@ -31,6 +31,15 @@ class RankedRepo(BaseModel):
     topics: List[str] = Field(default_factory=list, description="Repository topics")
 
 
+class PathfinderSearchMeta(BaseModel):
+    """Metadata proving a live search pipeline ran (not cached UI results)."""
+    repos_discovered: int = Field(default=0, ge=0)
+    search_queries_run: int = Field(default=0, ge=0)
+    llm_personalization_calls: int = Field(default=0, ge=0)
+    generated_at: str = Field(default="", description="ISO-8601 UTC timestamp when search finished")
+    client_request_id: str = Field(default="")
+
+
 class PathfinderOutput(BaseModel):
     """Output from Agent 0: Pathfinder (Repository Discovery)"""
     tech_stack: List[str] = Field(description="User's input tech stack")
@@ -38,6 +47,7 @@ class PathfinderOutput(BaseModel):
     search_queries_used: List[str] = Field(default_factory=list, description="Search queries used")
     recalled_memory_ids: List[str] = Field(default_factory=list)
     memory_summary: str = Field(default="", description="Human-readable memory influence summary")
+    search_meta: Optional[PathfinderSearchMeta] = Field(default=None)
 
 
 # ==================== Agent 1: Triage Nurse ====================
