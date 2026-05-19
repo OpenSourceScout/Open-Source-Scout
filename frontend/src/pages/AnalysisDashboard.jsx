@@ -13,7 +13,9 @@ import {
   FileText,
   Loader2,
   ExternalLink,
+  RefreshCw,
 } from 'lucide-react'
+import { getReadmeSummary } from '../api'
 
 const LANGUAGE_COLORS = {
   JavaScript: '#f1e05a',
@@ -47,6 +49,7 @@ export default function AnalysisDashboard() {
   const [readme, setReadme] = useState(null)
   const [readmeLoading, setReadmeLoading] = useState(false)
   const [readmeError, setReadmeError] = useState(null)
+  const [readmeRetry, setReadmeRetry] = useState(0)
 
   const repo = analysisResult?.repo
 
@@ -76,35 +79,32 @@ export default function AnalysisDashboard() {
     setReadme(null)
     setReadmeError(null)
 
-    const fetchReadme = async () => {
+    const fetchReadme = async (fresh = false) => {
       setReadmeLoading(true)
+      setReadmeError(null)
 
       try {
-        const res = await fetch(`/api/repos/${owner}/${name}/readme-summary`)
+        const text = await getReadmeSummary(owner, name, { fresh })
         if (cancelled) return
-        if (res.ok) {
-          const data = await res.json()
-          const text = data.summary
-          setReadme(text)
-          try {
-            sessionStorage.setItem(cacheKey, JSON.stringify({ summary: text }))
-          } catch {
-            /* quota / private mode */
-          }
-        } else {
-          setReadmeError('Failed to load README summary.')
+        setReadme(text)
+        try {
+          sessionStorage.setItem(cacheKey, JSON.stringify({ summary: text }))
+        } catch {
+          /* quota / private mode */
         }
       } catch (err) {
-        if (!cancelled) setReadmeError('Error connecting to backend.')
+        if (!cancelled) {
+          setReadmeError(err?.message || 'Failed to load README summary.')
+        }
       }
       if (!cancelled) setReadmeLoading(false)
     }
 
-    fetchReadme()
+    fetchReadme(readmeRetry > 0)
     return () => {
       cancelled = true
     }
-  }, [repoInfo?.owner, repoInfo?.name])
+  }, [repoInfo?.owner, repoInfo?.name, readmeRetry])
 
   // No analysis result yet
   if (!analysisResult || !repo) {
@@ -271,7 +271,29 @@ export default function AnalysisDashboard() {
               <span className="ml-3 text-app-muted">Loading README...</span>
             </div>
           ) : readmeError ? (
-            <p className="text-app-muted text-sm py-4">{readmeError}</p>
+            <div className="py-4 space-y-3">
+              <p className="text-red-400/90 text-sm">{readmeError}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  const o = repoInfo?.owner
+                  const n = repoInfo?.name
+                  if (o && n) {
+                    try {
+                      sessionStorage.removeItem(`scout_readme_summary_${o}_${n}`)
+                    } catch {
+                      /* ignore */
+                    }
+                  }
+                  setReadme(null)
+                  setReadmeRetry((c) => c + 1)
+                }}
+                className="inline-flex items-center gap-2 text-sm font-medium text-primary-400 hover:text-primary-300"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Retry
+              </button>
+            </div>
           ) : readme ? (
             <div>
               <ReactMarkdown
