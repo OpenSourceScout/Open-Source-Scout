@@ -1,3 +1,4 @@
+import { Fragment, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 
@@ -6,17 +7,21 @@ function traceRows(run) {
   return Array.isArray(rows) ? rows : []
 }
 
+function parseMeta(row) {
+  try {
+    const q = row?.query
+    if (typeof q === 'object' && q !== null) return q
+    if (typeof q === 'string' && q.startsWith('{')) return JSON.parse(q)
+  } catch {
+    /* ignore */
+  }
+  return {}
+}
+
 function aggregateByAgent(rows) {
   const map = new Map()
   for (const row of rows) {
-    let meta = {}
-    try {
-      const q = typeof row.query === 'string' ? row.query : ''
-      const parsed = q.startsWith('{') ? JSON.parse(q) : {}
-      meta = parsed && typeof parsed === 'object' ? parsed : {}
-    } catch {
-      meta = {}
-    }
+    const meta = parseMeta(row)
     const agent = meta.agent_name || row.agent || row.role || 'unknown'
     const cost = Number(meta.estimated_cost_usd ?? row.estimated_cost_usd ?? row.cost ?? 0) || 0
     const prev = map.get(agent) || { agent, cost: 0, steps: 0 }
@@ -27,11 +32,26 @@ function aggregateByAgent(rows) {
   return [...map.values()].sort((a, b) => b.cost - a.cost)
 }
 
+function MetaPanel({ meta, raw }) {
+  const text =
+    Object.keys(meta).length > 0
+      ? JSON.stringify(meta, null, 2)
+      : typeof raw === 'string'
+        ? raw
+        : JSON.stringify(raw ?? {}, null, 2)
+  return (
+    <pre className="max-h-72 overflow-auto rounded-lg border border-app-border bg-app-bg p-3 font-mono text-[11px] text-app-muted whitespace-pre-wrap break-all">
+      {text}
+    </pre>
+  )
+}
+
 export default function DecisionTrace() {
   const { cascadeflowRun } = useOutletContext() || {}
   const run = cascadeflowRun || {}
   const rows = traceRows(run)
   const chartData = aggregateByAgent(rows)
+  const [expandedRow, setExpandedRow] = useState(null)
 
   return (
     <div className="min-h-full bg-app-bg text-app-text p-6">
@@ -88,26 +108,54 @@ export default function DecisionTrace() {
               <tr>
                 <th className="px-3 py-2">Action</th>
                 <th className="px-3 py-2">Reason</th>
-                <th className="px-3 py-2">Model</th>
-                <th className="px-3 py-2">Meta</th>
+                <th className="px-3 py-2">Agent</th>
+                <th className="px-3 py-2">Logical model</th>
+                <th className="px-3 py-2">Groq model</th>
+                <th className="px-3 py-2 w-20">Meta</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-app-border">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-3 py-8 text-center text-app-muted">
+                  <td colSpan={6} className="px-3 py-8 text-center text-app-muted">
                     No trace rows yet. Run repository search or analysis with cascadeflow enabled (not &quot;off&quot; mode).
                   </td>
                 </tr>
               ) : (
-                rows.map((row, i) => (
-                  <tr key={i} className="hover:bg-app-bg/80">
-                    <td className="px-3 py-2 font-medium text-app-text">{row.action ?? '—'}</td>
-                    <td className="px-3 py-2 text-app-muted max-w-xs truncate">{row.reason ?? '—'}</td>
-                    <td className="px-3 py-2 font-mono text-xs text-primary-300">{row.model ?? '—'}</td>
-                    <td className="px-3 py-2 font-mono text-[11px] text-app-muted max-w-xl truncate">{row.query ?? '—'}</td>
-                  </tr>
-                ))
+                rows.map((row, i) => {
+                  const meta = parseMeta(row)
+                  const agent = meta.agent_name || '—'
+                  const logical = meta.logical_model || '—'
+                  const groq = meta.groq_model || row.model || '—'
+                  const isOpen = expandedRow === i
+                  return (
+                    <Fragment key={i}>
+                      <tr className="hover:bg-app-bg/80">
+                        <td className="px-3 py-2 font-medium text-app-text">{row.action ?? '—'}</td>
+                        <td className="px-3 py-2 text-app-muted">{row.reason ?? '—'}</td>
+                        <td className="px-3 py-2 text-app-text">{agent}</td>
+                        <td className="px-3 py-2 font-mono text-xs text-primary-300 break-all">{logical}</td>
+                        <td className="px-3 py-2 font-mono text-xs text-app-muted break-all">{groq}</td>
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedRow(isOpen ? null : i)}
+                            className="text-xs font-medium text-primary-400 hover:text-primary-300"
+                          >
+                            {isOpen ? 'Hide' : 'View'}
+                          </button>
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr key={`${i}-meta`} className="bg-app-bg/50">
+                          <td colSpan={6} className="px-3 py-3">
+                            <MetaPanel meta={meta} raw={row.query} />
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  )
+                })
               )}
             </tbody>
           </table>

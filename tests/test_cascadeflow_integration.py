@@ -23,6 +23,17 @@ def test_observe_mode_no_model_change(monkeypatch, groq_client):
     assert gid
 
 
+def test_observe_mode_preserves_non_pool_model(monkeypatch, groq_client):
+    monkeypatch.setenv("CASCADEFLOW_MODE", "observe")
+    logical, gid, reason, switched = groq_client._route_completion(
+        "Archaeologist", "openai/gpt-oss-120b"
+    )
+    assert logical == "openai/gpt-oss-120b"
+    assert gid == "openai/gpt-oss-120b"
+    assert reason == "observe_passthrough"
+    assert switched is False
+
+
 def test_off_mode_no_switch(monkeypatch, groq_client):
     monkeypatch.setenv("CASCADEFLOW_MODE", "off")
     _logical, gid, reason, switched = groq_client._route_completion("Senior Dev", "llama-3.3-70b")

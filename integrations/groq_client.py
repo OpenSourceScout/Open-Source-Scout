@@ -52,6 +52,7 @@ class GroqAPIError(Exception):
 # Rough relative USD prices ($ / 1M input tokens) for routing pressure — not invoicing-grade.
 _MODEL_INPUT_PRICE: dict[str, float] = {
     "meta-llama/llama-3.1-8b-instant": 0.05,
+    MODEL_LLAMA_4_SCOUT_17B: 0.11,
     "meta-llama/llama-3.3-70b-versatile": 0.59,
     "mixtral-8x7b-32768": 0.24,
     "openai/gpt-oss-120b": 0.15,
@@ -184,9 +185,8 @@ class GroqClient:
         self, agent_name: str, requested: Optional[str]
     ) -> tuple[str, str, str, bool]:
         pool = model_pool_for_agent(agent_name or "Archaeologist")
-        logical_base = self._snap_to_pool(self._logical_key_for(requested), pool)
-        baseline_gid = self.MODELS.get(logical_base, logical_base)
-
+        logical_requested = self._logical_key_for(requested)
+        requested_gid = self.MODELS.get(logical_requested, logical_requested)
         mode = get_cascadeflow_mode()
 
         ctx = _CF.get_current_run() if _CF else None
@@ -194,14 +194,16 @@ class GroqClient:
             if ctx.budget_remaining <= 0 or ctx.cost >= ctx.budget_max:
                 cheap_log = self._cheapest_logical(pool)
                 gid = self.MODELS.get(cheap_log, cheap_log)
-                return cheap_log, gid, "budget_cap_cheapest", gid != baseline_gid
+                return cheap_log, gid, "budget_cap_cheapest", gid != requested_gid
 
         if mode == "off":
-            return logical_base, baseline_gid, "off_mode", False
+            return logical_requested, requested_gid, "off_mode", False
 
         if mode == "observe":
-            return logical_base, baseline_gid, "observe_passthrough", False
+            return logical_requested, requested_gid, "observe_passthrough", False
 
+        logical_base = self._snap_to_pool(logical_requested, pool)
+        baseline_gid = self.MODELS.get(logical_base, logical_base)
         best_logical = max(pool, key=lambda k: self._kpi_score_logical(k, agent_name))
         gid = self.MODELS.get(best_logical, best_logical)
         return best_logical, gid, "enforce_kpi", gid != baseline_gid
@@ -246,13 +248,12 @@ class GroqClient:
             }
         )
         action = "switch_model" if applied_switch else "allow"
-        reason = routing_reason if applied_switch else get_cascadeflow_mode()
         try:
             ctx.record(
                 action=action,
-                reason=str(reason),
+                reason=str(routing_reason),
                 model=groq_model_id,
-                query=json.dumps(meta, default=str)[:480],
+                query=json.dumps(meta, default=str),
                 applied=True,
                 decision_mode=get_cascadeflow_mode(),
             )

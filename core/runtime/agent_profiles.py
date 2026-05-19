@@ -33,9 +33,11 @@ KPI_WEIGHTS: Dict[str, Dict[str, float]] = {
 }
 
 # Logical tier labels → Groq model *keys* understood by integrations.groq_client.GroqClient.MODELS
-_CHEAP_KEYS = ["qwen-qwq-32b-instruct", "llama-3.1-8b"]
-_MID_KEYS = ["qwen-qwq-32b", "mixtral-8x7b"]
-_TOP_KEYS = ["llama-3.3-70b"]
+_LLAMA_4_SCOUT = "meta-llama/llama-4-scout-17b-16e-instruct"
+_GPT_OSS_120B = "openai/gpt-oss-120b"
+_CHEAP_KEYS = ["qwen-qwq-32b-instruct", "llama-3.1-8b", _LLAMA_4_SCOUT]
+_MID_KEYS = ["qwen-qwq-32b", "mixtral-8x7b", _GPT_OSS_120B]
+_TOP_KEYS = ["llama-3.3-70b", _GPT_OSS_120B]
 
 
 def model_pool_for_agent(agent_name: str) -> List[str]:

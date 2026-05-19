@@ -181,8 +181,8 @@ class AnalyzeRequest(BaseModel):
 
     repo_url: str
     beginner_only: bool = True
-    fast_model: str = "llama-3.3-70b"
-    powerful_model: str = "openai/gpt-oss-120b"
+    fast_model: str = "openai/gpt-oss-120b"
+    powerful_model: str = "llama-3.3-70b"
     cascadeflow_budget_usd: float | None = None
 
 
@@ -205,7 +205,7 @@ class ReAnalyzeRequest(BaseModel):
 
     repo_url: str
     issue_number: int
-    fast_model: str = "llama-3.3-70b"
+    fast_model: str = "openai/gpt-oss-120b"
     powerful_model: str = "llama-3.3-70b"
     pathfinder_output: dict | None = None
     cascadeflow_budget_usd: float | None = None
