@@ -16,11 +16,10 @@ import {
   PanelLeft,
   PanelRightClose,
   ChevronLeft,
-  ThumbsUp,
-  ThumbsDown,
 } from 'lucide-react'
-import { exportPdf, saveProjectBriefing, feedbackExport, feedbackThumbs } from '../api'
+import { exportPdf, saveProjectBriefing, feedbackExport } from '../api'
 import MemoryCitationPill from '../components/MemoryCitationPill'
+import { BriefingFeedbackThumbs } from '../components/RepoFeedbackActions'
 
 const briefingProseClass =
   'prose prose-invert prose-base max-w-none ' +
@@ -424,36 +423,7 @@ export default function ContributorBriefing() {
                   recalledMemoryIds={analysisResult?.agent3_output?.recalled_memory_ids}
                   memorySummary={analysisResult?.agent3_output?.memory_summary}
                 />
-                <div className="flex items-center gap-1 rounded-lg border border-app-border bg-app-bg p-1">
-                  <button
-                    type="button"
-                    title="Briefing helpful"
-                    onClick={() =>
-                      feedbackThumbs({
-                        target_type: 'briefing',
-                        target_id: briefingId,
-                        vote: 'up',
-                      })
-                    }
-                    className="p-2 rounded-md text-app-muted hover:text-emerald-400"
-                  >
-                    <ThumbsUp className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    title="Briefing not helpful"
-                    onClick={() =>
-                      feedbackThumbs({
-                        target_type: 'briefing',
-                        target_id: briefingId,
-                        vote: 'down',
-                      })
-                    }
-                    className="p-2 rounded-md text-app-muted hover:text-red-400"
-                  >
-                    <ThumbsDown className="w-4 h-4" />
-                  </button>
-                </div>
+                <BriefingFeedbackThumbs briefingId={briefingId} />
               </div>
             </div>
 

@@ -1,6 +1,6 @@
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
-import { ClipboardList, FileText, ArrowLeft, Lock, RefreshCw, ThumbsUp, ThumbsDown } from 'lucide-react'
+import { ClipboardList, FileText, ArrowLeft, Lock, RefreshCw } from 'lucide-react'
 import {
   reAnalyzeIssue,
   selectProjectIssue,
@@ -9,9 +9,9 @@ import {
   saveProjectTesting,
   saveProjectAnalysisResult,
   feedbackIssueInteraction,
-  feedbackThumbs,
 } from '../api'
 import MemoryCitationPill from '../components/MemoryCitationPill'
+import { IssueFeedbackThumbs } from '../components/RepoFeedbackActions'
 
 function getDifficultyFromLabels(labels) {
   if (!labels || labels.length === 0) return null
@@ -276,34 +276,7 @@ export default function IssueRanking() {
                   )}
 
                   <div className="flex items-center gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      title="Good suggestion"
-                      onClick={() =>
-                        feedbackThumbs({
-                          target_type: 'issue',
-                          target_id: issue.url || String(issue.number),
-                          vote: 'up',
-                        })
-                      }
-                      className="rounded-md border border-app-border p-1.5 text-app-muted hover:text-emerald-400 bg-app-bg"
-                    >
-                      <ThumbsUp className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      title="Poor suggestion"
-                      onClick={() =>
-                        feedbackThumbs({
-                          target_type: 'issue',
-                          target_id: issue.url || String(issue.number),
-                          vote: 'down',
-                        })
-                      }
-                      className="rounded-md border border-app-border p-1.5 text-app-muted hover:text-red-400 bg-app-bg"
-                    >
-                      <ThumbsDown className="w-3.5 h-3.5" />
-                    </button>
+                    <IssueFeedbackThumbs issue={issue} />
                   </div>
 
                   {issue.labels && issue.labels.length > 0 && (

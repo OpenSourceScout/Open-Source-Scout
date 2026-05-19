@@ -22,8 +22,8 @@ import AgentMemory from './pages/AgentMemory.jsx'
 import SettingsPage from './pages/Settings.jsx'
 import './index.css'
 import { isLoggedIn, isAdmin } from './auth'
-import { feedbackRepoSelection, feedbackThumbs } from './api'
-import { ThumbsUp, ThumbsDown } from 'lucide-react'
+import { RepoFeedbackBar } from './components/RepoFeedbackActions'
+import { FeedbackProvider } from './context/FeedbackContext'
 
 // RepositoriesView - shows ranked repos from tech stack search
 function RepositoriesView() {
@@ -156,35 +156,7 @@ function RepositoriesView() {
                     Currently Selected
                   </span>
                 )}
-                <button
-                  type="button"
-                  onClick={() => feedbackRepoSelection({ repo_url: repo.url, action: 'skipped' })}
-                  className="inline-flex items-center gap-2 px-5 py-2.5 border border-app-border rounded-lg text-app-muted hover:bg-app-elevated transition-colors text-sm font-medium"
-                >
-                  Skip
-                </button>
-                <div className="flex items-center gap-1 border border-app-border rounded-lg p-1 bg-app-bg">
-                  <button
-                    type="button"
-                    title="Good match"
-                    onClick={() =>
-                      feedbackThumbs({ target_type: 'repo', target_id: repo.full_name, vote: 'up' })
-                    }
-                    className="p-2 rounded-md text-app-muted hover:text-emerald-400 hover:bg-app-elevated"
-                  >
-                    <ThumbsUp className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    title="Poor match"
-                    onClick={() =>
-                      feedbackThumbs({ target_type: 'repo', target_id: repo.full_name, vote: 'down' })
-                    }
-                    className="p-2 rounded-md text-app-muted hover:text-red-400 hover:bg-app-elevated"
-                  >
-                    <ThumbsDown className="w-4 h-4" />
-                  </button>
-                </div>
+                <RepoFeedbackBar repo={repo} />
                 <a
                   href={repo.url}
                   target="_blank"
@@ -221,6 +193,7 @@ function RequireAdmin({ children }) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
+    <FeedbackProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
@@ -244,5 +217,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/projects" element={<RequireAuth><Projects /></RequireAuth>} />
       </Routes>
     </BrowserRouter>
+    </FeedbackProvider>
   </React.StrictMode>,
 )
