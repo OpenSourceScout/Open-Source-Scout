@@ -11,6 +11,11 @@ from core.schemas import (
     RankedRepo, RepoScoreBreakdown, PathfinderOutput, PathfinderSearchMeta
 )
 from core.memory.hindsight_client import get_scout_hindsight
+from core.memory.skipped_repos import (
+    merge_exclude_sets,
+    repo_matches_exclude,
+    skipped_ids_from_memories,
+)
 from core.runtime.groq_context import pipeline_user_id_var
 from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B
 
@@ -68,6 +73,7 @@ Be encouraging and help users find projects where they can make meaningful contr
         github_client,
         top_n: int = 5,
         client_request_id: str = "",
+        exclude_repo_urls: Optional[List[str]] = None,
     ) -> PathfinderOutput:
         """
         Search and rank repositories based on user's tech stack.
@@ -87,19 +93,22 @@ Be encouraging and help users find projects where they can make meaningful contr
         recalled_memory_ids: list[str] = []
         memory_summary = ""
         user_memory_section = ""
+        memories: list = []
+        exclude_ids: set[str] = set()
         uid = pipeline_user_id_var.get()
         if uid:
             try:
                 hx = get_scout_hindsight()
                 memories = hx.recall_sync(
                     uid,
-                    f"past tech stack preferences and repo history for stack: {','.join(tech_stack)}",
-                    top_k=10,
+                    f"past tech stack preferences, skipped repositories, and repo history for stack: {','.join(tech_stack)}",
+                    top_k=15,
                 )
                 recalled_memory_ids = [
                     str(m.get("memory_id") or "") for m in memories if m.get("memory_id")
                 ]
                 recalled_memory_ids = [x for x in recalled_memory_ids if x]
+                exclude_ids = skipped_ids_from_memories(memories)
                 if memories:
                     lines = "\n".join(f"- {(m.get('text') or '')[:400]}" for m in memories[:10])
                     user_memory_section = f"\n\n## What I know about this user\n{lines}\n"
@@ -108,6 +117,10 @@ Be encouraging and help users find projects where they can make meaningful contr
                     )
             except Exception as e:
                 self.log(f"Hindsight recall skipped: {e}", level="warning")
+
+        exclude_ids = merge_exclude_sets(exclude_repo_urls, exclude_ids)
+        if exclude_ids:
+            self.log(f"Excluding {len(exclude_ids)} skipped repositories from ranking")
 
         # Normalize tech stack
         normalized_stack = [t.strip().lower() for t in tech_stack if t.strip()]
@@ -136,15 +149,16 @@ Be encouraging and help users find projects where they can make meaningful contr
             except Exception as e:
                 self.log(f"Search failed for query '{query}': {e}", level="warning")
         
-        # Deduplicate by full_name
+        # Deduplicate by full_name and drop user-skipped repos
         seen = set()
         unique_repos = []
         for repo in all_repos:
             if repo.full_name not in seen:
                 seen.add(repo.full_name)
-                unique_repos.append(repo)
+                if not repo_matches_exclude(repo, exclude_ids):
+                    unique_repos.append(repo)
         
-        self.log(f"Found {len(unique_repos)} unique repositories")
+        self.log(f"Found {len(unique_repos)} unique repositories (after skip filter)")
         
         if not unique_repos:
             return self._finalize_output(

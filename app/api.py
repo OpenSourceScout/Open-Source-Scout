@@ -194,6 +194,7 @@ class SearchReposRequest(BaseModel):
     cascadeflow_budget_usd: float | None = None
     fresh: bool = True
     client_request_id: str = ""
+    exclude_repo_urls: list[str] = []
 
 
 class ExportPdfRequest(BaseModel):
@@ -805,6 +806,7 @@ def search_repos_by_tech_stack(
                 github_client=github_client,
                 top_n=5,
                 client_request_id=(body.client_request_id or "").strip(),
+                exclude_repo_urls=body.exclude_repo_urls or [],
             )
             pool = getattr(request.app.state, "db_pool", None)
             uid = _optional_user_id(request)

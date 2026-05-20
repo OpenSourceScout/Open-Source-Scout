@@ -102,7 +102,7 @@ SCOUT_MISSION = (
 DIRECTIVES: list[tuple[str, str]] = [
     (
         "skip_repos",
-        "Never recommend a repository the user has explicitly skipped two or more times",
+        "Never recommend a repository the user has explicitly skipped",
     ),
     (
         "no_upstream_writes",
