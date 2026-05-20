@@ -23,15 +23,20 @@ import SettingsPage from './pages/Settings.jsx'
 import './index.css'
 import { isLoggedIn, isAdmin } from './auth'
 import { RepoFeedbackBar } from './components/RepoFeedbackActions'
-import { FeedbackProvider } from './context/FeedbackContext'
+import { FeedbackProvider, useFeedbackActions } from './context/FeedbackContext'
+import { filterRankedRepos } from './utils/skippedRepos'
 
 // RepositoriesView - shows ranked repos from tech stack search
 function RepositoriesView() {
   const context = useOutletContext()
   const rankedRepos = context?.rankedRepos
   const repoInfo = context?.repoInfo
+  const { getSkippedRepoUrls } = useFeedbackActions()
+  const visibleRepos = rankedRepos?.ranked_repos
+    ? filterRankedRepos(rankedRepos.ranked_repos, getSkippedRepoUrls())
+    : []
 
-  if (!rankedRepos || !rankedRepos.ranked_repos || rankedRepos.ranked_repos.length === 0) {
+  if (!rankedRepos || visibleRepos.length === 0) {
     return (
       <div className="flex items-center justify-center h-full min-h-[50vh] bg-app-bg">
         <div className="text-center px-4">
@@ -51,7 +56,7 @@ function RepositoriesView() {
         <div>
           <h2 className="text-xl font-semibold text-app-text">Discovered Repositories</h2>
           <p className="text-app-muted text-sm">
-            {rankedRepos.ranked_repos.length} repositories matched your tech stack: {rankedRepos.tech_stack?.join(', ')}
+            {visibleRepos.length} repositories matched your tech stack: {rankedRepos.tech_stack?.join(', ')}
           </p>
         </div>
         <MemoryCitationPill
@@ -61,7 +66,7 @@ function RepositoriesView() {
       </div>
 
       <div className="space-y-6">
-        {rankedRepos.ranked_repos.map((repo, index) => {
+        {visibleRepos.map((repo, index) => {
           const isSelected = repoInfo && repo.full_name === `${repoInfo.owner}/${repoInfo.name}`
           const repoName = repo.full_name.split('/')[1] || repo.full_name
           const owner = repo.full_name.split('/')[0] || ''

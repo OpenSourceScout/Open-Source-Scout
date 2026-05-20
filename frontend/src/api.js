@@ -135,13 +135,14 @@ export async function getMe() {
   return res.json()
 }
 
-export async function searchReposByTechStack({ tech_stack, fast_model, fresh = true }) {
+export async function searchReposByTechStack({ tech_stack, fast_model, fresh = true, exclude_repo_urls = [] }) {
   const res = await apiFetch(`/search-repos`, {
     method: 'POST',
     body: JSON.stringify({
       tech_stack,
       fast_model: fast_model || 'meta-llama/llama-4-scout-17b-16e-instruct',
       fresh,
+      exclude_repo_urls,
       client_request_id: typeof crypto !== 'undefined' && crypto.randomUUID
         ? crypto.randomUUID()
         : String(Date.now()),

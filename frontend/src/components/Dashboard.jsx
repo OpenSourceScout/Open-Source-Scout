@@ -6,6 +6,8 @@ import ScoutLogo from './ScoutLogo'
 import PathfinderSearchLoader from './PathfinderSearchLoader'
 import AgentPipelineLoader from './AgentPipelineLoader'
 import { RepoFeedbackBar } from './RepoFeedbackActions'
+import { useFeedbackActions } from '../context/FeedbackContext'
+import { filterPathfinderResult, filterRankedRepos } from '../utils/skippedRepos'
 
 const QUICK_ADD_TAGS = ['Python', 'JavaScript', 'React', 'Node.js', 'TypeScript', 'Go', 'Java', 'Rust']
 
@@ -44,6 +46,7 @@ function buildRepoBullets(repo) {
 }
 
 export default function Dashboard() {
+  const { getSkippedRepoUrls } = useFeedbackActions()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const initialMode = searchParams.get('mode') || 'tech'
@@ -98,8 +101,13 @@ export default function Dashboard() {
       /* ignore */
     }
     try {
-      const result = await searchReposByTechStack({ tech_stack: techTags, fresh: true })
-      setRankedRepos(result)
+      const exclude = getSkippedRepoUrls()
+      const result = await searchReposByTechStack({
+        tech_stack: techTags,
+        fresh: true,
+        exclude_repo_urls: exclude,
+      })
+      setRankedRepos(filterPathfinderResult(result, exclude))
       try {
         sessionStorage.setItem('scout_rankedRepos', JSON.stringify(result))
       } catch {
@@ -192,13 +200,15 @@ export default function Dashboard() {
     </div>
   )
 
-  const renderRepoResults = () => (
+  const renderRepoResults = () => {
+    const visibleRepos = filterRankedRepos(rankedRepos.ranked_repos, getSkippedRepoUrls())
+    return (
     <div className="p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-app-text">Discovered Repositories</h2>
           <p className="text-app-muted text-sm mt-1">
-            {rankedRepos.ranked_repos.length} repositories match your tech stack
+            {visibleRepos.length} repositories match your tech stack
             {rankedRepos.search_meta?.generated_at && (
               <span className="block text-xs text-app-muted/80 mt-1">
                 Live search · {rankedRepos.search_meta.repos_discovered} repos scanned
@@ -218,8 +228,14 @@ export default function Dashboard() {
         </button>
       </div>
 
+      {visibleRepos.length === 0 && (
+        <p className="text-app-muted text-sm mb-6">
+          All results were previously skipped. Try another tech stack or clear skips from Agent Memory reset.
+        </p>
+      )}
+
       <div className="space-y-6">
-        {rankedRepos.ranked_repos.map((repo, index) => {
+        {visibleRepos.map((repo, index) => {
           const repoName = repo.full_name.split('/')[1] || repo.full_name
           const owner = repo.full_name.split('/')[0] || ''
           const isAnalyzingThis = loading && selectedRepo?.full_name === repo.full_name
@@ -332,7 +348,8 @@ export default function Dashboard() {
         })}
       </div>
     </div>
-  )
+    )
+  }
 
   return (
     <div className="h-screen bg-app-bg flex text-app-text overflow-hidden">

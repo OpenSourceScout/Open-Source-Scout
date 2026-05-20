@@ -57,6 +57,14 @@ export function FeedbackProvider({ children }) {
 
   const isSkipped = useCallback((repoUrl) => !!state[skipKey(repoUrl)], [state])
 
+  const getSkippedRepoUrls = useCallback(
+    () =>
+      Object.keys(state)
+        .filter((k) => k.startsWith('skip:repo:') && state[k])
+        .map((k) => k.slice('skip:repo:'.length)),
+    [state],
+  )
+
   const sendThumbs = useCallback(
     async ({ target_type, target_id, vote }) => {
       const key = thumbsKey(target_type, target_id)
@@ -82,7 +90,7 @@ export function FeedbackProvider({ children }) {
       patchState((prev) => ({ ...prev, [key]: true }))
       try {
         await feedbackRepoSelection({ repo_url: repoUrl, action: 'skipped' })
-        setToast('Repository skipped')
+        setToast("Repository skipped — it won't appear in future searches")
       } catch {
         patchState((prev) => {
           const next = { ...prev }
@@ -96,8 +104,8 @@ export function FeedbackProvider({ children }) {
   )
 
   const value = useMemo(
-    () => ({ getVote, isSkipped, sendThumbs, sendRepoSkip }),
-    [getVote, isSkipped, sendThumbs, sendRepoSkip],
+    () => ({ getVote, isSkipped, getSkippedRepoUrls, sendThumbs, sendRepoSkip }),
+    [getVote, isSkipped, getSkippedRepoUrls, sendThumbs, sendRepoSkip],
   )
 
   return (
