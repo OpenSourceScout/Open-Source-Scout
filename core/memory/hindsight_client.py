@@ -67,23 +67,88 @@ def _memory_unit_fields(m: Any) -> tuple[str, str, Any, Any]:
     return mid, text, typ, ts
 
 
-def _mental_model_fields(model: Any) -> tuple[str, str, Any]:
+def _extract_hindsight_items(payload: Any, *attr_names: str) -> list[Any]:
+    """Normalize list responses (items, memories, banks, mental_models, …)."""
+    if payload is None:
+        return []
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        for name in attr_names:
+            chunk = payload.get(name)
+            if chunk:
+                return list(chunk)
+        return []
+    for name in attr_names:
+        chunk = getattr(payload, name, None)
+        if chunk:
+            return list(chunk)
+    if hasattr(payload, "model_dump"):
+        try:
+            data = payload.model_dump()
+            for name in attr_names:
+                chunk = data.get(name)
+                if chunk:
+                    return list(chunk)
+        except Exception:
+            pass
+    return []
+
+
+def _mental_model_fields(model: Any) -> tuple[str, str, str, Any]:
     if isinstance(model, dict):
         mid = _scalar_text(model.get("id"))
-        title_raw = model.get("title") or model.get("name") or model.get("label") or "Mental model"
+        title_raw = (
+            model.get("title")
+            or model.get("name")
+            or model.get("label")
+            or model.get("canonical_name")
+            or "Mental model"
+        )
         title = title_raw if isinstance(title_raw, str) else str(title_raw)
-        ca = model.get("created_at") or model.get("updated_at")
-        return mid, title.strip(), ca
+        desc = _scalar_text(model.get("content") or model.get("description") or "")
+        ca = model.get("created_at") or model.get("updated_at") or model.get("last_refreshed_at")
+        return mid, title.strip(), desc, ca
     mid = _scalar_text(getattr(model, "id", None))
     title_raw = (
         getattr(model, "title", None)
         or getattr(model, "name", None)
         or getattr(model, "label", None)
+        or getattr(model, "canonical_name", None)
         or "Mental model"
     )
     title = title_raw if isinstance(title_raw, str) else str(title_raw)
-    ca = getattr(model, "created_at", None) or getattr(model, "updated_at", None)
-    return mid, title.strip(), ca
+    desc = _scalar_text(getattr(model, "content", None) or getattr(model, "description", None) or "")
+    ca = (
+        getattr(model, "created_at", None)
+        or getattr(model, "updated_at", None)
+        or getattr(model, "last_refreshed_at", None)
+    )
+    return mid, title.strip(), desc, ca
+
+
+def _mental_model_row(model: Any, *, source: str = "curated") -> dict[str, Any]:
+    mid, title, desc, ca = _mental_model_fields(model)
+    return {
+        "id": mid,
+        "title": title or "Mental model",
+        "description": desc,
+        "created_at": ca,
+        "source": source,
+    }
+
+
+def _observation_as_mental_model_row(obs: dict[str, Any]) -> dict[str, Any]:
+    text = _scalar_text(obs.get("text") or "")
+    title = text[:120] + ("…" if len(text) > 120 else "")
+    return {
+        "id": obs.get("id") or "",
+        "title": title or "Consolidated observation",
+        "description": text,
+        "created_at": obs.get("mentioned_at"),
+        "source": "observation",
+        "freshness": obs.get("freshness") or "stable",
+    }
 
 
 try:
@@ -518,12 +583,26 @@ class ScoutHindsightClient:
         observations: list[dict[str, Any]] = []
         facts: list[dict[str, Any]] = []
         mental_models: list[dict[str, Any]] = []
+        hindsight_stats: dict[str, Any] = {}
+
+        try:
+            from hindsight_client.hindsight_client import _run_async as _hc_run_async
+
+            stats = _hc_run_async(sdk.banks.get_agent_stats(bank_id))
+            hindsight_stats = {
+                "total_observations": int(getattr(stats, "total_observations", 0) or 0),
+                "pending_consolidation": int(getattr(stats, "pending_consolidation", 0) or 0),
+                "last_consolidated_at": getattr(stats, "last_consolidated_at", None),
+            }
+        except Exception as e:
+            logger.warning("get_agent_stats failed: %s", e)
 
         try:
             obs_resp = sdk.list_memories(bank_id=bank_id, type="observation", limit=50)
-            items = getattr(obs_resp, "memories", None) or getattr(obs_resp, "items", None) or []
-            for m in items[:15]:
+            for m in _extract_hindsight_items(obs_resp, "memories", "items")[:20]:
                 mid, text, _, ts = _memory_unit_fields(m)
+                if not text:
+                    continue
                 observations.append(
                     {
                         "id": mid,
@@ -536,25 +615,32 @@ class ScoutHindsightClient:
             logger.warning("list observations failed: %s", e)
 
         try:
-            mm = sdk.list_mental_models(bank_id=bank_id)
-            mm_items = getattr(mm, "items", None) or getattr(mm, "mental_models", None) or []
-            for model in mm_items[:20]:
-                mid, title, ca = _mental_model_fields(model)
-                mental_models.append(
-                    {
-                        "id": mid,
-                        "title": title or "Mental model",
-                        "created_at": ca,
-                    }
+            from hindsight_client.hindsight_client import _run_async as _hc_run_async
+
+            mm = _hc_run_async(
+                sdk.mental_models.list_mental_models(
+                    bank_id=bank_id,
+                    limit=100,
+                    detail="metadata",
                 )
+            )
+            for model in _extract_hindsight_items(mm, "items", "mental_models")[:20]:
+                mental_models.append(_mental_model_row(model, source="curated"))
         except Exception as e:
             logger.warning("list mental models failed: %s", e)
+            try:
+                mm = sdk.list_mental_models(bank_id=bank_id)
+                for model in _extract_hindsight_items(mm, "items", "mental_models")[:20]:
+                    mental_models.append(_mental_model_row(model, source="curated"))
+            except Exception as e2:
+                logger.warning("list mental models fallback failed: %s", e2)
 
         try:
             f_resp = sdk.list_memories(bank_id=bank_id, limit=40)
-            items = getattr(f_resp, "memories", None) or getattr(f_resp, "items", None) or []
-            for m in items[-20:]:
+            for m in _extract_hindsight_items(f_resp, "memories", "items"):
                 mid, text, typ, ts = _memory_unit_fields(m)
+                if (typ or "").lower() == "observation":
+                    continue
                 facts.append(
                     {
                         "id": mid,
@@ -566,14 +652,21 @@ class ScoutHindsightClient:
         except Exception as e:
             logger.warning("list recent facts failed: %s", e)
 
+        consolidated_as_mental_models = [
+            _observation_as_mental_model_row(o) for o in observations[:20]
+        ]
+
         return {
             "observations": observations,
             "mental_models": mental_models,
+            "consolidated_as_mental_models": consolidated_as_mental_models,
             "recent_facts": facts[-20:],
+            "hindsight_stats": hindsight_stats,
             "totals": {
                 "facts": len(facts),
                 "observations": len(observations),
                 "mental_models": len(mental_models),
+                "consolidated_as_mental_models": len(consolidated_as_mental_models),
             },
         }
 

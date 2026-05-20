@@ -7,7 +7,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import app
-from core.memory.hindsight_client import _mental_model_fields, _memory_unit_fields
+from core.memory.hindsight_client import (
+    _extract_hindsight_items,
+    _mental_model_fields,
+    _memory_unit_fields,
+    _observation_as_mental_model_row,
+)
 from core.schemas import Agent1Output, PathfinderOutput, RankedIssue, RepoInfo, ScoreBreakdown
 
 
@@ -29,8 +34,21 @@ def test_memory_unit_fields_reads_api_dict_rows():
     assert typ == "experience"
 
 
+def test_extract_hindsight_items_reads_banks_key():
+    payload = {"banks": [{"bank_id": "scout:user:1"}]}
+    assert len(_extract_hindsight_items(payload, "items", "banks")) == 1
+
+
+def test_observation_maps_to_mental_model_row():
+    row = _observation_as_mental_model_row(
+        {"id": "o1", "text": "User prefers React repos", "mentioned_at": "2026-01-01"}
+    )
+    assert row["source"] == "observation"
+    assert "React" in row["title"]
+
+
 def test_mental_model_fields_reads_api_dict_rows():
-    mid, title, _ca = _mental_model_fields({"id": "mm1", "name": "Prefers small PRs"})
+    mid, title, _desc, _ca = _mental_model_fields({"id": "mm1", "name": "Prefers small PRs"})
     assert mid == "mm1"
     assert title == "Prefers small PRs"
 
