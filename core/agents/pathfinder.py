@@ -13,6 +13,7 @@ from core.schemas import (
 from core.memory.hindsight_client import get_scout_hindsight
 from core.memory.skipped_repos import (
     merge_exclude_sets,
+    normalize_repo_id,
     repo_matches_exclude,
     skipped_ids_from_memories,
 )
@@ -95,13 +96,14 @@ Be encouraging and help users find projects where they can make meaningful contr
         user_memory_section = ""
         memories: list = []
         exclude_ids: set[str] = set()
+        disliked_repos: list[dict[str, object]] = []
         uid = pipeline_user_id_var.get()
         if uid:
             try:
                 hx = get_scout_hindsight()
                 memories = hx.recall_sync(
                     uid,
-                    f"past tech stack preferences, skipped repositories, and repo history for stack: {','.join(tech_stack)}",
+                    f"past tech stack preferences, skipped or disliked repositories, and repo history for stack: {','.join(tech_stack)}",
                     top_k=15,
                 )
                 recalled_memory_ids = [
@@ -109,6 +111,7 @@ Be encouraging and help users find projects where they can make meaningful contr
                 ]
                 recalled_memory_ids = [x for x in recalled_memory_ids if x]
                 exclude_ids = skipped_ids_from_memories(memories)
+                disliked_repos = self._extract_disliked_repos(memories)
                 if memories:
                     lines = "\n".join(f"- {(m.get('text') or '')[:400]}" for m in memories[:10])
                     user_memory_section = f"\n\n## What I know about this user\n{lines}\n"
@@ -179,6 +182,7 @@ Be encouraging and help users find projects where they can make meaningful contr
             github_client,
             top_n,
             user_memory_section,
+            disliked_repos,
         )
         
         return self._finalize_output(
@@ -283,6 +287,7 @@ Be encouraging and help users find projects where they can make meaningful contr
         github_client,
         top_n: int,
         user_memory_section: str = "",
+        disliked_repos: Optional[list[dict[str, object]]] = None,
     ) -> List[RankedRepo]:
         """Score repositories and return top N ranked."""
         scored_repos = []
@@ -290,6 +295,10 @@ Be encouraging and help users find projects where they can make meaningful contr
         for repo in repos:
             try:
                 score_result = self._calculate_repo_score(repo, user_stack, github_client)
+                penalty = self._repo_dislike_penalty(repo, disliked_repos or [])
+                if penalty:
+                    score_result = dict(score_result)
+                    score_result["total"] = max(0, score_result["total"] - penalty)
                 scored_repos.append((repo, score_result))
             except Exception as e:
                 self.log(f"Failed to score {repo.full_name}: {e}", level="warning")
@@ -323,6 +332,51 @@ Be encouraging and help users find projects where they can make meaningful contr
             ))
         
         return ranked
+
+    def _extract_disliked_repos(self, memories: list) -> list[dict[str, object]]:
+        """Extract repo thumbs-down feedback from memories for ranking penalties."""
+        disliked: list[dict[str, object]] = []
+        for m in memories or []:
+            meta = m.get("metadata") if isinstance(m.get("metadata"), dict) else {}
+            if (meta.get("kind") or "").lower() != "thumbs":
+                continue
+            if (meta.get("vote") or "").lower() != "down":
+                continue
+            if (meta.get("target_type") or "").lower() != "repo":
+                continue
+            repo_url = meta.get("repo_url") or meta.get("target_id") or ""
+            repo_id = normalize_repo_id(repo_url or meta.get("repo_full_name") or "")
+            if not repo_id:
+                continue
+            language = (meta.get("language") or "").strip().lower()
+            topics = [
+                str(t).strip().lower()
+                for t in (meta.get("topics") or [])
+                if str(t).strip()
+            ]
+            disliked.append({
+                "id": repo_id,
+                "language": language,
+                "topics": set(topics),
+            })
+        return disliked
+
+    def _repo_dislike_penalty(self, repo, disliked_repos: list[dict[str, object]]) -> int:
+        if not disliked_repos:
+            return 0
+        repo_id = normalize_repo_id(getattr(repo, "html_url", "") or getattr(repo, "full_name", ""))
+        language = (getattr(repo, "language", "") or "").strip().lower()
+        topics = {t.lower() for t in getattr(repo, "topics", []) or []}
+        penalty = 0
+        for disliked in disliked_repos:
+            if repo_id and disliked.get("id") == repo_id:
+                return 40
+            if language and disliked.get("language") == language:
+                penalty += 8
+            disliked_topics = disliked.get("topics") or set()
+            if topics and disliked_topics and topics.intersection(disliked_topics):
+                penalty += 6
+        return min(penalty, 20)
     
     def _calculate_repo_score(
         self,

@@ -3,6 +3,7 @@ Agent 1: Triage Nurse - Issue ranking and selection.
 """
 from typing import List, Optional
 import json
+import re
 
 from core.agents.base import BaseAgent
 from core.schemas import (
@@ -10,8 +11,9 @@ from core.schemas import (
     RankedIssue, RepoInfo
 )
 from core.memory.hindsight_client import get_scout_hindsight
+from core.memory.skipped_repos import normalize_repo_id
 from core.runtime.groq_context import pipeline_user_id_var
-from core.scoring import IssueScorer
+from core.scoring import IssueScorer, ScoreResult
 from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B
 
 
@@ -78,6 +80,7 @@ Be encouraging but honest about difficulty levels."""
         recalled_memory_ids: list[str] = []
         memory_summary = ""
         patterns_section = ""
+        disliked_issues: list[dict[str, object]] = []
         uid = pipeline_user_id_var.get()
         repo_language = (repo.language or "").strip()
         if not repo_language and repo.languages:
@@ -87,7 +90,7 @@ Be encouraging but honest about difficulty levels."""
                 hx = get_scout_hindsight()
                 memories = hx.recall_sync(
                     uid,
-                    f"issue completion patterns in {repo_language}: labels, size, complexity",
+                    f"issue completion patterns and thumbs-down feedback in {repo_language}: labels, size, complexity",
                     top_k=8,
                 )
                 recalled_memory_ids = [
@@ -100,6 +103,7 @@ Be encouraging but honest about difficulty levels."""
                     memory_summary = (
                         f"Influenced by {len(recalled_memory_ids)} past memories about issue preferences"
                     )
+                disliked_issues = self._extract_disliked_issues(memories)
             except Exception as e:
                 self.log(f"Hindsight recall skipped: {e}", level="warning")
 
@@ -118,8 +122,21 @@ Be encouraging but honest about difficulty levels."""
                 memory_summary=memory_summary,
             )
         
-        # Score all issues
-        ranked = self.scorer.rank_issues(issues, top_n=top_n)
+        # Score all issues with thumbs-down penalty
+        ranked = []
+        for issue in issues:
+            score_result = self.scorer.score_issue(issue)
+            penalty = self._issue_dislike_penalty(issue, disliked_issues)
+            if penalty:
+                score_result = ScoreResult(
+                    total=max(0, score_result.total - penalty),
+                    breakdown=score_result.breakdown,
+                    reasons=score_result.reasons,
+                )
+            ranked.append((issue, score_result))
+
+        ranked.sort(key=lambda x: x[1].total, reverse=True)
+        ranked = ranked[:top_n]
         
         # Generate enhanced reasons using LLM
         ranked_issues = []
@@ -201,3 +218,60 @@ Example format:
         except Exception as e:
             self.log(f"Failed to enhance reasons: {e}", level="warning")
             return base_reasons[:4]
+
+    def _extract_disliked_issues(self, memories: list) -> list[dict[str, object]]:
+        """Extract issue thumbs-down feedback from memories for ranking penalties."""
+        disliked: list[dict[str, object]] = []
+        for m in memories or []:
+            meta = m.get("metadata") if isinstance(m.get("metadata"), dict) else {}
+            if (meta.get("kind") or "").lower() != "thumbs":
+                continue
+            if (meta.get("vote") or "").lower() != "down":
+                continue
+            if (meta.get("target_type") or "").lower() != "issue":
+                continue
+            issue_url = meta.get("issue_url") or meta.get("target_id") or ""
+            repo_id = normalize_repo_id(meta.get("repo_url") or issue_url)
+            labels = [
+                str(l).strip().lower()
+                for l in (meta.get("labels") or [])
+                if str(l).strip()
+            ]
+            title = (meta.get("title") or "").strip()
+            disliked.append(
+                {
+                    "issue_url": issue_url,
+                    "repo_id": repo_id,
+                    "labels": set(labels),
+                    "tokens": self._tokenize_text(title),
+                }
+            )
+        return disliked
+
+    def _issue_dislike_penalty(self, issue: GitHubIssue, disliked_issues: list[dict[str, object]]) -> int:
+        if not disliked_issues:
+            return 0
+        issue_url = issue.html_url or issue.url
+        repo_id = normalize_repo_id(issue_url)
+        labels = {lbl.lower() for lbl in issue.labels}
+        title_tokens = self._tokenize_text(issue.title)
+        penalty = 0
+        for disliked in disliked_issues:
+            if issue_url and disliked.get("issue_url") == issue_url:
+                return 40
+            disliked_labels = disliked.get("labels") or set()
+            disliked_tokens = disliked.get("tokens") or set()
+            if repo_id and disliked.get("repo_id") == repo_id:
+                if labels and disliked_labels and labels.intersection(disliked_labels):
+                    penalty += 10
+                if title_tokens and disliked_tokens and title_tokens.intersection(disliked_tokens):
+                    penalty += 8
+                continue
+            if labels and disliked_labels and labels.intersection(disliked_labels):
+                penalty += 6
+        return min(penalty, 20)
+
+    def _tokenize_text(self, text: str) -> set[str]:
+        if not text:
+            return set()
+        return set(re.findall(r"[a-z0-9]{3,}", text.lower()))

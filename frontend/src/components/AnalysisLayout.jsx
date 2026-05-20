@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { PanelLeft } from 'lucide-react'
 import AnalysisSidebar from './AnalysisSidebar'
 import { fetchMemorySummary } from '../api'
+import { isAdmin } from '../auth'
 
 const SIDEBAR_OPEN_KEY = 'scout_analysis_sidebar_open'
 
@@ -206,26 +207,30 @@ export default function AnalysisLayout() {
       )}
       <main className="flex-1 min-w-0 min-h-0 overflow-hidden bg-app-bg flex flex-col">
         <div className="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b border-app-border bg-app-bg/95 px-4 py-2 text-[11px] backdrop-blur-sm shrink-0">
-          <span className="rounded-full border border-app-border bg-app-surface px-2 py-1 font-mono text-app-muted">
-            cascadeflow: {cascadeflowRun?.mode ?? '—'}
-          </span>
-          {cascadeflowRun != null && cascadeflowRun.cost != null && (
-            <span className="rounded-full border border-primary-500/20 bg-primary-500/10 px-2 py-1 font-mono text-primary-300">
-              ~${Number(cascadeflowRun.cost).toFixed(5)} USD
-            </span>
+          {isAdmin() && (
+            <>
+              <span className="rounded-full border border-app-border bg-app-surface px-2 py-1 font-mono text-app-muted">
+                cascadeflow: {cascadeflowRun?.mode ?? '—'}
+              </span>
+              {cascadeflowRun != null && cascadeflowRun.cost != null && (
+                <span className="rounded-full border border-primary-500/20 bg-primary-500/10 px-2 py-1 font-mono text-primary-300">
+                  ~${Number(cascadeflowRun.cost).toFixed(5)} USD
+                </span>
+              )}
+              <Link
+                to="/analysis/agent-memory"
+                className="rounded-full border border-app-border px-2 py-1 font-medium text-app-muted hover:border-primary-500/40 hover:text-primary-400"
+              >
+                memories: {memoryTotal === null ? '—' : memoryTotal}
+              </Link>
+              <Link
+                to="/analysis/decision-trace"
+                className="rounded-full border border-app-border px-2 py-1 font-medium text-app-muted hover:border-primary-500/40 hover:text-primary-400"
+              >
+                trace
+              </Link>
+            </>
           )}
-          <Link
-            to="/analysis/agent-memory"
-            className="rounded-full border border-app-border px-2 py-1 font-medium text-app-muted hover:border-primary-500/40 hover:text-primary-400"
-          >
-            memories: {memoryTotal === null ? '—' : memoryTotal}
-          </Link>
-          <Link
-            to="/analysis/decision-trace"
-            className="rounded-full border border-app-border px-2 py-1 font-medium text-app-muted hover:border-primary-500/40 hover:text-primary-400"
-          >
-            trace
-          </Link>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto">
           <Outlet

@@ -659,3 +659,83 @@ def update_project_testing(
             )
             row = fetch_one_dict(cur)
             return _jsonable_row(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Admin queries
+# ---------------------------------------------------------------------------
+
+
+def list_users_admin(
+    pool: ConnectionPool,
+    query: str | None = None,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    lim = min(max(limit, 1), 500)
+    q = (query or "").strip()
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            if q:
+                cur.execute(
+                    """
+                    select id, email, display_name, role, created_at
+                    from users
+                    where email ilike %s
+                       or display_name ilike %s
+                       or cast(id as text) = %s
+                    order by created_at desc
+                    limit %s
+                    """,
+                    (f"%{q}%", f"%{q}%", q, lim),
+                )
+            else:
+                cur.execute(
+                    """
+                    select id, email, display_name, role, created_at
+                    from users
+                    order by created_at desc
+                    limit %s
+                    """,
+                    (lim,),
+                )
+            return [_jsonable_row(r) for r in fetch_all_dicts(cur)]
+
+
+def list_projects_admin(
+    pool: ConnectionPool,
+    user_id: int | None = None,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    lim = min(max(limit, 1), 1000)
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            if user_id is not None:
+                cur.execute(
+                    """
+                    select p.id, p.user_id, p.name, p.project_type,
+                           p.repo_url, p.repo_full_name, p.analysis_result,
+                           p.created_at, p.updated_at,
+                           u.email as user_email, u.display_name as user_display_name
+                    from user_projects p
+                    join users u on u.id = p.user_id
+                    where p.user_id = %s
+                    order by p.updated_at desc
+                    limit %s
+                    """,
+                    (user_id, lim),
+                )
+            else:
+                cur.execute(
+                    """
+                    select p.id, p.user_id, p.name, p.project_type,
+                           p.repo_url, p.repo_full_name, p.analysis_result,
+                           p.created_at, p.updated_at,
+                           u.email as user_email, u.display_name as user_display_name
+                    from user_projects p
+                    join users u on u.id = p.user_id
+                    order by p.updated_at desc
+                    limit %s
+                    """,
+                    (lim,),
+                )
+            return [_jsonable_row(r) for r in fetch_all_dicts(cur)]

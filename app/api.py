@@ -10,6 +10,7 @@ import errno
 import asyncio
 import logging
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -63,6 +64,8 @@ from app.db import (
     update_project_briefing,
     update_project_testing,
     update_project_analysis_result,
+    list_users_admin,
+    list_projects_admin,
 )
 
 from integrations.github_client import GitHubClient
@@ -340,6 +343,20 @@ def _require_pool(request: Request):
     return pool
 
 
+def _require_admin_user(request: Request) -> int:
+    """Ensure the caller is an admin user (JWT required)."""
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select role from users where id = %s", (uid,))
+            row = cur.fetchone()
+            role = row[0] if row else None
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return uid
+
+
 def _require_terminal_manager(request: Request) -> TerminalManager:
     """Return terminal manager or raise 503 if unavailable."""
     manager = getattr(request.app.state, "terminal_manager", None)
@@ -486,17 +503,44 @@ def _feedback_thumbs_worker(
     target_type: str,
     target_id: str,
     vote: str,
+    extra_meta: dict[str, Any] | None = None,
 ) -> None:
     try:
+        meta = {
+            "kind": "thumbs",
+            "target_type": target_type,
+            "target_id": target_id,
+            "vote": vote,
+        }
+        if extra_meta:
+            meta.update(extra_meta)
         hx = get_scout_hindsight()
         hx.retain_sync(
             user_id,
             f"Explicit feedback: {vote} on {target_type} {target_id}",
             "experience",
-            {"kind": "thumbs", "target_type": target_type, "target_id": target_id, "vote": vote},
+            meta,
         )
     except Exception as e:
         logger.warning("feedback thumbs retain failed: %s", e)
+
+
+_GH_ISSUE_RE = re.compile(r"github\.com/([^/\s]+/[^/\s#?]+)/issues/(\d+)", re.I)
+_GH_API_ISSUE_RE = re.compile(r"api\.github\.com/repos/([^/\s]+/[^/\s#?]+)/issues/(\d+)", re.I)
+
+
+def _parse_issue_url(issue_url: str) -> tuple[str, int] | None:
+    if not issue_url:
+        return None
+    match = _GH_ISSUE_RE.search(issue_url)
+    if not match:
+        match = _GH_API_ISSUE_RE.search(issue_url)
+    if not match:
+        return None
+    repo_id, issue_number = match.group(1).strip(), match.group(2).strip()
+    if not repo_id or not issue_number.isdigit():
+        return None
+    return f"https://github.com/{repo_id}", int(issue_number)
 
 
 def _record_phase1_issue_analysis(pool, user_id: int, body: AnalyzeRequest, results: dict) -> None:
@@ -859,9 +903,45 @@ def feedback_export(
 @app.post("/api/feedback/thumbs")
 def feedback_thumbs(
     body: ThumbsFeedback,
+    request: Request,
     user_ctx: UserContext = Depends(get_current_user),
 ):
-    _feedback_thumbs_worker(user_ctx.user_id, body.target_type, body.target_id.strip(), body.vote)
+    extra_meta: dict[str, Any] = {}
+    target_type = body.target_type
+    target_id = body.target_id.strip()
+    if body.vote == "down":
+        try:
+            github_client = GitHubClient(token=_get_github_token_for_user(request))
+            if target_type == "repo":
+                repo = github_client.get_repo(target_id)
+                extra_meta.update(
+                    {
+                        "repo_url": repo.html_url,
+                        "repo_full_name": repo.full_name,
+                        "language": repo.language,
+                        "topics": getattr(repo, "topics", []) or [],
+                    }
+                )
+            elif target_type == "issue":
+                parsed = _parse_issue_url(target_id)
+                if parsed:
+                    repo_url, issue_number = parsed
+                    issue = github_client.get_issue(repo_url, issue_number)
+                    repo_full_name = repo_url.replace("https://github.com/", "").strip("/")
+                    extra_meta.update(
+                        {
+                            "repo_url": repo_url,
+                            "repo_full_name": repo_full_name,
+                            "issue_url": issue.html_url,
+                            "issue_number": issue.number,
+                            "title": issue.title,
+                            "labels": issue.labels or [],
+                        }
+                    )
+        except Exception as e:
+            logger.warning("thumbs feedback enrichment skipped: %s", e)
+
+    _feedback_thumbs_worker(user_ctx.user_id, target_type, target_id, body.vote, extra_meta or None)
     return {"accepted": True}
 
 
@@ -912,6 +992,84 @@ def memory_reset(
     hx = get_scout_hindsight()
     hx.reset_bank_sync(user_ctx.user_id)
     return Response(status_code=204)
+
+
+def _extract_cascadeflow_run(analysis_result: Any) -> dict[str, Any] | None:
+    if not analysis_result:
+        return None
+    if isinstance(analysis_result, str):
+        try:
+            analysis_result = json.loads(analysis_result)
+        except Exception:
+            return None
+    if not isinstance(analysis_result, dict):
+        return None
+    run = analysis_result.get("cascadeflow_run") or analysis_result.get("cascadeflowRun")
+    return run if isinstance(run, dict) else None
+
+
+@app.get("/api/admin/users")
+def admin_users(
+    request: Request,
+    query: str | None = Query(None),
+):
+    _require_admin_user(request)
+    pool = _require_pool(request)
+    users = list_users_admin(pool, query=query)
+    return {"users": users}
+
+
+@app.get("/api/admin/decision-traces")
+def admin_decision_traces(
+    request: Request,
+    user_id: int | None = Query(None),
+):
+    _require_admin_user(request)
+    pool = _require_pool(request)
+    rows = list_projects_admin(pool, user_id=user_id)
+    out = []
+    for row in rows:
+        cascadeflow_run = _extract_cascadeflow_run(row.get("analysis_result"))
+        out.append(
+            {
+                "project_id": row.get("id"),
+                "project_name": row.get("name"),
+                "project_type": row.get("project_type"),
+                "repo_url": row.get("repo_url"),
+                "repo_full_name": row.get("repo_full_name"),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+                "user_id": row.get("user_id"),
+                "user_email": row.get("user_email"),
+                "user_display_name": row.get("user_display_name"),
+                "cascadeflow_run": cascadeflow_run,
+            }
+        )
+    return {"projects": out}
+
+
+@app.get("/api/admin/memory/summary")
+def admin_memory_summary(
+    request: Request,
+    user_id: str = Query(..., description="Target user id"),
+):
+    _require_admin_user(request)
+    hx = get_scout_hindsight()
+    hx.get_or_create_bank_sync(user_id)
+    payload = hx.memory_summary_sync(user_id)
+    t = payload.get("totals") or {}
+    try:
+        total_mem = int(t.get("facts", 0)) + int(t.get("observations", 0)) + int(t.get("mental_models", 0))
+    except (TypeError, ValueError):
+        total_mem = 0
+    if isinstance(payload, dict):
+        payload = dict(payload)
+        pt = dict(t)
+        pt["total_entries"] = total_mem
+        payload["totals"] = pt
+        payload["user_id"] = user_id
+        payload["hindsight_enabled"] = hx.enabled
+    return payload
 
 
 @app.post("/api/export/pdf")

@@ -548,6 +548,33 @@ export async function fetchMemorySummary() {
   return res.json()
 }
 
+export async function adminListUsers(query = '') {
+  const q = query ? `?query=${encodeURIComponent(query)}` : ''
+  const res = await apiFetch(`/admin/users${q}`)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load users')
+  }
+  return res.json()
+}
+
+export async function adminDecisionTraces({ user_id } = {}) {
+  const q = user_id != null ? `?user_id=${encodeURIComponent(user_id)}` : ''
+  const res = await apiFetch(`/admin/decision-traces${q}`)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load decision traces')
+  }
+  return res.json()
+}
+
+export async function adminMemorySummary(user_id) {
+  if (!user_id) throw new Error('Missing user id')
+  const res = await apiFetch(`/admin/memory/summary?user_id=${encodeURIComponent(user_id)}`)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load memory summary')
+  }
+  return res.json()
+}
+
 export async function fetchMemoryByIds(ids) {
   if (!ids || ids.length === 0) return { memories: [] }
   const q = encodeURIComponent(ids.join(','))

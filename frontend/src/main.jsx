@@ -17,8 +17,8 @@ import EditorWindow from './pages/EditorWindow.jsx'
 import Profile from './pages/Profile.jsx'
 import Projects from './pages/Projects.jsx'
 import AnalysisDashboard from './pages/AnalysisDashboard.jsx'
-import DecisionTrace from './pages/DecisionTrace.jsx'
-import AgentMemory from './pages/AgentMemory.jsx'
+import AdminDecisionTrace from './pages/AdminDecisionTrace.jsx'
+import AdminAgentMemory from './pages/AdminAgentMemory.jsx'
 import SettingsPage from './pages/Settings.jsx'
 import './index.css'
 import { isLoggedIn, isAdmin } from './auth'
@@ -212,14 +212,16 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="issues" element={<IssueRanking />} />
           <Route path="code" element={<CodeLocator />} />
           <Route path="briefing" element={<ContributorBriefing />} />
-          <Route path="decision-trace" element={<DecisionTrace />} />
-          <Route path="agent-memory" element={<AgentMemory />} />
+          <Route path="decision-trace" element={<RequireAdmin><AdminDecisionTrace /></RequireAdmin>} />
+          <Route path="agent-memory" element={<RequireAdmin><AdminAgentMemory /></RequireAdmin>} />
           <Route path="qa-report" element={<RequireAdmin><QaReport /></RequireAdmin>} />
         </Route>
         <Route path="/editor" element={<RequireAuth><EditorWindow /></RequireAuth>} />
         <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
         <Route path="/projects" element={<RequireAuth><Projects /></RequireAuth>} />
+        <Route path="/admin/decision-trace" element={<RequireAdmin><AdminDecisionTrace /></RequireAdmin>} />
+        <Route path="/admin/agent-memory" element={<RequireAdmin><AdminAgentMemory /></RequireAdmin>} />
       </Routes>
     </BrowserRouter>
     </FeedbackProvider>

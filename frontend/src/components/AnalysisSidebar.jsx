@@ -25,8 +25,8 @@ const NAV_ITEMS = [
   { path: '/analysis/issues', label: 'Issue analysis', Icon: ClipboardList },
   { path: '/analysis/code', label: 'Code Locator', Icon: MapPin },
   { path: '/analysis/briefing', label: 'Contributor Briefing', Icon: FileText },
-  { path: '/analysis/decision-trace', label: 'Decision Trace', Icon: Gauge },
-  { path: '/analysis/agent-memory', label: 'Agent Memory', Icon: Brain },
+  { path: '/analysis/decision-trace', label: 'Decision Trace', Icon: Gauge, adminOnly: true },
+  { path: '/analysis/agent-memory', label: 'Agent Memory', Icon: Brain, adminOnly: true },
   { path: '/analysis/qa-report', label: 'QA Report', Icon: ShieldCheck, adminOnly: true },
 ]
 

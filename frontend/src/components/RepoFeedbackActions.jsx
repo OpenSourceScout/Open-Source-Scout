@@ -72,7 +72,7 @@ export function RepoFeedbackBar({ repo, compact = false }) {
 
 export function IssueFeedbackThumbs({ issue, compact = true }) {
   const { getVote, sendThumbs } = useFeedbackActions()
-  const targetId = issue.url || String(issue.number)
+  const targetId = issue.html_url || issue.url || String(issue.number)
   const vote = getVote('issue', targetId)
   const btnPad = compact ? 'p-1.5' : 'p-2'
   const iconSize = compact ? 'w-3.5 h-3.5' : 'w-4 h-4'

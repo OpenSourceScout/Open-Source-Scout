@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { Search, Rocket, Settings, User, Github, ExternalLink, FolderKanban } from 'lucide-react'
+import { Search, Rocket, Settings, User, Github, ExternalLink, FolderKanban, Gauge, Brain } from 'lucide-react'
 import { searchReposByTechStack, runAnalyze, createProject, getMe, feedbackRepoSelection } from '../api'
 import ScoutLogo from './ScoutLogo'
 import PathfinderSearchLoader from './PathfinderSearchLoader'
@@ -8,6 +8,7 @@ import AgentPipelineLoader from './AgentPipelineLoader'
 import { RepoFeedbackBar } from './RepoFeedbackActions'
 import { useFeedbackActions } from '../context/FeedbackContext'
 import { filterPathfinderResult, filterRankedRepos } from '../utils/skippedRepos'
+import { isAdmin } from '../auth'
 
 const QUICK_ADD_TAGS = ['Python', 'JavaScript', 'React', 'Node.js', 'TypeScript', 'Go', 'Java', 'Rust']
 
@@ -63,6 +64,7 @@ export default function Dashboard() {
   const [selectedRepo, setSelectedRepo] = useState(null)
   const [analysisResult, setAnalysisResult] = useState(null)
   const [user, setUser] = useState(null)
+  const admin = isAdmin()
 
   useEffect(() => {
     getMe().then(setUser).catch(() => setUser(null))
@@ -503,6 +505,28 @@ export default function Dashboard() {
             )}
           </button>
         </div>
+
+        {admin && (
+          <div className="p-4 border-t border-app-border bg-app-surface/40 shrink-0">
+            <p className="text-[11px] uppercase tracking-wide text-app-muted mb-2">Admin</p>
+            <div className="space-y-2">
+              <Link
+                to="/admin/decision-trace"
+                className="flex items-center gap-2 rounded-lg border border-app-border px-3 py-2 text-sm text-app-muted hover:text-app-text hover:border-primary-500/40 hover:bg-app-elevated transition-colors"
+              >
+                <Gauge className="w-4 h-4" />
+                Decision Trace
+              </Link>
+              <Link
+                to="/admin/agent-memory"
+                className="flex items-center gap-2 rounded-lg border border-app-border px-3 py-2 text-sm text-app-muted hover:text-app-text hover:border-primary-500/40 hover:bg-app-elevated transition-colors"
+              >
+                <Brain className="w-4 h-4" />
+                Agent Memory
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Profile Sidebar Footer */}
         <div className="p-4 border-t border-app-border bg-app-surface/50 shrink-0">
