@@ -5,7 +5,9 @@ import asyncio
 import json
 import logging
 import os
+import re
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, TypeVar
 
@@ -95,6 +97,26 @@ def _extract_hindsight_items(payload: Any, *attr_names: str) -> list[Any]:
     return []
 
 
+def _mental_model_content_empty(content: str) -> bool:
+    text = _scalar_text(content)
+    if not text:
+        return True
+    if len(text) < 4:
+        return True
+    for pat in _MENTAL_MODEL_EMPTY_PATTERNS:
+        if pat.match(text):
+            return True
+    return False
+
+
+def _operation_id_from_response(resp: Any) -> str:
+    if resp is None:
+        return ""
+    if isinstance(resp, dict):
+        return _scalar_text(resp.get("operation_id"))
+    return _scalar_text(getattr(resp, "operation_id", None))
+
+
 def _mental_model_fields(model: Any) -> tuple[str, str, str, Any]:
     if isinstance(model, dict):
         mid = _scalar_text(model.get("id"))
@@ -106,7 +128,12 @@ def _mental_model_fields(model: Any) -> tuple[str, str, str, Any]:
             or "Mental model"
         )
         title = title_raw if isinstance(title_raw, str) else str(title_raw)
-        desc = _scalar_text(model.get("content") or model.get("description") or "")
+        desc = _scalar_text(
+            model.get("content")
+            or model.get("text")
+            or model.get("description")
+            or ""
+        )
         ca = model.get("created_at") or model.get("updated_at") or model.get("last_refreshed_at")
         return mid, title.strip(), desc, ca
     mid = _scalar_text(getattr(model, "id", None))
@@ -118,13 +145,29 @@ def _mental_model_fields(model: Any) -> tuple[str, str, str, Any]:
         or "Mental model"
     )
     title = title_raw if isinstance(title_raw, str) else str(title_raw)
-    desc = _scalar_text(getattr(model, "content", None) or getattr(model, "description", None) or "")
+    desc = _scalar_text(
+        getattr(model, "content", None)
+        or getattr(model, "text", None)
+        or getattr(model, "description", None)
+        or ""
+    )
     ca = (
         getattr(model, "created_at", None)
         or getattr(model, "updated_at", None)
         or getattr(model, "last_refreshed_at", None)
     )
     return mid, title.strip(), desc, ca
+
+
+def _mental_model_is_stale(model: Any) -> bool:
+    if isinstance(model, dict):
+        return bool(model.get("is_stale"))
+    return bool(getattr(model, "is_stale", False))
+
+
+def _mental_model_needs_refresh(model: Any) -> bool:
+    _mid, _title, desc, _ca = _mental_model_fields(model)
+    return _mental_model_is_stale(model) or _mental_model_content_empty(desc)
 
 
 def _mental_model_row(model: Any, *, source: str = "curated") -> dict[str, Any]:
@@ -185,6 +228,17 @@ DIRECTIVES: list[tuple[str, str]] = [
 
 # Curated mental models (Hindsight living documents) — distinct from auto-consolidated observations.
 # Created per user bank; refresh_after_consolidation keeps them updated when new memories arrive.
+MENTAL_MODEL_OP_POLL_INTERVAL_SEC = 0.75
+MENTAL_MODEL_OP_TIMEOUT_SEC = 120.0
+MEMORY_SUMMARY_SYNC_TIMEOUT_SEC = 300.0
+
+# Placeholder text Hindsight returns before reflect finishes or when the bank has no data yet.
+_MENTAL_MODEL_EMPTY_PATTERNS = (
+    re.compile(r"^i\s+don'?t\s+have\s+information\.?$", re.I),
+    re.compile(r"^no\s+information\.?$", re.I),
+    re.compile(r"^not\s+enough\s+information\.?$", re.I),
+)
+
 SCOUT_MENTAL_MODEL_SPECS: list[dict[str, Any]] = [
     {
         "id": "scout-repo-preferences",
@@ -339,25 +393,127 @@ class ScoutHindsightClient:
 
         self._ensure_scout_mental_models(sdk, bank_id)
 
+    def _hc_run_async(self, coro: Any) -> Any:
+        from hindsight_client.hindsight_client import _run_async as _hc_run_async
+
+        return _hc_run_async(coro)
+
+    def _wait_for_hindsight_operations(
+        self,
+        sdk: Any,
+        bank_id: str,
+        operation_ids: list[str],
+        timeout: float = MENTAL_MODEL_OP_TIMEOUT_SEC,
+    ) -> None:
+        pending = {_scalar_text(op) for op in operation_ids if _scalar_text(op)}
+        if not pending:
+            return
+        deadline = time.monotonic() + timeout
+        while pending and time.monotonic() < deadline:
+            finished: set[str] = set()
+            for op_id in pending:
+                try:
+                    status = self._hc_run_async(
+                        sdk.operations.get_operation_status(bank_id, op_id)
+                    )
+                    st = getattr(status, "status", None)
+                    if st is None and isinstance(status, dict):
+                        st = status.get("status")
+                    st = str(st or "").lower()
+                    if st == "completed":
+                        finished.add(op_id)
+                    elif st in ("failed", "cancelled", "not_found"):
+                        err = getattr(status, "error_message", None) or (
+                            status.get("error_message") if isinstance(status, dict) else None
+                        )
+                        logger.warning(
+                            "Hindsight operation %s for %s ended: %s (%s)",
+                            op_id,
+                            bank_id,
+                            st,
+                            err or "no detail",
+                        )
+                        finished.add(op_id)
+                except Exception as e:
+                    logger.warning("get_operation_status %s failed: %s", op_id, e)
+            pending -= finished
+            if pending:
+                time.sleep(MENTAL_MODEL_OP_POLL_INTERVAL_SEC)
+        if pending:
+            logger.warning(
+                "Timed out waiting for Hindsight operations on %s: %s",
+                bank_id,
+                ", ".join(sorted(pending)),
+            )
+
+    def _bank_has_memories(self, sdk: Any, bank_id: str) -> bool:
+        try:
+            resp = sdk.list_memories(bank_id=bank_id, limit=1)
+            return bool(_extract_hindsight_items(resp, "memories", "items"))
+        except Exception:
+            return False
+
+    def _list_scout_mental_models_raw(self, sdk: Any, bank_id: str) -> list[Any]:
+        try:
+            mm = self._hc_run_async(
+                sdk.mental_models.list_mental_models(
+                    bank_id=bank_id,
+                    limit=100,
+                    detail="content",
+                )
+            )
+            return _extract_hindsight_items(mm, "items", "mental_models")
+        except Exception as e:
+            logger.warning("list_scout_mental_models_raw failed: %s", e)
+            try:
+                mm = sdk.list_mental_models(bank_id=bank_id)
+                return _extract_hindsight_items(mm, "items", "mental_models")
+            except Exception as e2:
+                logger.warning("list_scout_mental_models_raw fallback failed: %s", e2)
+                return []
+
+    def _refresh_scout_mental_models(
+        self,
+        sdk: Any,
+        bank_id: str,
+        model_ids: list[str],
+    ) -> None:
+        """Run Hindsight reflect for each model and wait until async operations finish."""
+        if not model_ids:
+            return
+        op_ids: list[str] = []
+        for mm_id in model_ids:
+            try:
+                resp = sdk.refresh_mental_model(bank_id=bank_id, mental_model_id=mm_id)
+                op_id = _operation_id_from_response(resp)
+                if op_id:
+                    op_ids.append(op_id)
+                    logger.info("Refreshing mental model %s for %s (op=%s)", mm_id, bank_id, op_id)
+            except Exception as e:
+                logger.warning("refresh_mental_model %s for %s failed: %s", mm_id, bank_id, e)
+        self._wait_for_hindsight_operations(sdk, bank_id, op_ids)
+
     def _ensure_scout_mental_models(self, sdk: Any, bank_id: str) -> None:
         """Provision Scout curated mental models (idempotent). Observations alone are not mental models."""
         if not sdk or not SCOUT_MENTAL_MODEL_SPECS:
             return
         try:
-            listed = sdk.list_mental_models(bank_id=bank_id)
+            listed_models = self._list_scout_mental_models_raw(sdk, bank_id)
             existing_ids: set[str] = set()
-            for model in _extract_hindsight_items(listed, "items", "mental_models"):
+            for model in listed_models:
                 mid = _scalar_text(
                     model.get("id") if isinstance(model, dict) else getattr(model, "id", None)
                 )
                 if mid:
                     existing_ids.add(mid)
+
+            create_ops: list[str] = []
             for spec in SCOUT_MENTAL_MODEL_SPECS:
                 mm_id = spec["id"]
                 if mm_id in existing_ids:
                     continue
                 try:
-                    sdk.create_mental_model(
+                    resp = sdk.create_mental_model(
                         bank_id=bank_id,
                         id=mm_id,
                         name=spec["name"],
@@ -366,13 +522,34 @@ class ScoutHindsightClient:
                         max_tokens=2048,
                         trigger={"refresh_after_consolidation": True},
                     )
+                    op_id = _operation_id_from_response(resp)
+                    if op_id:
+                        create_ops.append(op_id)
                     logger.info("Created Hindsight mental model %s for %s", mm_id, bank_id)
                 except Exception as e:
                     logger.warning(
                         "create_mental_model %s for %s failed: %s", mm_id, bank_id, e
                     )
+
+            if create_ops:
+                self._wait_for_hindsight_operations(sdk, bank_id, create_ops)
         except Exception as e:
             logger.warning("ensure_scout_mental_models failed for %s: %s", bank_id, e)
+
+    def _sync_scout_mental_model_content(self, sdk: Any, bank_id: str, user_id: str) -> None:
+        """Refresh empty/stale Scout mental models when the bank has memories (memory page load)."""
+        if not sdk or not self._bank_has_memories(sdk, bank_id):
+            return
+        scout_ids = {spec["id"] for spec in SCOUT_MENTAL_MODEL_SPECS}
+        to_refresh: list[str] = []
+        for model in self._list_scout_mental_models_raw(sdk, bank_id):
+            mid = _scalar_text(
+                model.get("id") if isinstance(model, dict) else getattr(model, "id", None)
+            )
+            if mid in scout_ids and _mental_model_needs_refresh(model):
+                to_refresh.append(mid)
+        if to_refresh:
+            self._refresh_scout_mental_models(sdk, bank_id, to_refresh)
 
     async def get_or_create_bank(self, user_id: str) -> str:
         bid = self.bank_for_user(user_id)
@@ -659,9 +836,7 @@ class ScoutHindsightClient:
         hindsight_stats: dict[str, Any] = {}
 
         try:
-            from hindsight_client.hindsight_client import _run_async as _hc_run_async
-
-            stats = _hc_run_async(sdk.banks.get_agent_stats(bank_id))
+            stats = self._hc_run_async(sdk.banks.get_agent_stats(bank_id))
             hindsight_stats = {
                 "total_observations": int(getattr(stats, "total_observations", 0) or 0),
                 "pending_consolidation": int(getattr(stats, "pending_consolidation", 0) or 0),
@@ -688,25 +863,27 @@ class ScoutHindsightClient:
             logger.warning("list observations failed: %s", e)
 
         try:
-            from hindsight_client.hindsight_client import _run_async as _hc_run_async
+            self._sync_scout_mental_model_content(sdk, bank_id, user_id)
+        except Exception as e:
+            logger.warning("sync_scout_mental_model_content failed: %s", e)
 
-            mm = _hc_run_async(
-                sdk.mental_models.list_mental_models(
-                    bank_id=bank_id,
-                    limit=100,
-                    detail="content",
-                )
-            )
-            for model in _extract_hindsight_items(mm, "items", "mental_models")[:20]:
-                mental_models.append(_mental_model_row(model, source="curated"))
+        try:
+            for model in self._list_scout_mental_models_raw(sdk, bank_id)[:20]:
+                row = _mental_model_row(model, source="curated")
+                if _mental_model_content_empty(row.get("description") or "") and observations:
+                    spec = next(
+                        (s for s in SCOUT_MENTAL_MODEL_SPECS if s["id"] == row.get("id")),
+                        None,
+                    )
+                    if spec:
+                        reflected = self.reflect_sync(user_id, spec["source_query"], {})
+                        answer = _scalar_text(reflected.get("answer") or "")
+                        if answer and not _mental_model_content_empty(answer):
+                            row["description"] = answer
+                            row["source"] = "curated+reflect"
+                mental_models.append(row)
         except Exception as e:
             logger.warning("list mental models failed: %s", e)
-            try:
-                mm = sdk.list_mental_models(bank_id=bank_id)
-                for model in _extract_hindsight_items(mm, "items", "mental_models")[:20]:
-                    mental_models.append(_mental_model_row(model, source="curated"))
-            except Exception as e2:
-                logger.warning("list mental models fallback failed: %s", e2)
 
         try:
             f_resp = sdk.list_memories(bank_id=bank_id, limit=40)
@@ -790,7 +967,17 @@ class ScoutHindsightClient:
         if not self.enabled or not self._client:
             return self._memory_summary_payload_sync(user_id)
         try:
-            return _run_sync_sdk(self._memory_summary_payload_sync, user_id)
+            try:
+                asyncio.get_running_loop()
+                in_loop = True
+            except RuntimeError:
+                in_loop = False
+            if not in_loop:
+                return self._memory_summary_payload_sync(user_id)
+            future = _HINDSIGHT_SYNC_POOL.submit(
+                self._memory_summary_payload_sync, user_id
+            )
+            return future.result(timeout=MEMORY_SUMMARY_SYNC_TIMEOUT_SEC)
         except Exception as e:
             logger.warning("Hindsight memory_summary_sync failed: %s", e)
             return self._memory_summary_payload_sync(user_id)

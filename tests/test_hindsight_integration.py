@@ -9,9 +9,12 @@ from fastapi.testclient import TestClient
 from app.api import app
 from core.memory.hindsight_client import (
     _extract_hindsight_items,
+    _mental_model_content_empty,
     _mental_model_fields,
+    _mental_model_needs_refresh,
     _memory_unit_fields,
     _observation_as_mental_model_row,
+    _operation_id_from_response,
 )
 from core.schemas import Agent1Output, PathfinderOutput, RankedIssue, RepoInfo, ScoreBreakdown
 
@@ -53,19 +56,41 @@ def test_mental_model_fields_reads_api_dict_rows():
     assert title == "Prefers small PRs"
 
 
+def test_mental_model_content_empty_detects_hindsight_placeholder():
+    assert _mental_model_content_empty("I don't have information.")
+    assert _mental_model_content_empty("")
+    assert not _mental_model_content_empty("User prefers React and TypeScript repos.")
+
+
+def test_mental_model_needs_refresh_for_placeholder():
+    model = {"id": "scout-repo-preferences", "name": "Repos", "content": "I don't have information."}
+    assert _mental_model_needs_refresh(model)
+
+
+def test_operation_id_from_response_reads_dict():
+    assert _operation_id_from_response({"operation_id": "op-abc"}) == "op-abc"
+
+
 def test_ensure_scout_mental_models_creates_missing():
     from core.memory import hindsight_client as hc
 
     sdk = MagicMock()
-    listed = MagicMock()
-    listed.items = []
-    sdk.list_mental_models.return_value = listed
+    sdk.list_memories.return_value = {"items": []}
+    create_resp = MagicMock()
+    create_resp.operation_id = "op-create-1"
+    sdk.create_mental_model.return_value = create_resp
 
     client = hc.ScoutHindsightClient()
     client.enabled = True
     client._client = MagicMock()
+    client._list_scout_mental_models_raw = MagicMock(return_value=[])
+    status = MagicMock()
+    status.status = "completed"
+    client._hc_run_async = MagicMock(return_value=status)
+
     client._ensure_scout_mental_models(sdk, "scout:user:test-mm")
     assert sdk.create_mental_model.call_count == len(hc.SCOUT_MENTAL_MODEL_SPECS)
+    client._hc_run_async.assert_called()
 
 
 def test_feedback_repo_selection_triggers_retain(client):

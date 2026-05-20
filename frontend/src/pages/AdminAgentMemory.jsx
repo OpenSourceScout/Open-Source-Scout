@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Brain, Search, AlertTriangle } from 'lucide-react'
 import { adminListUsers, adminMemorySummary } from '../api'
+import { mentalModelDescription, mentalModelEmptyHint } from '../utils/mentalModelText'
 import AdminSidebar from '../components/AdminSidebar'
 
 function freshnessBadge(f) {
@@ -148,7 +149,7 @@ export default function AdminAgentMemory() {
 
           {loadingSummary && selectedUser && (
             <div className="rounded-xl border border-app-border bg-app-surface p-6 text-sm text-app-muted">
-              Loading memory summary...
+              Loading memory summary… Curated mental models may take up to a minute to generate.
             </div>
           )}
 
@@ -187,7 +188,9 @@ export default function AdminAgentMemory() {
                   {curatedMental.length === 0 ? (
                     <li className="text-sm text-app-muted">No mental models available yet.</li>
                   ) : (
-                    curatedMental.map((m) => (
+                    curatedMental.map((m) => {
+                      const body = mentalModelDescription(m)
+                      return (
                       <li
                         key={`${m.source || 'mm'}-${m.id || m.title}`}
                         className="rounded-lg border border-app-border bg-app-surface px-4 py-3 text-sm"
@@ -198,8 +201,12 @@ export default function AdminAgentMemory() {
                             Curated
                           </span>
                         </div>
-                        {m.description && (
-                          <p className="text-xs text-app-muted/90 leading-relaxed">{m.description}</p>
+                        {body ? (
+                          <p className="text-xs text-app-muted/90 leading-relaxed whitespace-pre-wrap">{body}</p>
+                        ) : (
+                          <p className="text-xs text-amber-300/90 leading-relaxed italic">
+                            {mentalModelEmptyHint(observations.length > 0)}
+                          </p>
                         )}
                         {m.created_at && (
                           <p className="mt-1 text-xs text-app-muted">
@@ -207,7 +214,8 @@ export default function AdminAgentMemory() {
                           </p>
                         )}
                       </li>
-                    ))
+                      )
+                    })
                   )}
                 </ul>
               </section>

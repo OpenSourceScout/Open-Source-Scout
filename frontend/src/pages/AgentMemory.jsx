@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Brain, RefreshCw, Trash2 } from 'lucide-react'
 import { fetchMemorySummary, resetMemoryBank } from '../api'
+import { mentalModelDescription, mentalModelEmptyHint } from '../utils/mentalModelText'
 
 function freshnessBadge(f) {
   const v = (f || 'stable').toLowerCase()
@@ -126,7 +127,11 @@ export default function AgentMemory() {
         </div>
       )}
 
-      {loading && !data && <p className="text-app-muted text-sm">Loading memory…</p>}
+      {loading && !data && (
+        <p className="text-app-muted text-sm">
+          Loading memory… Curated mental models may take up to a minute to generate on first refresh.
+        </p>
+      )}
       {error && (
         <div className="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">{error}</div>
       )}
@@ -185,7 +190,9 @@ export default function AgentMemory() {
                     : 'None yet. Use the app (feedback, skips, analysis), then refresh.'}
                 </li>
               ) : (
-                curatedMental.map((m) => (
+                curatedMental.map((m) => {
+                  const body = mentalModelDescription(m)
+                  return (
                   <li
                     key={`${m.source || 'mm'}-${m.id || m.title}`}
                     className="rounded-lg border border-app-border bg-app-surface px-4 py-3 text-sm"
@@ -196,8 +203,12 @@ export default function AgentMemory() {
                         Curated
                       </span>
                     </div>
-                    {m.description && (
-                      <p className="text-xs text-app-muted/90 leading-relaxed">{m.description}</p>
+                    {body ? (
+                      <p className="text-xs text-app-muted/90 leading-relaxed whitespace-pre-wrap">{body}</p>
+                    ) : (
+                      <p className="text-xs text-amber-300/90 leading-relaxed italic">
+                        {mentalModelEmptyHint(observations.length > 0)}
+                      </p>
                     )}
                     {m.created_at && (
                       <p className="mt-1 text-xs text-app-muted">
@@ -205,7 +216,8 @@ export default function AgentMemory() {
                       </p>
                     )}
                   </li>
-                ))
+                  )
+                })
               )}
             </ul>
           </section>
