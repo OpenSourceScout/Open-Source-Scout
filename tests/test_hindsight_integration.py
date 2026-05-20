@@ -53,6 +53,21 @@ def test_mental_model_fields_reads_api_dict_rows():
     assert title == "Prefers small PRs"
 
 
+def test_ensure_scout_mental_models_creates_missing():
+    from core.memory import hindsight_client as hc
+
+    sdk = MagicMock()
+    listed = MagicMock()
+    listed.items = []
+    sdk.list_mental_models.return_value = listed
+
+    client = hc.ScoutHindsightClient()
+    client.enabled = True
+    client._client = MagicMock()
+    client._ensure_scout_mental_models(sdk, "scout:user:test-mm")
+    assert sdk.create_mental_model.call_count == len(hc.SCOUT_MENTAL_MODEL_SPECS)
+
+
 def test_feedback_repo_selection_triggers_retain(client):
     hx = MagicMock()
     with patch("app.api.get_scout_hindsight", return_value=hx):

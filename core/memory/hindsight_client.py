@@ -183,6 +183,38 @@ DIRECTIVES: list[tuple[str, str]] = [
     ),
 ]
 
+# Curated mental models (Hindsight living documents) — distinct from auto-consolidated observations.
+# Created per user bank; refresh_after_consolidation keeps them updated when new memories arrive.
+SCOUT_MENTAL_MODEL_SPECS: list[dict[str, Any]] = [
+    {
+        "id": "scout-repo-preferences",
+        "name": "Repository & tech preferences",
+        "source_query": (
+            "Based on this user's memories, summarize which repositories, tech stacks, "
+            "and project types they prefer, skip, or want to avoid. Be specific and concise."
+        ),
+        "tags": ["scout", "repos"],
+    },
+    {
+        "id": "scout-contribution-style",
+        "name": "Contribution style",
+        "source_query": (
+            "How does this user approach open-source contribution: issue types, difficulty, "
+            "briefings, and what has worked vs not worked for them?"
+        ),
+        "tags": ["scout", "issues"],
+    },
+    {
+        "id": "scout-feedback-patterns",
+        "name": "Feedback patterns",
+        "source_query": (
+            "What patterns appear in this user's thumbs up/down, skips, exports, and repo selections? "
+            "What should agents recommend or avoid?"
+        ),
+        "tags": ["scout", "feedback"],
+    },
+]
+
 
 _scout_singleton: Any | None = None
 
@@ -304,6 +336,43 @@ class ScoutHindsightClient:
                 logger.warning("Hindsight directives setup failed for %s: %s", bank_id, e)
 
             self._banks_configured.add(bank_id)
+
+        self._ensure_scout_mental_models(sdk, bank_id)
+
+    def _ensure_scout_mental_models(self, sdk: Any, bank_id: str) -> None:
+        """Provision Scout curated mental models (idempotent). Observations alone are not mental models."""
+        if not sdk or not SCOUT_MENTAL_MODEL_SPECS:
+            return
+        try:
+            listed = sdk.list_mental_models(bank_id=bank_id)
+            existing_ids: set[str] = set()
+            for model in _extract_hindsight_items(listed, "items", "mental_models"):
+                mid = _scalar_text(
+                    model.get("id") if isinstance(model, dict) else getattr(model, "id", None)
+                )
+                if mid:
+                    existing_ids.add(mid)
+            for spec in SCOUT_MENTAL_MODEL_SPECS:
+                mm_id = spec["id"]
+                if mm_id in existing_ids:
+                    continue
+                try:
+                    sdk.create_mental_model(
+                        bank_id=bank_id,
+                        id=mm_id,
+                        name=spec["name"],
+                        source_query=spec["source_query"],
+                        tags=spec.get("tags"),
+                        max_tokens=2048,
+                        trigger={"refresh_after_consolidation": True},
+                    )
+                    logger.info("Created Hindsight mental model %s for %s", mm_id, bank_id)
+                except Exception as e:
+                    logger.warning(
+                        "create_mental_model %s for %s failed: %s", mm_id, bank_id, e
+                    )
+        except Exception as e:
+            logger.warning("ensure_scout_mental_models failed for %s: %s", bank_id, e)
 
     async def get_or_create_bank(self, user_id: str) -> str:
         bid = self.bank_for_user(user_id)
@@ -579,6 +648,10 @@ class ScoutHindsightClient:
             self._ensure_bank(bank_id)
         except Exception:
             pass
+        try:
+            self._ensure_scout_mental_models(sdk, bank_id)
+        except Exception:
+            pass
 
         observations: list[dict[str, Any]] = []
         facts: list[dict[str, Any]] = []
@@ -621,7 +694,7 @@ class ScoutHindsightClient:
                 sdk.mental_models.list_mental_models(
                     bank_id=bank_id,
                     limit=100,
-                    detail="metadata",
+                    detail="content",
                 )
             )
             for model in _extract_hindsight_items(mm, "items", "mental_models")[:20]:
@@ -652,21 +725,15 @@ class ScoutHindsightClient:
         except Exception as e:
             logger.warning("list recent facts failed: %s", e)
 
-        consolidated_as_mental_models = [
-            _observation_as_mental_model_row(o) for o in observations[:20]
-        ]
-
         return {
             "observations": observations,
             "mental_models": mental_models,
-            "consolidated_as_mental_models": consolidated_as_mental_models,
             "recent_facts": facts[-20:],
             "hindsight_stats": hindsight_stats,
             "totals": {
                 "facts": len(facts),
                 "observations": len(observations),
                 "mental_models": len(mental_models),
-                "consolidated_as_mental_models": len(consolidated_as_mental_models),
             },
         }
 

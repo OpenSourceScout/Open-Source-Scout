@@ -44,16 +44,13 @@ export default function AgentMemory() {
 
   const observations = data?.observations || []
   const curatedMental = data?.mental_models || []
-  const consolidatedMental = data?.consolidated_as_mental_models || []
-  const mentalDisplay =
-    curatedMental.length > 0 ? curatedMental : consolidatedMental
   const facts = data?.recent_facts || []
   const totals = data?.totals || {}
   const stats = data?.hindsight_stats || {}
   const empty =
     !loading &&
     observations.length === 0 &&
-    mentalDisplay.length === 0 &&
+    curatedMental.length === 0 &&
     facts.length === 0 &&
     (totals.total_entries ?? 0) === 0
 
@@ -149,7 +146,10 @@ export default function AgentMemory() {
       {!loading && !empty && (
         <div className="space-y-10">
           <section>
-            <h2 className="text-lg font-semibold text-app-text mb-4">What I know about you</h2>
+            <h2 className="text-lg font-semibold text-app-text mb-1">What I know about you</h2>
+            <p className="text-xs text-app-muted mb-4 max-w-2xl">
+              Consolidated observation summaries from your activity (automatic, not curated documents).
+            </p>
             <div className="space-y-3">
               {observations.length === 0 ? (
                 <p className="text-sm text-app-muted">No consolidated observations yet.</p>
@@ -174,33 +174,27 @@ export default function AgentMemory() {
           <section>
             <h2 className="text-lg font-semibold text-app-text mb-1">Mental models I&apos;ve built</h2>
             <p className="text-xs text-app-muted mb-4 max-w-2xl">
-              {curatedMental.length > 0
-                ? 'Curated mental models from your Hindsight bank.'
-                : mentalDisplay.length > 0
-                  ? 'Showing consolidated observations from Hindsight — the same knowledge shown as mental models on the Hindsight dashboard.'
-                  : 'Consolidated after you interact with repos, issues, and briefings.'}
+              Living documents maintained by Hindsight (refreshed after new memories consolidate).
+              Different from the observation summaries above.
             </p>
             <ul className="space-y-2">
-              {mentalDisplay.length === 0 ? (
-                <li className="text-sm text-app-muted">None yet. Use the app, then refresh in a few seconds.</li>
+              {curatedMental.length === 0 ? (
+                <li className="text-sm text-app-muted">
+                  {observations.length > 0
+                    ? 'Models are being created or refreshed — click Refresh in a few seconds.'
+                    : 'None yet. Use the app (feedback, skips, analysis), then refresh.'}
+                </li>
               ) : (
-                mentalDisplay.map((m) => (
+                curatedMental.map((m) => (
                   <li
                     key={`${m.source || 'mm'}-${m.id || m.title}`}
                     className="rounded-lg border border-app-border bg-app-surface px-4 py-3 text-sm"
                   >
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <span className="font-medium text-app-text">{m.title}</span>
-                      {m.source === 'observation' && (
-                        <span className="rounded-full border border-primary-500/30 bg-primary-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-primary-300">
-                          Consolidated
-                        </span>
-                      )}
-                      {m.source === 'curated' && (
-                        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-emerald-300">
-                          Curated
-                        </span>
-                      )}
+                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-emerald-300">
+                        Curated
+                      </span>
                     </div>
                     {m.description && (
                       <p className="text-xs text-app-muted/90 leading-relaxed">{m.description}</p>
