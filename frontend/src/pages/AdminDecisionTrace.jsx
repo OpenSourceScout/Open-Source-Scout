@@ -228,11 +228,15 @@ export default function AdminDecisionTrace() {
         </div>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[320px_1fr] min-h-0 h-full">
-        <div className="flex flex-col gap-4 min-h-0">
-          <div className="rounded-xl border border-app-border bg-app-surface p-4 flex flex-col min-h-0">
-            <div className="text-xs uppercase tracking-wide text-app-muted mb-2">Scope</div>
-            <div className="space-y-2">
+      <div className="grid gap-4 lg:grid-cols-[minmax(280px,320px)_1fr] min-h-0 h-full">
+        <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-app-border bg-app-surface">
+          <div className="shrink-0 border-b border-app-border bg-app-elevated/80 p-4 z-10">
+            <div className="text-xs uppercase tracking-wide text-app-muted mb-3">Scope</div>
+            <div
+              className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:grid-cols-1"
+              role="tablist"
+              aria-label="Decision trace scope"
+            >
               {[
                 { id: 'all', label: 'All users' },
                 { id: 'user', label: 'Per user' },
@@ -241,25 +245,71 @@ export default function AdminDecisionTrace() {
                 <button
                   key={item.id}
                   type="button"
+                  role="tab"
+                  aria-selected={scope === item.id}
                   onClick={() => setScope(item.id)}
-                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                  className={`rounded-lg border px-3 py-2.5 text-left text-sm font-medium transition-colors ${
                     scope === item.id
-                      ? 'border-primary-500/40 bg-primary-500/10 text-primary-300'
-                      : 'border-app-border text-app-muted hover:border-primary-500/40 hover:text-app-text'
+                      ? 'border-primary-500/50 bg-primary-500/15 text-primary-300 shadow-sm shadow-primary-500/10'
+                      : 'border-app-border bg-app-bg text-app-muted hover:border-primary-500/40 hover:text-app-text'
                   }`}
                 >
                   {item.label}
                 </button>
               ))}
             </div>
+            <p className="mt-3 text-[11px] leading-relaxed text-app-muted">
+              {scope === 'all' && 'Aggregate traces across every user with a saved project.'}
+              {scope === 'user' && 'Pick a user below to filter traces to their projects.'}
+              {scope === 'project' && 'Pick a user, then choose one project to inspect.'}
+            </p>
           </div>
 
-          <div className="rounded-xl border border-app-border bg-app-surface p-4">
-            <div className="flex items-center gap-2 mb-2">
+          {scope !== 'all' && (
+            <div className="shrink-0 border-b border-app-border p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <FolderKanban className="h-4 w-4 text-app-muted" />
+                <div className="text-xs uppercase tracking-wide text-app-muted">Project</div>
+              </div>
+              <div className="relative">
+                <select
+                  value={selectedProjectId || ''}
+                  onChange={(e) => {
+                    setSelectedProjectId(e.target.value || null)
+                    if (e.target.value) setScope('project')
+                  }}
+                  disabled={!selectedUserId}
+                  className="w-full appearance-none rounded-lg border border-app-border bg-app-bg px-3 py-2 pr-9 text-sm text-app-text disabled:opacity-50"
+                >
+                  <option value="">
+                    {scope === 'project' ? 'Select a project' : 'Optional — filter to one project'}
+                  </option>
+                  {userProjects.map((p) => (
+                    <option key={p.project_id} value={p.project_id}>
+                      {projectLabel(p)}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-2.5 h-4 w-4 text-app-muted" />
+              </div>
+              {scope === 'project' && !selectedUserId && (
+                <p className="mt-2 text-xs text-amber-300/90">Select a user first.</p>
+              )}
+              {selectedUser && scope !== 'all' && (
+                <p className="mt-2 text-xs text-app-muted">User: {userLabel(selectedUser)}</p>
+              )}
+            </div>
+          )}
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-4 pt-3">
+            <div className="flex shrink-0 items-center gap-2 mb-2">
               <Users className="h-4 w-4 text-app-muted" />
               <div className="text-xs uppercase tracking-wide text-app-muted">Users</div>
+              {scope === 'all' && (
+                <span className="ml-auto text-[10px] text-app-muted/80">optional</span>
+              )}
             </div>
-            <div className="relative mb-3">
+            <div className="relative mb-3 shrink-0">
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-app-muted" />
               <input
                 value={userQuery}
@@ -268,7 +318,7 @@ export default function AdminDecisionTrace() {
                 className="w-full rounded-lg border border-app-border bg-app-bg px-9 py-2 text-sm text-app-text placeholder:text-app-muted/60"
               />
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
+            <div className="min-h-0 flex-1 overflow-y-auto space-y-2 pr-1">
               {loadingUsers && <p className="text-xs text-app-muted">Loading users...</p>}
               {!loadingUsers && users.length === 0 && (
                 <p className="text-xs text-app-muted">No users found.</p>
@@ -279,7 +329,7 @@ export default function AdminDecisionTrace() {
                   type="button"
                   onClick={() => {
                     setSelectedUserId(u.id)
-                    setScope('user')
+                    if (scope === 'all') setScope('user')
                   }}
                   className={`w-full rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
                     String(selectedUserId) === String(u.id)
@@ -293,37 +343,7 @@ export default function AdminDecisionTrace() {
               ))}
             </div>
           </div>
-
-          {scope !== 'all' && (
-            <div className="rounded-xl border border-app-border bg-app-surface p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <FolderKanban className="h-4 w-4 text-app-muted" />
-                <div className="text-xs uppercase tracking-wide text-app-muted">Projects</div>
-              </div>
-              <div className="relative">
-                <select
-                  value={selectedProjectId || ''}
-                  onChange={(e) => {
-                    setSelectedProjectId(e.target.value || null)
-                    setScope('project')
-                  }}
-                  className="w-full appearance-none rounded-lg border border-app-border bg-app-bg px-3 py-2 pr-9 text-sm text-app-text"
-                >
-                  <option value="">Select a project</option>
-                  {userProjects.map((p) => (
-                    <option key={p.project_id} value={p.project_id}>
-                      {projectLabel(p)}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-app-muted" />
-              </div>
-              {selectedUser && (
-                <p className="mt-2 text-xs text-app-muted">Showing projects for {userLabel(selectedUser)}.</p>
-              )}
-            </div>
-          )}
-        </div>
+        </aside>
 
         <div className="space-y-5 min-h-0 overflow-y-auto pr-1">
           <div className="grid gap-3 sm:grid-cols-3">
