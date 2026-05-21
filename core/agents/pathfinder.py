@@ -15,6 +15,11 @@ from core.schemas import (
     PathfinderSearchMeta,
 )
 from core.memory.hindsight_client import get_scout_hindsight
+from core.memory.repo_search_memory import (
+    build_repo_search_recall_query,
+    build_repo_search_retain_fact,
+    repo_search_retain_metadata,
+)
 from core.memory.skipped_repos import (
     merge_exclude_sets,
     normalize_repo_id,
@@ -105,10 +110,10 @@ Prioritize recent maintenance, good-first issues, README/contributing clarity, s
         if uid:
             try:
                 hx = get_scout_hindsight()
-                recall_query = prompt_text or f"stack: {','.join(effective_stack)}"
+                recall_query = build_repo_search_recall_query(prompt_text, preferences)
                 memories = hx.recall_sync(
                     uid,
-                    f"past repo search preferences, skipped or disliked repositories for {recall_query}",
+                    recall_query,
                     top_k=15,
                 )
                 recalled_memory_ids = [
@@ -218,6 +223,11 @@ Prioritize recent maintenance, good-first issues, README/contributing clarity, s
         search_prompt: str = "",
         preferences: Optional[RepoSearchPreferences] = None,
     ) -> PathfinderOutput:
+        self._retain_search_preferences(
+            search_prompt,
+            preferences,
+            len(ranked_repos),
+        )
         return PathfinderOutput(
             tech_stack=tech_stack,
             search_prompt=search_prompt,
@@ -234,6 +244,41 @@ Prioritize recent maintenance, good-first issues, README/contributing clarity, s
                 client_request_id=client_request_id or "",
             ),
         )
+
+    def _retain_search_preferences(
+        self,
+        search_prompt: str,
+        preferences: Optional[RepoSearchPreferences],
+        ranked_count: int,
+    ) -> None:
+        """Store completed search preferences in Hindsight for future recall."""
+        if not preferences:
+            return
+        has_signal = bool(
+            (search_prompt or "").strip()
+            or preferences.tech_stack
+            or (preferences.domain or "").strip()
+            or preferences.preferred_tasks
+        )
+        if not has_signal:
+            return
+        uid = pipeline_user_id_var.get()
+        if not uid:
+            return
+        try:
+            hx = get_scout_hindsight()
+            hx.retain_sync(
+                uid,
+                build_repo_search_retain_fact(
+                    search_prompt, preferences, ranked_count=ranked_count
+                ),
+                "experience",
+                repo_search_retain_metadata(
+                    search_prompt, preferences, ranked_count=ranked_count
+                ),
+            )
+        except Exception as e:
+            self.log(f"Hindsight retain for repo search skipped: {e}", level="warning")
 
     def _resolve_preferences(
         self, search_prompt: str, tag_stack: List[str]

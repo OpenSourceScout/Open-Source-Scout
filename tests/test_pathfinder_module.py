@@ -1,7 +1,7 @@
 """Module tests: Pathfinder repository search and ranking (Agent 0)."""
 import json
 from datetime import datetime, timezone, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from core.agents.pathfinder import PathfinderAgent
 from core.schemas import GitHubRepo, RepoSearchPreferences
@@ -118,3 +118,33 @@ class TestPathfinderRepositorySearch:
         assert all(0 <= result[k] <= 100 for k in (
             "active_score", "beginner_friendly", "tech_match", "issue_quality", "community_score"
         ))
+
+    def test_finalize_output_retains_search_preferences(self):
+        agent = PathfinderAgent(MagicMock())
+        prefs = RepoSearchPreferences(
+            tech_stack=["react"],
+            domain="AI",
+            difficulty="beginner",
+            preferred_tasks=["frontend"],
+        )
+        hx = MagicMock()
+        with patch("core.agents.pathfinder.get_scout_hindsight", return_value=hx), patch(
+            "core.agents.pathfinder.pipeline_user_id_var"
+        ) as uid_var:
+            uid_var.get.return_value = "user-42"
+            agent._finalize_output(
+                ["react"],
+                [],
+                [],
+                [],
+                "",
+                repos_discovered=0,
+                queries_run=0,
+                client_request_id="",
+                search_prompt="beginner react AI repos",
+                preferences=prefs,
+            )
+        hx.retain_sync.assert_called_once()
+        fact = hx.retain_sync.call_args[0][1]
+        assert "AI" in fact
+        assert hx.retain_sync.call_args[0][3]["kind"] == "repo_search"

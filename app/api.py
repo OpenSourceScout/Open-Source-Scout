@@ -862,12 +862,19 @@ def search_repos_by_tech_stack(
             uid = _optional_user_id(request)
             if pool and uid:
                 names = [r.full_name for r in results.ranked_repos]
+                prefs_payload = (
+                    results.preferences.model_dump()
+                    if results.preferences is not None
+                    else None
+                )
                 _safe_record_activity(
                     record_tech_stack_search,
                     pool,
                     uid,
                     list(results.tech_stack),
                     names,
+                    search_prompt=(results.search_prompt or "").strip() or None,
+                    preferences=prefs_payload,
                 )
             payload = _to_jsonable(results)
             if isinstance(payload, dict):

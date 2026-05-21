@@ -45,6 +45,8 @@ def init_schema(pool: ConnectionPool) -> None:
       user_id bigint not null references users(id) on delete cascade,
       tech_stack jsonb not null,
       ranked_repo_full_names jsonb,
+      search_prompt text,
+      preferences jsonb,
       created_at timestamptz not null default now()
     );
     create index if not exists idx_user_tech_searches_user
@@ -99,6 +101,7 @@ def init_schema(pool: ConnectionPool) -> None:
             cur.execute(schema_sql)
             _ensure_github_oauth_columns(cur)
             _ensure_project_step_columns(cur)
+            _ensure_tech_stack_search_columns(cur)
 
 
 def _ensure_github_oauth_columns(cur) -> None:
@@ -130,6 +133,16 @@ def _ensure_github_oauth_columns(cur) -> None:
         end
         $$;
         """
+    )
+
+
+def _ensure_tech_stack_search_columns(cur) -> None:
+    """Add personalised search fields to user_tech_stack_searches (safe migration)."""
+    cur.execute(
+        "alter table user_tech_stack_searches add column if not exists search_prompt text"
+    )
+    cur.execute(
+        "alter table user_tech_stack_searches add column if not exists preferences jsonb"
     )
 
 
@@ -276,18 +289,25 @@ def record_tech_stack_search(
     user_id: int,
     tech_stack: Sequence[str],
     ranked_repo_full_names: Sequence[str] | None,
+    *,
+    search_prompt: str | None = None,
+    preferences: dict[str, Any] | None = None,
 ) -> None:
     names_list = (
         list(ranked_repo_full_names) if ranked_repo_full_names is not None else []
     )
+    prompt_val = (search_prompt or "").strip() or None
+    prefs_val = Json(preferences) if preferences else None
     with pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                insert into user_tech_stack_searches (user_id, tech_stack, ranked_repo_full_names)
-                values (%s, %s::jsonb, %s::jsonb)
+                insert into user_tech_stack_searches (
+                  user_id, tech_stack, ranked_repo_full_names, search_prompt, preferences
+                )
+                values (%s, %s::jsonb, %s::jsonb, %s, %s::jsonb)
                 """,
-                (user_id, Json(list(tech_stack)), Json(names_list)),
+                (user_id, Json(list(tech_stack)), Json(names_list), prompt_val, prefs_val),
             )
 
 
@@ -359,7 +379,7 @@ def fetch_user_activity(
         with conn.cursor() as cur:
             cur.execute(
                 """
-                select id, tech_stack, ranked_repo_full_names, created_at
+                select id, tech_stack, ranked_repo_full_names, search_prompt, preferences, created_at
                 from user_tech_stack_searches
                 where user_id = %s
                 order by created_at desc
