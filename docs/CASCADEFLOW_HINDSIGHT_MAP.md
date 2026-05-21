@@ -94,7 +94,7 @@ Per-agent Groq API keys (rate-limit spread), env vars in `GROQ_API_KEY_ENV`:
 
 | Agent | File | API | Query / behavior |
 |-------|------|-----|------------------|
-| **Pathfinder** | `core/agents/pathfinder.py` | `recall_sync` | Tech stack + repo history (`top_k=10`) → prompt section `## What I know about this user` |
+| **Pathfinder** | `core/agents/pathfinder.py` | `recall_sync` / `retain_sync` | Recall: parsed preferences + prompt (`core/memory/repo_search_memory.py`). Retain after each completed search (`kind: repo_search`). |
 | **Triage Nurse** | `core/agents/triage_nurse.py` | `recall_sync` | Issue completion patterns for repo language (`top_k=8`) → `## User completion patterns` |
 | **Archaeologist** | `core/agents/archaeologist.py` | `recall_sync` | Repo facts `owner/repo` (`top_k=5`) → `## Known facts about this repo` |
 | **Senior Dev** | `core/agents/senior_dev.py` | `reflect_sync` | Fix-plan tone / PR style / commit conventions → `## User Style Preamble` |
@@ -115,8 +115,11 @@ Outputs include `recalled_memory_ids` and `memory_summary` on schemas:
 | `POST /api/feedback/issue-interaction` | Issue opened/skipped/completed | `_feedback_issue_interaction_worker` |
 | `POST /api/feedback/export` | Briefing PDF/MD/push | `_feedback_export_worker` |
 | `POST /api/feedback/thumbs` | Up/down on repo/issue/briefing | `_feedback_thumbs_worker` |
+| `POST /api/search-repos` | Completed Pathfinder search | `PathfinderAgent._retain_search_preferences` → `retain_sync` (`kind: repo_search`) |
 
-All defined in `app/api.py`; require `get_current_user`.
+Feedback endpoints and search retain are defined in `app/api.py` / `pathfinder.py`; require `get_current_user` for API routes.
+
+Postgres `user_tech_stack_searches` also stores `search_prompt` and `preferences` jsonb for Profile history.
 
 ### Memory read paths
 

@@ -1,9 +1,10 @@
 """Module tests: Pathfinder repository search and ranking (Agent 0)."""
 import json
-from unittest.mock import MagicMock
+from datetime import datetime, timezone, timedelta
+from unittest.mock import MagicMock, patch
 
 from core.agents.pathfinder import PathfinderAgent
-from core.schemas import GitHubRepo
+from core.schemas import GitHubRepo, RepoSearchPreferences
 
 
 def _sample_repo(name: str = "acme/starter") -> GitHubRepo:
@@ -70,3 +71,80 @@ class TestPathfinderRepositorySearch:
         agent = PathfinderAgent(g)
         out = agent.run(["python"], gh, top_n=5)
         assert len(out.ranked_repos) == 1
+
+    def test_search_prompt_parsed_into_preferences(self):
+        gh = MagicMock()
+        gh.search_repos.return_value = []
+        g = MagicMock()
+        g.complete.return_value = json.dumps(
+            {
+                "tech_stack": ["React", "Node.js"],
+                "domain": "AI",
+                "difficulty": "beginner",
+                "preferred_tasks": ["frontend"],
+            }
+        )
+        agent = PathfinderAgent(g)
+        out = agent.run(
+            tech_stack=[],
+            github_client=gh,
+            search_prompt="I want beginner React AI frontend repos",
+        )
+        assert out.preferences is not None
+        assert "React" in out.preferences.tech_stack
+        assert out.preferences.domain == "AI"
+        assert "frontend" in out.preferences.preferred_tasks
+
+    def test_weighted_total_uses_new_formula(self):
+        agent = PathfinderAgent(MagicMock())
+        recent = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
+        repo = _sample_repo()
+        repo.pushed_at = recent
+        prefs = RepoSearchPreferences(
+            tech_stack=["python"],
+            domain="",
+            difficulty="beginner",
+            preferred_tasks=[],
+        )
+        result = agent._calculate_repo_score(repo, prefs, MagicMock())
+        expected = round(
+            result["active_score"] * 0.25
+            + result["beginner_friendly"] * 0.30
+            + result["tech_match"] * 0.20
+            + result["issue_quality"] * 0.15
+            + result["community_score"] * 0.10
+        )
+        assert result["total"] == expected
+        assert all(0 <= result[k] <= 100 for k in (
+            "active_score", "beginner_friendly", "tech_match", "issue_quality", "community_score"
+        ))
+
+    def test_finalize_output_retains_search_preferences(self):
+        agent = PathfinderAgent(MagicMock())
+        prefs = RepoSearchPreferences(
+            tech_stack=["react"],
+            domain="AI",
+            difficulty="beginner",
+            preferred_tasks=["frontend"],
+        )
+        hx = MagicMock()
+        with patch("core.agents.pathfinder.get_scout_hindsight", return_value=hx), patch(
+            "core.agents.pathfinder.pipeline_user_id_var"
+        ) as uid_var:
+            uid_var.get.return_value = "user-42"
+            agent._finalize_output(
+                ["react"],
+                [],
+                [],
+                [],
+                "",
+                repos_discovered=0,
+                queries_run=0,
+                client_request_id="",
+                search_prompt="beginner react AI repos",
+                preferences=prefs,
+            )
+        hx.retain_sync.assert_called_once()
+        fact = hx.retain_sync.call_args[0][1]
+        assert "AI" in fact
+        assert hx.retain_sync.call_args[0][3]["kind"] == "repo_search"

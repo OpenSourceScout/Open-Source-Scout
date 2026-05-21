@@ -133,6 +133,22 @@ export default function Profile() {
               {searches.map((row) => (
                 <li key={row.id} className="bg-app-surface border border-app-border rounded-xl p-4">
                   <p className="text-xs text-app-muted/80 mb-2">{formatWhen(row.created_at)}</p>
+                  {row.search_prompt && (
+                    <p className="text-sm text-app-text/90 mb-2 line-clamp-2">
+                      {row.search_prompt}
+                    </p>
+                  )}
+                  {row.preferences && (
+                    <p className="text-xs text-app-muted mb-2">
+                      {[
+                        row.preferences.domain,
+                        row.preferences.difficulty,
+                        (row.preferences.preferred_tasks || []).join(', '),
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-2 mb-2">
                     {(row.tech_stack || []).map((t) => (
                       <span

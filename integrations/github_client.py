@@ -125,6 +125,7 @@ class GitHubClient:
         lang_resp = self.session.get(f"{self.BASE_URL}/repos/{owner}/{repo}/languages")
         languages = lang_resp.json() if lang_resp.status_code == 200 else {}
         
+        license_info = data.get("license") or {}
         return GitHubRepo(
             full_name=data["full_name"],
             description=data.get("description"),
@@ -134,7 +135,12 @@ class GitHubClient:
             language=data.get("language"),
             languages=languages,
             stargazers_count=data.get("stargazers_count", 0),
-            open_issues_count=data.get("open_issues_count", 0)
+            open_issues_count=data.get("open_issues_count", 0),
+            topics=data.get("topics", []),
+            pushed_at=data.get("pushed_at"),
+            updated_at=data.get("updated_at"),
+            has_wiki=bool(data.get("has_wiki")),
+            license_spdx=license_info.get("spdx_id"),
         )
     
     def get_issues(
@@ -260,6 +266,7 @@ class GitHubClient:
         
         repos = []
         for item in data.get("items", []):
+            license_info = item.get("license") or {}
             repos.append(GitHubRepo(
                 full_name=item["full_name"],
                 description=item.get("description"),
@@ -270,7 +277,11 @@ class GitHubClient:
                 languages={},  # Not available in search results
                 stargazers_count=item.get("stargazers_count", 0),
                 open_issues_count=item.get("open_issues_count", 0),
-                topics=item.get("topics", [])
+                topics=item.get("topics", []),
+                pushed_at=item.get("pushed_at"),
+                updated_at=item.get("updated_at"),
+                has_wiki=bool(item.get("has_wiki")),
+                license_spdx=license_info.get("spdx_id"),
             ))
         
         return repos

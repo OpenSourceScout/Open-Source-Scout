@@ -57,11 +57,11 @@ class TestSearchReposIntegration:
             open_issues=12,
             score_total=75,
             score_breakdown=RepoScoreBreakdown(
-                tech_match=30,
-                beginner_friendliness=15,
-                activity=10,
-                community=8,
-                issue_availability=7,
+                active_score=70,
+                beginner_friendly=65,
+                tech_match=80,
+                issue_quality=60,
+                community_score=55,
             ),
             why_match=["Strong Python match", "Active maintenance"],
         )

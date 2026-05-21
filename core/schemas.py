@@ -8,13 +8,24 @@ from pydantic import BaseModel, Field
 
 # ==================== Agent 0: Pathfinder (Repo Discovery) ====================
 
+class RepoSearchPreferences(BaseModel):
+    """Structured search preferences parsed from a user prompt or tech tags."""
+    tech_stack: List[str] = Field(default_factory=list, description="Technologies to match")
+    domain: str = Field(default="", description="Interest area e.g. AI, web, devtools")
+    difficulty: str = Field(default="beginner", description="beginner, intermediate, or advanced")
+    preferred_tasks: List[str] = Field(
+        default_factory=list,
+        description="Contribution areas e.g. frontend, backend, docs",
+    )
+
+
 class RepoScoreBreakdown(BaseModel):
-    """Breakdown of score components for a repository."""
-    tech_match: int = Field(ge=0, le=40, description="Tech stack match score (0-40)")
-    beginner_friendliness: int = Field(ge=0, le=25, description="Beginner friendliness score (0-25)")
-    activity: int = Field(ge=0, le=15, description="Activity level score (0-15)")
-    community: int = Field(ge=0, le=10, description="Community health score (0-10)")
-    issue_availability: int = Field(ge=0, le=10, description="Issue availability score (0-10)")
+    """Per-metric scores (0-100 each); total uses weighted formula in Pathfinder."""
+    active_score: int = Field(ge=0, le=100, description="Recent commits / maintenance (0-100)")
+    beginner_friendly: int = Field(ge=0, le=100, description="Good first issues, onboarding (0-100)")
+    tech_match: int = Field(ge=0, le=100, description="Stack and task alignment (0-100)")
+    issue_quality: int = Field(ge=0, le=100, description="Labeled, approachable issues (0-100)")
+    community_score: int = Field(ge=0, le=100, description="Community size and health (0-100)")
 
 
 class RankedRepo(BaseModel):
@@ -42,7 +53,12 @@ class PathfinderSearchMeta(BaseModel):
 
 class PathfinderOutput(BaseModel):
     """Output from Agent 0: Pathfinder (Repository Discovery)"""
-    tech_stack: List[str] = Field(description="User's input tech stack")
+    tech_stack: List[str] = Field(description="Technologies used for matching")
+    search_prompt: str = Field(default="", description="Original natural-language search prompt")
+    preferences: Optional[RepoSearchPreferences] = Field(
+        default=None,
+        description="Structured preferences derived from prompt or tags",
+    )
     ranked_repos: List[RankedRepo] = Field(description="Top ranked repositories")
     search_queries_used: List[str] = Field(default_factory=list, description="Search queries used")
     recalled_memory_ids: List[str] = Field(default_factory=list)
@@ -188,6 +204,10 @@ class GitHubRepo(BaseModel):
     stargazers_count: int = 0
     open_issues_count: int = 0
     topics: List[str] = Field(default_factory=list)
+    pushed_at: Optional[str] = Field(default=None, description="ISO-8601 last push time")
+    updated_at: Optional[str] = Field(default=None, description="ISO-8601 last update time")
+    has_wiki: bool = False
+    license_spdx: Optional[str] = None
 
 
 # ==================== Run Log Model ====================

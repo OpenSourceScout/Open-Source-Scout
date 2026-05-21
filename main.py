@@ -8,6 +8,7 @@ Usage:
 """
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -75,26 +76,62 @@ def _resolve_python() -> str:
 
 def _backend_env() -> dict[str, str]:
     load_dotenv(ROOT / ".env", override=True)
-    return os.environ.copy()
+    env = os.environ.copy()
+    # Safer installs on Windows when the project lives under OneDrive/synced folders
+    env.setdefault("UV_LINK_MODE", "copy")
+    return env
+
+
+def _uvicorn_cmd() -> list[str]:
+    """Build backend command; prefer `uv run` so deps match pyproject.toml / uv.lock."""
+    uvicorn_args = [
+        "-m",
+        "uvicorn",
+        "--reload",
+        "--reload-dir",
+        "app",
+        "--reload-dir",
+        "core",
+        "--reload-dir",
+        "integrations",
+        "--reload-dir",
+        "utils",
+        "--reload-dir",
+        "tests",
+        "--port",
+        str(BACKEND_PORT),
+        "app.api:app",
+    ]
+    uv_bin = shutil.which("uv")
+    if uv_bin and (ROOT / "pyproject.toml").is_file():
+        return [uv_bin, "run", "python", *uvicorn_args]
+    python = _resolve_python()
+    return [python, *uvicorn_args]
+
+
+def _ensure_backend_deps() -> None:
+    """Fail fast with a clear message when the venv is missing uvicorn."""
+    python = _resolve_python()
+    check = subprocess.run(
+        [python, "-c", "import uvicorn"],
+        cwd=ROOT,
+        capture_output=True,
+    )
+    if check.returncode != 0:
+        print(
+            f"{RED}{BOLD}[error]{RESET} Backend dependencies are not installed in .venv.\n"
+            f"  Run: {GREEN}uv sync{RESET}\n"
+            f"  Or recreate: {GREEN}Remove-Item -Recurse -Force .venv; uv sync{RESET}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 def _start_backend() -> subprocess.Popen:
-    python = _resolve_python()
-    cmd = [
-        python, "-m", "uvicorn",
-        "--reload",
-        # Restrict reload watching to backend source folders; otherwise large
-        # temp/cached checkouts under `.cache/` can trigger endless reloads.
-        "--reload-dir", "app",
-        "--reload-dir", "core",
-        "--reload-dir", "integrations",
-        "--reload-dir", "utils",
-        "--reload-dir", "tests",
-        "--port", str(BACKEND_PORT),
-        "app.api:app",
-    ]
+    _ensure_backend_deps()
+    cmd = _uvicorn_cmd()
     print(f"{CYAN}{BOLD}Starting backend{RESET}  -> http://localhost:{BACKEND_PORT}")
-    print(f"{CYAN}  Python:{RESET} {python}")
+    print(f"{CYAN}  Command:{RESET} {' '.join(cmd)}")
     return subprocess.Popen(
         cmd,
         cwd=ROOT,

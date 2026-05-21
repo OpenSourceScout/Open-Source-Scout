@@ -35,11 +35,11 @@ function buildRepoBullets(repo) {
   const b = repo.score_breakdown
   const inferred = []
   if (b) {
-    if ((b.beginner_friendliness ?? 0) >= 15) inferred.push('Beginner-friendly repository')
-    if ((b.activity ?? 0) >= 10) inferred.push('Healthy activity and commits')
-    if ((b.issue_availability ?? 0) >= 7) inferred.push('Issues available for contributors')
-    if ((b.community ?? 0) >= 7) inferred.push('Active community')
-    if ((b.tech_match ?? 0) >= 25) inferred.push('Strong tech stack alignment')
+    if ((b.beginner_friendly ?? 0) >= 60) inferred.push('Beginner-friendly repository')
+    if ((b.active_score ?? 0) >= 55) inferred.push('Healthy activity and recent commits')
+    if ((b.issue_quality ?? 0) >= 55) inferred.push('Clear, approachable issues')
+    if ((b.community_score ?? 0) >= 55) inferred.push('Active community')
+    if ((b.tech_match ?? 0) >= 60) inferred.push('Strong alignment with your preferences')
   }
   return inferred.slice(0, MAX_REPO_BULLETS).length
     ? inferred.slice(0, MAX_REPO_BULLETS)
@@ -54,6 +54,7 @@ export default function Dashboard() {
 
   const [inputMode, setInputMode] = useState(initialMode)
   const [techTags, setTechTags] = useState([])
+  const [searchPrompt, setSearchPrompt] = useState('')
   const [tagInput, setTagInput] = useState('')
   const [repoUrl, setRepoUrl] = useState('')
   const [beginnerOnly, setBeginnerOnly] = useState(false)
@@ -93,7 +94,7 @@ export default function Dashboard() {
   }
 
   const handleTechSearch = async () => {
-    if (techTags.length === 0) return
+    if (techTags.length === 0 && !searchPrompt.trim()) return
     setLoading(true)
     setError(null)
     setRankedRepos(null)
@@ -106,6 +107,7 @@ export default function Dashboard() {
       const exclude = getSkippedRepoUrls()
       const result = await searchReposByTechStack({
         tech_stack: techTags,
+        search_prompt: searchPrompt.trim(),
         fresh: true,
         exclude_repo_urls: exclude,
       })
@@ -196,7 +198,7 @@ export default function Dashboard() {
       <h2 className="text-2xl font-semibold text-app-text mb-2">Waiting for input...</h2>
       <p className="text-app-muted text-center max-w-md">
         {inputMode === 'tech'
-          ? 'Add your tech stack tags in the sidebar to discover matching repositories.'
+          ? 'Describe the repositories you want in the sidebar, or add tech tags to refine the search.'
           : 'Enter a GitHub repository URL in the sidebar to begin analysis.'}
       </p>
     </div>
@@ -210,7 +212,24 @@ export default function Dashboard() {
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-app-text">Discovered Repositories</h2>
           <p className="text-app-muted text-sm mt-1">
-            {visibleRepos.length} repositories match your tech stack
+            {visibleRepos.length} repositories match your search
+            {rankedRepos.preferences?.domain && (
+              <span> · {rankedRepos.preferences.domain}</span>
+            )}
+            {rankedRepos.preferences && (
+              <span className="block text-xs text-app-muted/90 mt-1">
+                Parsed: {[
+                  rankedRepos.preferences.tech_stack?.length
+                    ? rankedRepos.preferences.tech_stack.join(', ')
+                    : null,
+                  rankedRepos.preferences.domain || null,
+                  rankedRepos.preferences.difficulty,
+                  rankedRepos.preferences.preferred_tasks?.length
+                    ? rankedRepos.preferences.preferred_tasks.join(', ')
+                    : null,
+                ].filter(Boolean).join(' · ')}
+              </span>
+            )}
             {rankedRepos.search_meta?.generated_at && (
               <span className="block text-xs text-app-muted/80 mt-1">
                 Live search · {rankedRepos.search_meta.repos_discovered} repos scanned
@@ -311,11 +330,11 @@ export default function Dashboard() {
               {/* Metrics Breakdown */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
                 {[
+                  ['active_score', 'Activity'],
+                  ['beginner_friendly', 'Beginner'],
                   ['tech_match', 'Tech Match'],
-                  ['beginner_friendliness', 'Beginner'],
-                  ['activity', 'Activity'],
-                  ['community', 'Community'],
-                  ['issue_availability', 'Issues'],
+                  ['issue_quality', 'Issues'],
+                  ['community_score', 'Community'],
                 ].map(([key, label]) => (
                   <div key={key} className="p-3 bg-app-bg rounded-xl border border-app-border">
                     <div className="text-[11px] font-semibold tracking-wide text-app-muted uppercase mb-1">{label}</div>
@@ -397,7 +416,18 @@ export default function Dashboard() {
         <div className="flex-1 p-4 overflow-y-auto">
           {inputMode === 'tech' ? (
             <>
-              <label className="block text-sm font-medium text-app-text mb-2">Your Tech Stack</label>
+              <label className="block text-sm font-medium text-app-text mb-2">What are you looking for?</label>
+              <textarea
+                value={searchPrompt}
+                onChange={(e) => setSearchPrompt(e.target.value)}
+                placeholder="e.g. Beginner-friendly React projects in AI with frontend tasks..."
+                rows={4}
+                className={`${inputClass} resize-y min-h-[88px]`}
+              />
+              <p className="text-xs text-app-muted mt-2 mb-4">
+                Describe the repos you want to contribute to. Optional tags below refine the search.
+              </p>
+              <label className="block text-sm font-medium text-app-text mb-2">Tech stack (optional)</label>
               <div className="flex flex-wrap gap-2 mb-3">
                 {techTags.map((tag) => (
                   <span
@@ -475,7 +505,7 @@ export default function Dashboard() {
           <button
             type="button"
             onClick={inputMode === 'tech' ? handleTechSearch : handleRepoAnalyze}
-            disabled={loading || (inputMode === 'tech' ? techTags.length === 0 : !repoUrl.trim())}
+            disabled={loading || (inputMode === 'tech' ? (techTags.length === 0 && !searchPrompt.trim()) : !repoUrl.trim())}
             className="w-full bg-accent-500 text-[#0b0f14] py-3 rounded-lg font-semibold hover:bg-accent-600 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
             {loading ? (
@@ -559,7 +589,7 @@ export default function Dashboard() {
           <div>
             <h1 className="text-lg font-semibold text-app-text">Dashboard</h1>
             <p className="text-sm text-app-muted">
-              {inputMode === 'tech' ? 'Discover repositories matching your skills' : 'Analyze a specific repository'}
+              {inputMode === 'tech' ? 'Discover repositories tailored to your goals' : 'Analyze a specific repository'}
             </p>
           </div>
           <div className="flex items-center justify-end">
@@ -583,7 +613,7 @@ export default function Dashboard() {
             }
           />
         ) : loading && inputMode === 'tech' ? (
-          <PathfinderSearchLoader techStack={techTags} />
+          <PathfinderSearchLoader techStack={techTags} searchPrompt={searchPrompt} />
         ) : inputMode === 'tech' && rankedRepos ? (
           renderRepoResults()
         ) : (

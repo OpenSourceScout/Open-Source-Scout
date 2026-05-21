@@ -190,9 +190,10 @@ class AnalyzeRequest(BaseModel):
 
 
 class SearchReposRequest(BaseModel):
-    """Request body for searching repositories by tech stack."""
+    """Request body for personalized repository search."""
 
-    tech_stack: list[str]
+    tech_stack: list[str] = []
+    search_prompt: str = ""
     fast_model: str = MODEL_LLAMA_4_SCOUT_17B
     cascadeflow_budget_usd: float | None = None
     fresh: bool = True
@@ -823,15 +824,19 @@ def search_repos_by_tech_stack(
     user_ctx: UserContext = Depends(get_current_user),
 ):
     """
-    Search and rank GitHub repositories based on user's tech stack.
+    Search and rank GitHub repositories from tech tags and/or a natural-language prompt.
 
-    Uses the Pathfinder agent to find beginner-friendly repos matching
-    the user's skills. Returns top 5 ranked repositories.
+    Uses Pathfinder to parse preferences and return top ranked repositories.
     """
     _enforce_free_tier_quota(request)
     try:
-        if not body.tech_stack or len(body.tech_stack) == 0:
-            raise HTTPException(status_code=400, detail="At least one technology/skill is required")
+        prompt = (body.search_prompt or "").strip()
+        stack = [t.strip() for t in (body.tech_stack or []) if t and t.strip()]
+        if not prompt and not stack:
+            raise HTTPException(
+                status_code=400,
+                detail="Provide a search prompt and/or at least one technology tag",
+            )
 
         budget_usd = (
             body.cascadeflow_budget_usd
@@ -846,7 +851,8 @@ def search_repos_by_tech_stack(
                 GroqClient.for_agent("Pathfinder"), model=body.fast_model
             )
             results = pathfinder.run(
-                tech_stack=body.tech_stack,
+                tech_stack=stack,
+                search_prompt=prompt,
                 github_client=github_client,
                 top_n=5,
                 client_request_id=(body.client_request_id or "").strip(),
@@ -856,12 +862,19 @@ def search_repos_by_tech_stack(
             uid = _optional_user_id(request)
             if pool and uid:
                 names = [r.full_name for r in results.ranked_repos]
+                prefs_payload = (
+                    results.preferences.model_dump()
+                    if results.preferences is not None
+                    else None
+                )
                 _safe_record_activity(
                     record_tech_stack_search,
                     pool,
                     uid,
                     list(results.tech_stack),
                     names,
+                    search_prompt=(results.search_prompt or "").strip() or None,
+                    preferences=prefs_payload,
                 )
             payload = _to_jsonable(results)
             if isinstance(payload, dict):
