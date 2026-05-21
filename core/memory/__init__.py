@@ -1,0 +1,1 @@
+"""Scout-specific Hindsight helpers."""

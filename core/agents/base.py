@@ -53,7 +53,12 @@ class BaseAgent(ABC):
     def clear_feedback(self):
         """Clear any QA feedback after a retry."""
         self._feedback = None
-    
+
+    def activate_agent_llm_context(self) -> None:
+        from core.runtime.groq_context import set_groq_agent
+
+        set_groq_agent(self.name)
+
     def _get_feedback_prompt(self) -> str:
         """Build a feedback prompt section if feedback is available."""
         if self._feedback:

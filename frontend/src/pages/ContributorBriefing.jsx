@@ -17,7 +17,9 @@ import {
   PanelRightClose,
   ChevronLeft,
 } from 'lucide-react'
-import { exportPdf, saveProjectBriefing } from '../api'
+import { exportPdf, saveProjectBriefing, feedbackExport } from '../api'
+import MemoryCitationPill from '../components/MemoryCitationPill'
+import { BriefingFeedbackThumbs } from '../components/RepoFeedbackActions'
 
 const briefingProseClass =
   'prose prose-invert prose-base max-w-none ' +
@@ -60,6 +62,12 @@ export default function ContributorBriefing() {
   const [prBody, setPrBody] = useState('')
   const [showFullPrBody, setShowFullPrBody] = useState(false)
   const [pushResult, setPushResult] = useState(null)
+  const pushExportLoggedRef = useRef(false)
+
+  const briefingId =
+    repoInfo?.owner && repoInfo?.name && targetIssue?.number != null
+      ? `${repoInfo.owner}/${repoInfo.name}#${targetIssue.number}`
+      : `${repoInfo?.name || 'repo'}-briefing`
 
   useEffect(() => {
     if (briefing.pr_draft) {
@@ -99,6 +107,12 @@ export default function ContributorBriefing() {
     }
   }, [repoInfo?.owner, repoInfo?.name])
 
+  useEffect(() => {
+    if (!pushResult?.pr_url || pushExportLoggedRef.current) return
+    feedbackExport({ briefing_id: briefingId, format: 'push' })
+    pushExportLoggedRef.current = true
+  }, [pushResult?.pr_url, briefingId])
+
   const handleExportPdf = async () => {
     setExporting(true)
     try {
@@ -111,6 +125,7 @@ export default function ContributorBriefing() {
       a.click()
       a.remove()
       window.URL.revokeObjectURL(url)
+      feedbackExport({ briefing_id: briefingId, format: 'pdf' })
     } catch (err) {
       console.error('Export failed:', err)
     } finally {
@@ -129,6 +144,7 @@ export default function ContributorBriefing() {
     a.click()
     a.remove()
     window.URL.revokeObjectURL(url)
+    feedbackExport({ briefing_id: briefingId, format: 'md' })
   }
 
   if (!analysisResult) {
@@ -389,17 +405,26 @@ export default function ContributorBriefing() {
       <header className="border-b border-app-border bg-app-surface/90 backdrop-blur-sm sticky top-0 z-20">
         <div className="max-w-[1400px] mx-auto px-5 sm:px-8 lg:px-10 py-5 sm:py-6">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0 space-y-1">
-              <h1 className="text-2xl sm:text-3xl font-bold text-app-text tracking-tight">Contributor briefing</h1>
-              <p className="text-sm sm:text-base text-app-muted leading-relaxed max-w-2xl">
-                Guide for contributing to <span className="text-app-text font-medium">{repoInfo?.name || 'this repository'}</span>
-                {targetIssue?.number != null && (
-                  <>
-                    {' '}
-                    · Issue <span className="text-primary-400 font-medium">#{targetIssue.number}</span>
-                  </>
-                )}
-              </p>
+            <div className="flex flex-wrap items-start gap-3 justify-between">
+              <div className="min-w-0 space-y-1 flex-1">
+                <h1 className="text-2xl sm:text-3xl font-bold text-app-text tracking-tight">Contributor briefing</h1>
+                <p className="text-sm sm:text-base text-app-muted leading-relaxed max-w-2xl">
+                  Guide for contributing to <span className="text-app-text font-medium">{repoInfo?.name || 'this repository'}</span>
+                  {targetIssue?.number != null && (
+                    <>
+                      {' '}
+                      · Issue <span className="text-primary-400 font-medium">#{targetIssue.number}</span>
+                    </>
+                  )}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <MemoryCitationPill
+                  recalledMemoryIds={analysisResult?.agent3_output?.recalled_memory_ids}
+                  memorySummary={analysisResult?.agent3_output?.memory_summary}
+                />
+                <BriefingFeedbackThumbs briefingId={briefingId} />
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">

@@ -10,10 +10,13 @@ import errno
 import asyncio
 import logging
 import os
+import re
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+from contextlib import asynccontextmanager
+from uuid import uuid4
 
 # Ensure project root is on path (for uvicorn app.api:app)
 project_root = Path(__file__).parent.parent
@@ -22,7 +25,15 @@ sys.path.insert(0, str(project_root))
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, HTMLResponse
@@ -53,6 +64,8 @@ from app.db import (
     update_project_briefing,
     update_project_testing,
     update_project_analysis_result,
+    list_users_admin,
+    list_projects_admin,
 )
 
 from integrations.github_client import GitHubClient
@@ -72,18 +85,22 @@ from core.terminal_manager import (
 from utils.cache import CacheManager
 from utils.pdf_generator import PDFGenerator
 
+from core.identity import UserContext, get_current_user
+from core.memory.hindsight_client import get_scout_hindsight
+from core.runtime.cascadeflow_init import (
+    cascadeflow_budget_run,
+    cascadeflow_session_payload,
+    configure_cascadeflow_from_env,
+    default_budget_usd,
+)
+from core.runtime.groq_context import reset_groq_step_index, set_pipeline_run_context
+
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="Open Source Scout API",
-    description="Backend API for the Open Source Scout editor and analysis tools",
-    version="0.1.0",
-)
 
-@app.on_event("startup")
-def _startup():
-    # Auth is optional for the app overall, but if Neon env vars are present,
-    # initialize the pool and ensure the schema exists.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    configure_cascadeflow_from_env()
     try:
         app.state.db_pool = create_pool()
         init_schema(app.state.db_pool)
@@ -94,9 +111,8 @@ def _startup():
 
     app.state.terminal_manager = TerminalManager()
 
+    yield
 
-@app.on_event("shutdown")
-def _shutdown():
     pool = getattr(app.state, "db_pool", None)
     if pool is not None:
         pool.close()
@@ -104,6 +120,14 @@ def _shutdown():
     terminal_manager = getattr(app.state, "terminal_manager", None)
     if terminal_manager is not None:
         terminal_manager.close_all()
+
+
+app = FastAPI(
+    title="Open Source Scout API",
+    description="Backend API for the Open Source Scout editor and analysis tools",
+    version="0.1.0",
+    lifespan=lifespan,
+)
 
 
 app.include_router(auth_router)
@@ -160,15 +184,20 @@ class AnalyzeRequest(BaseModel):
 
     repo_url: str
     beginner_only: bool = True
-    fast_model: str = "llama-3.3-70b"
-    powerful_model: str = "openai/gpt-oss-120b"
+    fast_model: str = "openai/gpt-oss-120b"
+    powerful_model: str = "llama-3.3-70b"
+    cascadeflow_budget_usd: float | None = None
 
 
 class SearchReposRequest(BaseModel):
     """Request body for searching repositories by tech stack."""
-    
+
     tech_stack: list[str]
     fast_model: str = MODEL_LLAMA_4_SCOUT_17B
+    cascadeflow_budget_usd: float | None = None
+    fresh: bool = True
+    client_request_id: str = ""
+    exclude_repo_urls: list[str] = []
 
 
 class ExportPdfRequest(BaseModel):
@@ -182,9 +211,31 @@ class ReAnalyzeRequest(BaseModel):
 
     repo_url: str
     issue_number: int
-    fast_model: str = "llama-3.3-70b"
+    fast_model: str = "openai/gpt-oss-120b"
     powerful_model: str = "llama-3.3-70b"
     pathfinder_output: dict | None = None
+    cascadeflow_budget_usd: float | None = None
+
+
+class RepoSelectionFeedback(BaseModel):
+    repo_url: str
+    action: Literal["selected", "skipped"]
+
+
+class IssueInteractionFeedback(BaseModel):
+    issue_url: str
+    action: Literal["opened", "skipped", "completed"]
+
+
+class ExportFeedback(BaseModel):
+    briefing_id: str
+    format: Literal["pdf", "md", "push"]
+
+
+class ThumbsFeedback(BaseModel):
+    target_type: Literal["repo", "issue", "briefing"]
+    target_id: str
+    vote: Literal["up", "down"]
 
 
 class CreateProjectRequest(BaseModel):
@@ -292,6 +343,20 @@ def _require_pool(request: Request):
     return pool
 
 
+def _require_admin_user(request: Request) -> int:
+    """Ensure the caller is an admin user (JWT required)."""
+    uid = _require_user_id(request)
+    pool = _require_pool(request)
+    with pool.connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select role from users where id = %s", (uid,))
+            row = cur.fetchone()
+            role = row[0] if row else None
+    if role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return uid
+
+
 def _require_terminal_manager(request: Request) -> TerminalManager:
     """Return terminal manager or raise 503 if unavailable."""
     manager = getattr(request.app.state, "terminal_manager", None)
@@ -394,6 +459,90 @@ def _safe_record_activity(fn, *args, **kwargs) -> None:
         logger.warning("Failed to record user activity: %s", e)
 
 
+def _feedback_repo_selection_worker(user_id: str, repo_url: str, action: str) -> None:
+    try:
+        hx = get_scout_hindsight()
+        hx.retain_sync(
+            user_id,
+            f"Pathfinder ranking: user {action} repository {repo_url}",
+            "experience",
+            {"kind": "repo_selection", "repo_url": repo_url, "action": action},
+        )
+    except Exception as e:
+        logger.warning("feedback repo-selection retain failed: %s", e)
+
+
+def _feedback_issue_interaction_worker(user_id: str, issue_url: str, action: str) -> None:
+    try:
+        hx = get_scout_hindsight()
+        hx.retain_sync(
+            user_id,
+            f"Issue list: user {action} {issue_url}",
+            "experience",
+            {"kind": "issue_interaction", "issue_url": issue_url, "action": action},
+        )
+    except Exception as e:
+        logger.warning("feedback issue-interaction retain failed: %s", e)
+
+
+def _feedback_export_worker(user_id: str, briefing_id: str, fmt: str) -> None:
+    try:
+        hx = get_scout_hindsight()
+        hx.retain_sync(
+            user_id,
+            f"Briefing export: user exported briefing {briefing_id} as {fmt}",
+            "experience",
+            {"kind": "export_briefing", "briefing_id": briefing_id, "format": fmt},
+        )
+    except Exception as e:
+        logger.warning("feedback export retain failed: %s", e)
+
+
+def _feedback_thumbs_worker(
+    user_id: str,
+    target_type: str,
+    target_id: str,
+    vote: str,
+    extra_meta: dict[str, Any] | None = None,
+) -> None:
+    try:
+        meta = {
+            "kind": "thumbs",
+            "target_type": target_type,
+            "target_id": target_id,
+            "vote": vote,
+        }
+        if extra_meta:
+            meta.update(extra_meta)
+        hx = get_scout_hindsight()
+        hx.retain_sync(
+            user_id,
+            f"Explicit feedback: {vote} on {target_type} {target_id}",
+            "experience",
+            meta,
+        )
+    except Exception as e:
+        logger.warning("feedback thumbs retain failed: %s", e)
+
+
+_GH_ISSUE_RE = re.compile(r"github\.com/([^/\s]+/[^/\s#?]+)/issues/(\d+)", re.I)
+_GH_API_ISSUE_RE = re.compile(r"api\.github\.com/repos/([^/\s]+/[^/\s#?]+)/issues/(\d+)", re.I)
+
+
+def _parse_issue_url(issue_url: str) -> tuple[str, int] | None:
+    if not issue_url:
+        return None
+    match = _GH_ISSUE_RE.search(issue_url)
+    if not match:
+        match = _GH_API_ISSUE_RE.search(issue_url)
+    if not match:
+        return None
+    repo_id, issue_number = match.group(1).strip(), match.group(2).strip()
+    if not repo_id or not issue_number.isdigit():
+        return None
+    return f"https://github.com/{repo_id}", int(issue_number)
+
+
 def _record_phase1_issue_analysis(pool, user_id: int, body: AnalyzeRequest, results: dict) -> None:
     if not results.get("success") or not results.get("agent1_output") or not results.get("repo"):
         return
@@ -441,7 +590,11 @@ def _enforce_free_tier_quota(request: Request):
 
 
 @app.post("/api/analyze")
-def run_analyze(body: AnalyzeRequest, request: Request):
+def run_analyze(
+    body: AnalyzeRequest,
+    request: Request,
+    user_ctx: UserContext = Depends(get_current_user),
+):
     """
     Run the full 3-agent analysis pipeline.
 
@@ -449,25 +602,34 @@ def run_analyze(body: AnalyzeRequest, request: Request):
     """
     _enforce_free_tier_quota(request)
     try:
-        github_client = GitHubClient(token=_get_github_token_for_user(request))
-        groq_client = GroqClient()
-        cache_manager = CacheManager()
-        orchestrator = ScoutOrchestrator(
-            github_client=github_client,
-            groq_client=groq_client,
-            cache_manager=cache_manager,
-            fast_model=body.fast_model,
-            powerful_model=body.powerful_model,
+        budget_usd = (
+            body.cascadeflow_budget_usd
+            if body.cascadeflow_budget_usd is not None
+            else default_budget_usd()
         )
-        results = orchestrator.run_phase1(
-            repo_url=body.repo_url,
-            beginner_only=body.beginner_only,
-        )
-        pool = getattr(request.app.state, "db_pool", None)
-        uid = _optional_user_id(request)
-        if pool and uid:
-            _safe_record_activity(_record_phase1_issue_analysis, pool, uid, body, results)
-        return _to_jsonable(results)
+        reset_groq_step_index()
+        set_pipeline_run_context(uuid4().hex[:12], user_ctx.user_id)
+        with cascadeflow_budget_run(budget_usd) as cascade_session:
+            github_client = GitHubClient(token=_get_github_token_for_user(request))
+            cache_manager = CacheManager()
+            orchestrator = ScoutOrchestrator(
+                github_client=github_client,
+                cache_manager=cache_manager,
+                fast_model=body.fast_model,
+                powerful_model=body.powerful_model,
+            )
+            results = orchestrator.run_phase1(
+                repo_url=body.repo_url,
+                beginner_only=body.beginner_only,
+            )
+            pool = getattr(request.app.state, "db_pool", None)
+            uid = _optional_user_id(request)
+            if pool and uid:
+                _safe_record_activity(_record_phase1_issue_analysis, pool, uid, body, results)
+            payload = _to_jsonable(results)
+            if isinstance(payload, dict):
+                payload["cascadeflow_run"] = cascadeflow_session_payload(cascade_session)
+            return payload
     except RetryError as e:
         status_msg = str(e)
         if "RateLimitError" in status_msg or "rate limit" in status_msg.lower():
@@ -478,7 +640,11 @@ def run_analyze(body: AnalyzeRequest, request: Request):
 
 
 @app.post("/api/re-analyze-issue")
-def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
+def re_analyze_issue(
+    body: ReAnalyzeRequest,
+    request: Request,
+    user_ctx: UserContext = Depends(get_current_user),
+):
     """
     Re-run phases 2 (Archaeologist) + 3 (Senior Dev) for a specific issue.
 
@@ -487,139 +653,146 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
     (code search + briefing generation) are repeated.
     """
     try:
-        github_client = GitHubClient(token=_get_github_token_for_user(request))
-        groq_client = GroqClient()
-        orchestrator = ScoutOrchestrator(
-            github_client=github_client,
-            groq_client=groq_client,
-            fast_model=body.fast_model,
-            powerful_model=body.powerful_model,
+        budget_usd = (
+            body.cascadeflow_budget_usd
+            if body.cascadeflow_budget_usd is not None
+            else default_budget_usd()
         )
-
-        # Fetch repo metadata
-        logger.info("re-analyze: fetching repo %s", body.repo_url)
-        repo = github_client.get_repo(body.repo_url)
-
-        # Fetch the specific issue directly by number — works for any issue
-        # regardless of how recently it was updated (avoids the "top 50" limit).
-        try:
-            logger.info("re-analyze: fetching issue %s", body.issue_number)
-            target_issue = github_client.get_issue(body.repo_url, body.issue_number)
-        except Exception:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Issue #{body.issue_number} not found in the repository."
+        reset_groq_step_index()
+        set_pipeline_run_context(uuid4().hex[:12], user_ctx.user_id)
+        with cascadeflow_budget_run(budget_usd) as cascade_session:
+            github_client = GitHubClient(token=_get_github_token_for_user(request))
+            orchestrator = ScoutOrchestrator(
+                github_client=github_client,
+                fast_model=body.fast_model,
+                powerful_model=body.powerful_model,
             )
 
-        # Also fetch a batch of issues for scoring/ranking context (phase 3)
-        issues = github_client.get_issues(body.repo_url, beginner_only=False, max_issues=50)
-
-        # Phase 2 — Archaeologist
-        logger.info("re-analyze: running Phase 2")
-        phase2 = orchestrator.run_phase2(body.repo_url, target_issue)
-        logger.info("re-analyze: Phase 2 finished")
-        if not phase2.get("success"):
-            logger.error("re-analyze Phase 2 failed: %s", phase2.get("error"))
-            raise HTTPException(status_code=500, detail=phase2.get("error", "Phase 2 failed"))
-
-        agent2_output = phase2["agent2_output"]
-
-        # Fetch agent1_output from a fresh issue ranking (needed for phase 3 context)
-        from core.schemas import Agent1Output, RepoInfo, RankedIssue
-        from core.scoring import IssueScorer
-        logger.info("re-analyze: ranking context issues")
-        scorer = IssueScorer()
-        ranked = scorer.rank_issues(issues, top_n=3)
-        logger.info("re-analyze: ranking context issues done")
-        ranked_issues = [
-            RankedIssue(
-                number=iss.number,
-                title=iss.title,
-                url=iss.html_url,
-                labels=iss.labels,
-                score_total=sr.total,
-                score_breakdown=sr.breakdown,
-                why=sr.reasons[:4],
-                body=iss.body,
-                created_at=iss.created_at,
-                updated_at=iss.updated_at,
-                comments=iss.comments,
-            )
-            for iss, sr in ranked
-        ]
-        agent1_output = Agent1Output(
-            repo=RepoInfo(
-                url=repo.html_url,
-                default_branch=repo.default_branch,
-                description=repo.description,
-                languages=list(repo.languages.keys())[:5] if repo.languages else None,
-            ),
-            ranked_issues=ranked_issues,
-            selected_issue_number=target_issue.number,
-        )
-
-        # Phase 3 — Senior Dev
-        logger.info("re-analyze: running Phase 3")
-        phase3 = orchestrator.run_phase3(repo, target_issue, agent1_output, agent2_output)
-        logger.info("re-analyze: Phase 3 finished")
-        if not phase3.get("success"):
-            raise HTTPException(status_code=500, detail=phase3.get("error", "Phase 3 failed"))
-
-        agent3_output = phase3["agent3_output"]
-
-        # Reconstruct PathfinderOutput if provided by frontend
-        pathfinder = None
-        if body.pathfinder_output:
-            from core.schemas import PathfinderOutput
+            # Fetch repo metadata
+            logger.info("re-analyze: fetching repo %s", body.repo_url)
+            repo = github_client.get_repo(body.repo_url)
+    
+            # Fetch the specific issue directly by number — works for any issue
+            # regardless of how recently it was updated (avoids the "top 50" limit).
             try:
-                pathfinder = PathfinderOutput.model_validate(body.pathfinder_output)
+                logger.info("re-analyze: fetching issue %s", body.issue_number)
+                target_issue = github_client.get_issue(body.repo_url, body.issue_number)
             except Exception:
-                pass
-
-        # Phase 4 — Testing Agent with QA feedback loop
-        # If any agent fails QA, they are re-run with feedback (up to 2 retries).
-        # The returned agent outputs may be improved versions after retries.
-        logger.info("re-analyze: running QA cycle")
-        testing_result = orchestrator.run_testing(
-            repo=repo,
-            issue=target_issue,
-            agent1_output=agent1_output,
-            agent2_output=agent2_output,
-            agent3_output=agent3_output,
-            repo_path=phase2.get("repo_path"),
-            file_tree=phase2.get("file_tree"),
-            pathfinder_output=pathfinder,
-        )
-        if not testing_result.get("success"):
-            raise HTTPException(
-                status_code=500,
-                detail=testing_result.get("error", "Testing / QA phase failed"),
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Issue #{body.issue_number} not found in the repository."
+                )
+    
+            # Also fetch a batch of issues for scoring/ranking context (phase 3)
+            issues = github_client.get_issues(body.repo_url, beginner_only=False, max_issues=50)
+    
+            # Phase 2 — Archaeologist
+            logger.info("re-analyze: running Phase 2")
+            phase2 = orchestrator.run_phase2(body.repo_url, target_issue)
+            logger.info("re-analyze: Phase 2 finished")
+            if not phase2.get("success"):
+                logger.error("re-analyze Phase 2 failed: %s", phase2.get("error"))
+                raise HTTPException(status_code=500, detail=phase2.get("error", "Phase 2 failed"))
+    
+            agent2_output = phase2["agent2_output"]
+    
+            # Fetch agent1_output from a fresh issue ranking (needed for phase 3 context)
+            from core.schemas import Agent1Output, RepoInfo, RankedIssue
+            from core.scoring import IssueScorer
+            logger.info("re-analyze: ranking context issues")
+            scorer = IssueScorer()
+            ranked = scorer.rank_issues(issues, top_n=3)
+            logger.info("re-analyze: ranking context issues done")
+            ranked_issues = [
+                RankedIssue(
+                    number=iss.number,
+                    title=iss.title,
+                    url=iss.html_url,
+                    labels=iss.labels,
+                    score_total=sr.total,
+                    score_breakdown=sr.breakdown,
+                    why=sr.reasons[:4],
+                    body=iss.body,
+                    created_at=iss.created_at,
+                    updated_at=iss.updated_at,
+                    comments=iss.comments,
+                )
+                for iss, sr in ranked
+            ]
+            agent1_output = Agent1Output(
+                repo=RepoInfo(
+                    url=repo.html_url,
+                    default_branch=repo.default_branch,
+                    description=repo.description,
+                    languages=list(repo.languages.keys())[:5] if repo.languages else None,
+                ),
+                ranked_issues=ranked_issues,
+                selected_issue_number=target_issue.number,
             )
-
-        final_agent2 = testing_result.get("agent2_output", agent2_output)
-        final_agent3 = testing_result.get("agent3_output", agent3_output)
-
-        logger.info("re-analyze: completed successfully")
-        payload = {
-            "success": True,
-            "target_issue": target_issue,
-            "agent2_output": final_agent2,
-            "agent3_output": final_agent3,
-            "testing_output": testing_result.get("testing_output"),
-        }
-        pool = getattr(request.app.state, "db_pool", None)
-        uid = _optional_user_id(request)
-        if pool and uid:
-            _safe_record_activity(
-                record_issue_analysis,
-                pool,
-                uid,
-                repo_url=body.repo_url.strip(),
-                repo_full_name=repo.full_name,
-                issue_number=target_issue.number,
-                issue_title=target_issue.title,
+    
+            # Phase 3 — Senior Dev
+            logger.info("re-analyze: running Phase 3")
+            phase3 = orchestrator.run_phase3(repo, target_issue, agent1_output, agent2_output)
+            logger.info("re-analyze: Phase 3 finished")
+            if not phase3.get("success"):
+                raise HTTPException(status_code=500, detail=phase3.get("error", "Phase 3 failed"))
+    
+            agent3_output = phase3["agent3_output"]
+    
+            # Reconstruct PathfinderOutput if provided by frontend
+            pathfinder = None
+            if body.pathfinder_output:
+                from core.schemas import PathfinderOutput
+                try:
+                    pathfinder = PathfinderOutput.model_validate(body.pathfinder_output)
+                except Exception:
+                    pass
+    
+            # Phase 4 — Testing Agent with QA feedback loop
+            # If any agent fails QA, they are re-run with feedback (up to 2 retries).
+            # The returned agent outputs may be improved versions after retries.
+            logger.info("re-analyze: running QA cycle")
+            testing_result = orchestrator.run_testing(
+                repo=repo,
+                issue=target_issue,
+                agent1_output=agent1_output,
+                agent2_output=agent2_output,
+                agent3_output=agent3_output,
+                repo_path=phase2.get("repo_path"),
+                file_tree=phase2.get("file_tree"),
+                pathfinder_output=pathfinder,
             )
-        return _to_jsonable(payload)
+            if not testing_result.get("success"):
+                raise HTTPException(
+                    status_code=500,
+                    detail=testing_result.get("error", "Testing / QA phase failed"),
+                )
+    
+            final_agent2 = testing_result.get("agent2_output", agent2_output)
+            final_agent3 = testing_result.get("agent3_output", agent3_output)
+    
+            logger.info("re-analyze: completed successfully")
+            payload = {
+                "success": True,
+                "target_issue": target_issue,
+                "agent2_output": final_agent2,
+                "agent3_output": final_agent3,
+                "testing_output": testing_result.get("testing_output"),
+            }
+            pool = getattr(request.app.state, "db_pool", None)
+            uid = _optional_user_id(request)
+            if pool and uid:
+                _safe_record_activity(
+                    record_issue_analysis,
+                    pool,
+                    uid,
+                    repo_url=body.repo_url.strip(),
+                    repo_full_name=repo.full_name,
+                    issue_number=target_issue.number,
+                    issue_title=target_issue.title,
+                )
+            payload["cascadeflow_run"] = cascadeflow_session_payload(cascade_session)
+            return _to_jsonable(payload)
 
     except RetryError as e:
         status_msg = str(e)
@@ -644,10 +817,14 @@ def re_analyze_issue(body: ReAnalyzeRequest, request: Request):
 
 
 @app.post("/api/search-repos")
-def search_repos_by_tech_stack(body: SearchReposRequest, request: Request):
+def search_repos_by_tech_stack(
+    body: SearchReposRequest,
+    request: Request,
+    user_ctx: UserContext = Depends(get_current_user),
+):
     """
     Search and rank GitHub repositories based on user's tech stack.
-    
+
     Uses the Pathfinder agent to find beginner-friendly repos matching
     the user's skills. Returns top 5 ranked repositories.
     """
@@ -655,32 +832,244 @@ def search_repos_by_tech_stack(body: SearchReposRequest, request: Request):
     try:
         if not body.tech_stack or len(body.tech_stack) == 0:
             raise HTTPException(status_code=400, detail="At least one technology/skill is required")
-        
-        github_client = GitHubClient(token=_get_github_token_for_user(request))
-        groq_client = GroqClient()
-        
-        pathfinder = PathfinderAgent(groq_client, model=body.fast_model)
-        results = pathfinder.run(
-            tech_stack=body.tech_stack,
-            github_client=github_client,
-            top_n=5
+
+        budget_usd = (
+            body.cascadeflow_budget_usd
+            if body.cascadeflow_budget_usd is not None
+            else default_budget_usd()
         )
-        pool = getattr(request.app.state, "db_pool", None)
-        uid = _optional_user_id(request)
-        if pool and uid:
-            names = [r.full_name for r in results.ranked_repos]
-            _safe_record_activity(
-                record_tech_stack_search,
-                pool,
-                uid,
-                list(results.tech_stack),
-                names,
+        reset_groq_step_index()
+        set_pipeline_run_context(uuid4().hex[:12], user_ctx.user_id)
+        with cascadeflow_budget_run(budget_usd) as cascade_session:
+            github_client = GitHubClient(token=_get_github_token_for_user(request))
+            pathfinder = PathfinderAgent(
+                GroqClient.for_agent("Pathfinder"), model=body.fast_model
             )
-        return _to_jsonable(results)
+            results = pathfinder.run(
+                tech_stack=body.tech_stack,
+                github_client=github_client,
+                top_n=5,
+                client_request_id=(body.client_request_id or "").strip(),
+                exclude_repo_urls=body.exclude_repo_urls or [],
+            )
+            pool = getattr(request.app.state, "db_pool", None)
+            uid = _optional_user_id(request)
+            if pool and uid:
+                names = [r.full_name for r in results.ranked_repos]
+                _safe_record_activity(
+                    record_tech_stack_search,
+                    pool,
+                    uid,
+                    list(results.tech_stack),
+                    names,
+                )
+            payload = _to_jsonable(results)
+            if isinstance(payload, dict):
+                payload["cascadeflow_run"] = cascadeflow_session_payload(cascade_session)
+            return payload
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/feedback/repo-selection")
+def feedback_repo_selection(
+    body: RepoSelectionFeedback,
+    user_ctx: UserContext = Depends(get_current_user),
+):
+    _feedback_repo_selection_worker(user_ctx.user_id, body.repo_url.strip(), body.action)
+    return {"accepted": True}
+
+
+@app.post("/api/feedback/issue-interaction")
+def feedback_issue_interaction(
+    body: IssueInteractionFeedback,
+    user_ctx: UserContext = Depends(get_current_user),
+):
+    _feedback_issue_interaction_worker(user_ctx.user_id, body.issue_url.strip(), body.action)
+    return {"accepted": True}
+
+
+@app.post("/api/feedback/export")
+def feedback_export(
+    body: ExportFeedback,
+    user_ctx: UserContext = Depends(get_current_user),
+):
+    _feedback_export_worker(user_ctx.user_id, body.briefing_id.strip(), body.format)
+    return {"accepted": True}
+
+
+@app.post("/api/feedback/thumbs")
+def feedback_thumbs(
+    body: ThumbsFeedback,
+    request: Request,
+    user_ctx: UserContext = Depends(get_current_user),
+):
+    extra_meta: dict[str, Any] = {}
+    target_type = body.target_type
+    target_id = body.target_id.strip()
+    if body.vote == "down":
+        try:
+            github_client = GitHubClient(token=_get_github_token_for_user(request))
+            if target_type == "repo":
+                repo = github_client.get_repo(target_id)
+                extra_meta.update(
+                    {
+                        "repo_url": repo.html_url,
+                        "repo_full_name": repo.full_name,
+                        "language": repo.language,
+                        "topics": getattr(repo, "topics", []) or [],
+                    }
+                )
+            elif target_type == "issue":
+                parsed = _parse_issue_url(target_id)
+                if parsed:
+                    repo_url, issue_number = parsed
+                    issue = github_client.get_issue(repo_url, issue_number)
+                    repo_full_name = repo_url.replace("https://github.com/", "").strip("/")
+                    extra_meta.update(
+                        {
+                            "repo_url": repo_url,
+                            "repo_full_name": repo_full_name,
+                            "issue_url": issue.html_url,
+                            "issue_number": issue.number,
+                            "title": issue.title,
+                            "labels": issue.labels or [],
+                        }
+                    )
+        except Exception as e:
+            logger.warning("thumbs feedback enrichment skipped: %s", e)
+
+    _feedback_thumbs_worker(user_ctx.user_id, target_type, target_id, body.vote, extra_meta or None)
+    return {"accepted": True}
+
+
+@app.get("/api/memory/summary")
+def memory_summary(user_ctx: UserContext = Depends(get_current_user)):
+    hx = get_scout_hindsight()
+    hx.get_or_create_bank_sync(user_ctx.user_id)
+    payload = hx.memory_summary_sync(user_ctx.user_id)
+    t = payload.get("totals") or {}
+    try:
+        total_mem = int(t.get("facts", 0)) + int(t.get("observations", 0)) + int(t.get("mental_models", 0))
+    except (TypeError, ValueError):
+        total_mem = 0
+    if isinstance(payload, dict):
+        payload = dict(payload)
+        pt = dict(t)
+        pt["total_entries"] = total_mem
+        payload["totals"] = pt
+        payload["bank_id"] = user_ctx.bank_id
+        payload["hindsight_enabled"] = hx.enabled
+        payload["user_id"] = user_ctx.user_id
+    return payload
+
+
+@app.get("/api/memory/by-ids")
+def memory_by_ids(
+    ids: str = Query(..., description="Comma-separated memory IDs"),
+    user_ctx: UserContext = Depends(get_current_user),
+):
+    id_list = [x.strip() for x in ids.split(",") if x.strip()]
+    if len(id_list) > 80:
+        raise HTTPException(status_code=400, detail="Too many ids (max 80)")
+    hx = get_scout_hindsight()
+    rows = hx.fetch_memory_sync(user_ctx.user_id, id_list)
+    return {"memories": rows}
+
+
+@app.post("/api/memory/reset")
+def memory_reset(
+    confirm: bool = Query(False),
+    user_ctx: UserContext = Depends(get_current_user),
+):
+    if not confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Memory reset requires query parameter confirm=true",
+        )
+    hx = get_scout_hindsight()
+    hx.reset_bank_sync(user_ctx.user_id)
+    return Response(status_code=204)
+
+
+def _extract_cascadeflow_run(analysis_result: Any) -> dict[str, Any] | None:
+    if not analysis_result:
+        return None
+    if isinstance(analysis_result, str):
+        try:
+            analysis_result = json.loads(analysis_result)
+        except Exception:
+            return None
+    if not isinstance(analysis_result, dict):
+        return None
+    run = analysis_result.get("cascadeflow_run") or analysis_result.get("cascadeflowRun")
+    return run if isinstance(run, dict) else None
+
+
+@app.get("/api/admin/users")
+def admin_users(
+    request: Request,
+    query: str | None = Query(None),
+):
+    _require_admin_user(request)
+    pool = _require_pool(request)
+    users = list_users_admin(pool, query=query)
+    return {"users": users}
+
+
+@app.get("/api/admin/decision-traces")
+def admin_decision_traces(
+    request: Request,
+    user_id: int | None = Query(None),
+):
+    _require_admin_user(request)
+    pool = _require_pool(request)
+    rows = list_projects_admin(pool, user_id=user_id)
+    out = []
+    for row in rows:
+        cascadeflow_run = _extract_cascadeflow_run(row.get("analysis_result"))
+        out.append(
+            {
+                "project_id": row.get("id"),
+                "project_name": row.get("name"),
+                "project_type": row.get("project_type"),
+                "repo_url": row.get("repo_url"),
+                "repo_full_name": row.get("repo_full_name"),
+                "created_at": row.get("created_at"),
+                "updated_at": row.get("updated_at"),
+                "user_id": row.get("user_id"),
+                "user_email": row.get("user_email"),
+                "user_display_name": row.get("user_display_name"),
+                "cascadeflow_run": cascadeflow_run,
+            }
+        )
+    return {"projects": out}
+
+
+@app.get("/api/admin/memory/summary")
+def admin_memory_summary(
+    request: Request,
+    user_id: str = Query(..., description="Target user id"),
+):
+    _require_admin_user(request)
+    hx = get_scout_hindsight()
+    hx.get_or_create_bank_sync(user_id)
+    payload = hx.memory_summary_sync(user_id)
+    t = payload.get("totals") or {}
+    try:
+        total_mem = int(t.get("facts", 0)) + int(t.get("observations", 0)) + int(t.get("mental_models", 0))
+    except (TypeError, ValueError):
+        total_mem = 0
+    if isinstance(payload, dict):
+        payload = dict(payload)
+        pt = dict(t)
+        pt["total_entries"] = total_mem
+        payload["totals"] = pt
+        payload["user_id"] = user_id
+        payload["hindsight_enabled"] = hx.enabled
+    return payload
 
 
 @app.post("/api/export/pdf")
@@ -1072,8 +1461,18 @@ def get_file_content(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _groq_client_for_readme() -> GroqClient:
+    """Prefer Pathfinder key, then other agent keys, then GROQ_API_KEY."""
+    for agent in ("Pathfinder", "Triage Nurse", "Senior Dev", "Archaeologist"):
+        try:
+            return GroqClient.for_agent(agent)
+        except ValueError:
+            continue
+    return GroqClient()
+
+
 @app.get("/api/repos/{owner}/{repo}/readme-summary")
-def get_readme_summary(request: Request, owner: str, repo: str):
+def get_readme_summary(request: Request, owner: str, repo: str, fresh: bool = False):
     """
     Fetch repository README and generate an LLM summary.
     """
@@ -1081,6 +1480,8 @@ def get_readme_summary(request: Request, owner: str, repo: str):
     repo = repo.strip()
     cache_key = f"{owner}/{repo}".lower()
     now = time.time()
+    if fresh:
+        _readme_summary_cache.pop(cache_key, None)
     cached = _readme_summary_cache.get(cache_key)
     if cached is not None:
         summary_text, stored_at = cached
@@ -1104,7 +1505,7 @@ def get_readme_summary(request: Request, owner: str, repo: str):
             _readme_summary_cache[cache_key] = (msg, now)
             return {"summary": msg}
 
-        groq_client = GroqClient()
+        groq_client = _groq_client_for_readme()
         prompt = (
             "Please summarize the following repository README into a concise and well-formatted "
             "technical overview. "
@@ -1114,12 +1515,36 @@ def get_readme_summary(request: Request, owner: str, repo: str):
             "3. You MUST use DOUBLE NEWLINES (\\n\\n) between EVERY single line, sentence, and section title. No two lines of text should touch each other. "
             f"README:\n{content[:20000]}"
         )
-        
-        summary = groq_client.complete(
-            prompt=prompt,
-            model=MODEL_README_SUMMARY,
-            max_tokens=1500
-        )
+
+        from integrations.groq_client import GroqAPIError
+
+        readme_models = [
+            MODEL_README_SUMMARY,
+            MODEL_LLAMA_4_SCOUT_17B,
+            "openai/gpt-oss-20b",
+            "llama-3.3-70b",
+        ]
+        summary = None
+        last_err = None
+        for model_id in readme_models:
+            try:
+                summary = groq_client.complete(
+                    prompt=prompt,
+                    model=model_id,
+                    max_tokens=1500,
+                    agent_name="Pathfinder",
+                )
+                break
+            except GroqAPIError as e:
+                last_err = e
+                if "model_not_found" not in str(e).lower() and "does not exist" not in str(e).lower():
+                    raise
+                continue
+        if summary is None:
+            raise last_err or ValueError("No Groq model available for README summary")
+        if not isinstance(summary, str) or not summary.strip():
+            raise ValueError("LLM returned an empty README summary")
+        summary = summary.strip()
         _readme_summary_cache[cache_key] = (summary, time.time())
         return {"summary": summary}
     except RetryError as e:

@@ -5,6 +5,7 @@ import { FolderOpen } from 'lucide-react'
 import LandingPage from './components/LandingPage.jsx'
 import Dashboard from './components/Dashboard.jsx'
 import AnalysisLayout from './components/AnalysisLayout.jsx'
+import MemoryCitationPill from './components/MemoryCitationPill.jsx'
 import Login from './pages/Login.jsx'
 import Signup from './pages/Signup.jsx'
 import OAuthCallback from './pages/OAuthCallback.jsx'
@@ -16,17 +17,26 @@ import EditorWindow from './pages/EditorWindow.jsx'
 import Profile from './pages/Profile.jsx'
 import Projects from './pages/Projects.jsx'
 import AnalysisDashboard from './pages/AnalysisDashboard.jsx'
+import AdminDecisionTrace from './pages/AdminDecisionTrace.jsx'
+import AdminAgentMemory from './pages/AdminAgentMemory.jsx'
 import SettingsPage from './pages/Settings.jsx'
 import './index.css'
 import { isLoggedIn, isAdmin } from './auth'
+import { RepoFeedbackBar } from './components/RepoFeedbackActions'
+import { FeedbackProvider, useFeedbackActions } from './context/FeedbackContext'
+import { filterRankedRepos } from './utils/skippedRepos'
 
 // RepositoriesView - shows ranked repos from tech stack search
 function RepositoriesView() {
   const context = useOutletContext()
   const rankedRepos = context?.rankedRepos
   const repoInfo = context?.repoInfo
+  const { getSkippedRepoUrls } = useFeedbackActions()
+  const visibleRepos = rankedRepos?.ranked_repos
+    ? filterRankedRepos(rankedRepos.ranked_repos, getSkippedRepoUrls())
+    : []
 
-  if (!rankedRepos || !rankedRepos.ranked_repos || rankedRepos.ranked_repos.length === 0) {
+  if (!rankedRepos || visibleRepos.length === 0) {
     return (
       <div className="flex items-center justify-center h-full min-h-[50vh] bg-app-bg">
         <div className="text-center px-4">
@@ -42,15 +52,21 @@ function RepositoriesView() {
 
   return (
     <div className="p-6 bg-app-bg min-h-full">
-      <div className="mb-6">
-        <h2 className="text-xl font-semibold text-app-text">Discovered Repositories</h2>
-        <p className="text-app-muted text-sm">
-          {rankedRepos.ranked_repos.length} repositories matched your tech stack: {rankedRepos.tech_stack?.join(', ')}
-        </p>
+      <div className="mb-6 flex flex-wrap items-start gap-3 justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-app-text">Discovered Repositories</h2>
+          <p className="text-app-muted text-sm">
+            {visibleRepos.length} repositories matched your tech stack: {rankedRepos.tech_stack?.join(', ')}
+          </p>
+        </div>
+        <MemoryCitationPill
+          recalledMemoryIds={rankedRepos.recalled_memory_ids}
+          memorySummary={rankedRepos.memory_summary}
+        />
       </div>
 
       <div className="space-y-6">
-        {rankedRepos.ranked_repos.map((repo, index) => {
+        {visibleRepos.map((repo, index) => {
           const isSelected = repoInfo && repo.full_name === `${repoInfo.owner}/${repoInfo.name}`
           const repoName = repo.full_name.split('/')[1] || repo.full_name
           const owner = repo.full_name.split('/')[0] || ''
@@ -145,6 +161,7 @@ function RepositoriesView() {
                     Currently Selected
                   </span>
                 )}
+                <RepoFeedbackBar repo={repo} />
                 <a
                   href={repo.url}
                   target="_blank"
@@ -181,6 +198,7 @@ function RequireAdmin({ children }) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
+    <FeedbackProvider>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
@@ -194,13 +212,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="issues" element={<IssueRanking />} />
           <Route path="code" element={<CodeLocator />} />
           <Route path="briefing" element={<ContributorBriefing />} />
+          <Route path="decision-trace" element={<RequireAdmin><AdminDecisionTrace /></RequireAdmin>} />
+          <Route path="agent-memory" element={<RequireAdmin><AdminAgentMemory /></RequireAdmin>} />
           <Route path="qa-report" element={<RequireAdmin><QaReport /></RequireAdmin>} />
         </Route>
         <Route path="/editor" element={<RequireAuth><EditorWindow /></RequireAuth>} />
         <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
         <Route path="/projects" element={<RequireAuth><Projects /></RequireAuth>} />
+        <Route path="/admin/decision-trace" element={<RequireAdmin><AdminDecisionTrace /></RequireAdmin>} />
+        <Route path="/admin/agent-memory" element={<RequireAdmin><AdminAgentMemory /></RequireAdmin>} />
       </Routes>
     </BrowserRouter>
+    </FeedbackProvider>
   </React.StrictMode>,
 )

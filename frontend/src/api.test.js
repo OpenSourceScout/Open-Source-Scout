@@ -7,6 +7,11 @@ import { runAnalyze, getFileContent } from './api'
 describe('frontend–backend API contract (slide integration)', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn())
+    try {
+      window.localStorage.setItem('os_anon_user_id', 'vitest-anon-user-id')
+    } catch {
+      /* ignore */
+    }
   })
 
   it('runAnalyze POSTs /api/analyze with repo_url and model fields', async () => {
@@ -25,6 +30,8 @@ describe('frontend–backend API contract (slide integration)', () => {
         body: expect.stringContaining('https://github.com/acme/app'),
       }),
     )
+    const opts = fetch.mock.calls[0][1]
+    expect(opts.headers.get('X-User-Id')).toBe('vitest-anon-user-id')
     const body = JSON.parse(fetch.mock.calls[0][1].body)
     expect(body).toMatchObject({
       repo_url: 'https://github.com/acme/app',

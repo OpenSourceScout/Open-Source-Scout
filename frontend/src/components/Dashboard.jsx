@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { Search, Rocket, Settings, User, Github, ExternalLink, FolderKanban } from 'lucide-react'
-import { searchReposByTechStack, runAnalyze, createProject, getMe } from '../api'
+import { Search, Rocket, Settings, User, Github, ExternalLink, FolderKanban, Gauge, Brain } from 'lucide-react'
+import { searchReposByTechStack, runAnalyze, createProject, getMe, feedbackRepoSelection } from '../api'
 import ScoutLogo from './ScoutLogo'
+import PathfinderSearchLoader from './PathfinderSearchLoader'
+import AgentPipelineLoader from './AgentPipelineLoader'
+import { RepoFeedbackBar } from './RepoFeedbackActions'
+import { useFeedbackActions } from '../context/FeedbackContext'
+import { filterPathfinderResult, filterRankedRepos } from '../utils/skippedRepos'
+import { isAdmin } from '../auth'
 
 const QUICK_ADD_TAGS = ['Python', 'JavaScript', 'React', 'Node.js', 'TypeScript', 'Go', 'Java', 'Rust']
 
@@ -41,6 +47,7 @@ function buildRepoBullets(repo) {
 }
 
 export default function Dashboard() {
+  const { getSkippedRepoUrls } = useFeedbackActions()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const initialMode = searchParams.get('mode') || 'tech'
@@ -57,6 +64,7 @@ export default function Dashboard() {
   const [selectedRepo, setSelectedRepo] = useState(null)
   const [analysisResult, setAnalysisResult] = useState(null)
   const [user, setUser] = useState(null)
+  const admin = isAdmin()
 
   useEffect(() => {
     getMe().then(setUser).catch(() => setUser(null))
@@ -88,9 +96,25 @@ export default function Dashboard() {
     if (techTags.length === 0) return
     setLoading(true)
     setError(null)
+    setRankedRepos(null)
     try {
-      const result = await searchReposByTechStack({ tech_stack: techTags })
-      setRankedRepos(result)
+      sessionStorage.removeItem('scout_rankedRepos')
+    } catch {
+      /* ignore */
+    }
+    try {
+      const exclude = getSkippedRepoUrls()
+      const result = await searchReposByTechStack({
+        tech_stack: techTags,
+        fresh: true,
+        exclude_repo_urls: exclude,
+      })
+      setRankedRepos(filterPathfinderResult(result, exclude))
+      try {
+        sessionStorage.setItem('scout_rankedRepos', JSON.stringify(result))
+      } catch {
+        /* ignore */
+      }
     } catch (err) {
       setError(typeof err === 'object' ? (err.message || JSON.stringify(err)) : String(err))
     } finally {
@@ -134,6 +158,7 @@ export default function Dashboard() {
     setSelectedRepo(repo)
     setLoading(true)
     setError(null)
+    feedbackRepoSelection({ repo_url: repo.url, action: 'selected' })
     try {
       const result = await runAnalyze({ repo_url: repo.url })
 
@@ -177,13 +202,23 @@ export default function Dashboard() {
     </div>
   )
 
-  const renderRepoResults = () => (
+  const renderRepoResults = () => {
+    const visibleRepos = filterRankedRepos(rankedRepos.ranked_repos, getSkippedRepoUrls())
+    return (
     <div className="p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-8">
         <div>
           <h2 className="text-xl font-semibold tracking-tight text-app-text">Discovered Repositories</h2>
           <p className="text-app-muted text-sm mt-1">
-            {rankedRepos.ranked_repos.length} repositories match your tech stack
+            {visibleRepos.length} repositories match your tech stack
+            {rankedRepos.search_meta?.generated_at && (
+              <span className="block text-xs text-app-muted/80 mt-1">
+                Live search · {rankedRepos.search_meta.repos_discovered} repos scanned
+                {rankedRepos.search_meta.llm_personalization_calls > 0
+                  ? ` · ${rankedRepos.search_meta.llm_personalization_calls} AI personalizations`
+                  : ''}
+              </span>
+            )}
           </p>
         </div>
         <button
@@ -195,8 +230,14 @@ export default function Dashboard() {
         </button>
       </div>
 
+      {visibleRepos.length === 0 && (
+        <p className="text-app-muted text-sm mb-6">
+          All results were previously skipped. Try another tech stack or clear skips from Agent Memory reset.
+        </p>
+      )}
+
       <div className="space-y-6">
-        {rankedRepos.ranked_repos.map((repo, index) => {
+        {visibleRepos.map((repo, index) => {
           const repoName = repo.full_name.split('/')[1] || repo.full_name
           const owner = repo.full_name.split('/')[0] || ''
           const isAnalyzingThis = loading && selectedRepo?.full_name === repo.full_name
@@ -294,6 +335,7 @@ export default function Dashboard() {
                   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                   {isAnalyzingThis ? 'Analyzing...' : 'Analyze Repository'}
                 </button>
+                <RepoFeedbackBar repo={repo} />
                 <a
                   href={repo.url}
                   target="_blank"
@@ -308,7 +350,8 @@ export default function Dashboard() {
         })}
       </div>
     </div>
-  )
+    )
+  }
 
   return (
     <div className="h-screen bg-app-bg flex text-app-text overflow-hidden">
@@ -335,7 +378,11 @@ export default function Dashboard() {
             </button>
             <button
               type="button"
-              onClick={() => setInputMode('repo')}
+              onClick={() => {
+                setInputMode('repo')
+                setRankedRepos(null)
+                setSelectedRepo(null)
+              }}
               className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors duration-200 ${
                 inputMode === 'repo'
                   ? 'bg-app-elevated text-app-text shadow-sm border border-app-border'
@@ -459,6 +506,28 @@ export default function Dashboard() {
           </button>
         </div>
 
+        {admin && (
+          <div className="p-4 border-t border-app-border bg-app-surface/40 shrink-0">
+            <p className="text-[11px] uppercase tracking-wide text-app-muted mb-2">Admin</p>
+            <div className="space-y-2">
+              <Link
+                to="/admin/decision-trace"
+                className="flex items-center gap-2 rounded-lg border border-app-border px-3 py-2 text-sm text-app-muted hover:text-app-text hover:border-primary-500/40 hover:bg-app-elevated transition-colors"
+              >
+                <Gauge className="w-4 h-4" />
+                Decision Trace
+              </Link>
+              <Link
+                to="/admin/agent-memory"
+                className="flex items-center gap-2 rounded-lg border border-app-border px-3 py-2 text-sm text-app-muted hover:text-app-text hover:border-primary-500/40 hover:bg-app-elevated transition-colors"
+              >
+                <Brain className="w-4 h-4" />
+                Agent Memory
+              </Link>
+            </div>
+          </div>
+        )}
+
         {/* Profile Sidebar Footer */}
         <div className="p-4 border-t border-app-border bg-app-surface/50 shrink-0">
           <div className="flex items-center justify-between">
@@ -506,7 +575,20 @@ export default function Dashboard() {
           </div>
         </header>
 
-        {rankedRepos ? renderRepoResults() : renderWaitingState()}
+        {loading && (inputMode === 'repo' || selectedRepo) ? (
+          <AgentPipelineLoader
+            repoLabel={
+              selectedRepo?.full_name ||
+              (repoUrl.trim().match(/github\.com\/([^/]+\/[^/]+)/)?.[1] ?? '')
+            }
+          />
+        ) : loading && inputMode === 'tech' ? (
+          <PathfinderSearchLoader techStack={techTags} />
+        ) : inputMode === 'tech' && rankedRepos ? (
+          renderRepoResults()
+        ) : (
+          renderWaitingState()
+        )}
       </main>
     </div>
   )

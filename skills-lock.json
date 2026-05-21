@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "hindsight-docs": {
+      "source": "vectorize-io/hindsight",
+      "sourceType": "github",
+      "skillPath": "skills/hindsight-docs/SKILL.md",
+      "computedHash": "e8356a3b9dc9b7dacfb9cddd211e7eeae53a085df49b418501f327c49945e934"
+    },
     "neon-postgres": {
       "source": "neondatabase/agent-skills",
       "sourceType": "github",

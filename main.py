@@ -14,6 +14,8 @@ import threading
 import signal
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 # --------------------------------------------------------------------------- #
 #  ANSI colour helpers                                                          #
 # --------------------------------------------------------------------------- #
@@ -53,9 +55,33 @@ ROOT = Path(__file__).parent
 BACKEND_PORT = 8003
 
 
+def _resolve_python() -> str:
+    """Prefer project virtualenv so optional deps (e.g. cascadeflow) are available."""
+    if os.name == "nt":
+        candidates = (
+            ROOT / ".venv" / "Scripts" / "python.exe",
+            ROOT / "venv" / "Scripts" / "python.exe",
+        )
+    else:
+        candidates = (
+            ROOT / ".venv" / "bin" / "python",
+            ROOT / "venv" / "bin" / "python",
+        )
+    for path in candidates:
+        if path.is_file():
+            return str(path)
+    return sys.executable
+
+
+def _backend_env() -> dict[str, str]:
+    load_dotenv(ROOT / ".env", override=True)
+    return os.environ.copy()
+
+
 def _start_backend() -> subprocess.Popen:
+    python = _resolve_python()
     cmd = [
-        sys.executable, "-m", "uvicorn",
+        python, "-m", "uvicorn",
         "--reload",
         # Restrict reload watching to backend source folders; otherwise large
         # temp/cached checkouts under `.cache/` can trigger endless reloads.
@@ -68,12 +94,13 @@ def _start_backend() -> subprocess.Popen:
         "app.api:app",
     ]
     print(f"{CYAN}{BOLD}Starting backend{RESET}  -> http://localhost:{BACKEND_PORT}")
+    print(f"{CYAN}  Python:{RESET} {python}")
     return subprocess.Popen(
         cmd,
         cwd=ROOT,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        env=os.environ.copy(),
+        env=_backend_env(),
     )
 
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } fr
 import { useSearchParams, useLocation } from 'react-router-dom'
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react'
 import { FileCode, Pencil, ChevronDown, PanelLeftClose, PanelLeftOpen, Download, FileDown } from 'lucide-react'
-import { getFileContent, pushFile, pushFilesBatch, exportPdf } from '../api'
+import { getFileContent, pushFile, pushFilesBatch, exportPdf, feedbackExport } from '../api'
 import FileTree from '../components/FileTree'
 import ScoutLogo from '../components/ScoutLogo'
 import TerminalDock from '../components/TerminalDock'
@@ -370,6 +370,26 @@ export default function EditorWindow() {
       a.click()
       a.remove()
       window.URL.revokeObjectURL(url)
+      try {
+        const full =
+          analysisDataParam ||
+          (() => {
+            try {
+              const raw = sessionStorage.getItem('scout_analysisResult')
+              return raw ? JSON.parse(raw) : null
+            } catch {
+              return null
+            }
+          })()
+        const ti = full?.target_issue
+        const o = ownerParam || owner
+        const r = repoParam || repo
+        const bid =
+          o && r && ti?.number != null ? `${o}/${r}#${ti.number}` : `${r || 'repo'}-briefing`
+        feedbackExport({ briefing_id: bid, format: 'pdf' })
+      } catch {
+        /* ignore briefing id derivation */
+      }
     } catch (err) {
       console.error('Briefing PDF export failed:', err)
       setError('Failed to export briefing as PDF: ' + err.message)

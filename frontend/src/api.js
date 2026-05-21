@@ -3,6 +3,23 @@ import { encodeRepoFilePathForApi } from './utils/repoPaths'
 
 const API_BASE = '/api';
 
+const ANON_USER_KEY = 'os_anon_user_id'
+
+/** Stable anonymous id for per-user agent memory when JWT auth is not used. */
+export function ensureAnonUserId() {
+  if (typeof window === 'undefined') return ''
+  try {
+    let id = localStorage.getItem(ANON_USER_KEY)
+    if (!id) {
+      id = crypto.randomUUID()
+      localStorage.setItem(ANON_USER_KEY, id)
+    }
+    return id
+  } catch {
+    return ''
+  }
+}
+
 // Different timeouts for different operations
 const TIMEOUTS = {
   default: 30000,      // 30 seconds for quick operations
@@ -61,6 +78,8 @@ async function apiFetch(path, options = {}, timeoutMs = TIMEOUTS.default) {
   const token = getAccessToken()
   const headers = new Headers(options.headers || {})
   if (token) headers.set('Authorization', `Bearer ${token}`)
+  const anon = ensureAnonUserId()
+  if (anon && !headers.has('X-User-Id')) headers.set('X-User-Id', anon)
   if (!headers.has('Content-Type') && options.body) headers.set('Content-Type', 'application/json')
   
   try {
@@ -116,14 +135,19 @@ export async function getMe() {
   return res.json()
 }
 
-export async function searchReposByTechStack({ tech_stack, fast_model }) {
+export async function searchReposByTechStack({ tech_stack, fast_model, fresh = true, exclude_repo_urls = [] }) {
   const res = await apiFetch(`/search-repos`, {
     method: 'POST',
     body: JSON.stringify({
       tech_stack,
       fast_model: fast_model || 'meta-llama/llama-4-scout-17b-16e-instruct',
+      fresh,
+      exclude_repo_urls,
+      client_request_id: typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : String(Date.now()),
     }),
-  });
+  }, TIMEOUTS.analysis);
   if (!res.ok) {
     throw new Error((await responseErrorDetail(res)) || 'Repository search failed')
   }
@@ -462,4 +486,108 @@ export async function saveProjectAnalysisResult(projectId, analysisResult) {
     throw new Error((await responseErrorDetail(res)) || 'Failed to save analysis result')
   }
   return res.json()
+}
+
+export async function feedbackRepoSelection(payload) {
+  const res = await apiFetch('/feedback/repo-selection', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Feedback failed')
+  }
+  return res.json()
+}
+
+export function feedbackIssueInteraction(payload) {
+  apiFetch('/feedback/issue-interaction', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }).catch((err) => console.warn('[feedback issue-interaction]', err))
+}
+
+export function feedbackExport(payload) {
+  apiFetch('/feedback/export', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }).catch((err) => console.warn('[feedback export]', err))
+}
+
+export async function feedbackThumbs(payload) {
+  const res = await apiFetch('/feedback/thumbs', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Feedback failed')
+  }
+  return res.json()
+}
+
+export async function getReadmeSummary(owner, repo, { fresh = false } = {}) {
+  const q = fresh ? '?fresh=true' : ''
+  const res = await apiFetch(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/readme-summary${q}`,
+  )
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load README summary')
+  }
+  const data = await res.json()
+  const summary = data?.summary
+  if (typeof summary !== 'string' || !summary.trim()) {
+    throw new Error('README summary was empty')
+  }
+  return summary
+}
+
+export async function fetchMemorySummary() {
+  const res = await apiFetch('/memory/summary')
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load memory summary')
+  }
+  return res.json()
+}
+
+export async function adminListUsers(query = '') {
+  const q = query ? `?query=${encodeURIComponent(query)}` : ''
+  const res = await apiFetch(`/admin/users${q}`)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load users')
+  }
+  return res.json()
+}
+
+export async function adminDecisionTraces({ user_id } = {}) {
+  const q = user_id != null ? `?user_id=${encodeURIComponent(user_id)}` : ''
+  const res = await apiFetch(`/admin/decision-traces${q}`)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load decision traces')
+  }
+  return res.json()
+}
+
+export async function adminMemorySummary(user_id) {
+  if (!user_id) throw new Error('Missing user id')
+  const res = await apiFetch(`/admin/memory/summary?user_id=${encodeURIComponent(user_id)}`)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load memory summary')
+  }
+  return res.json()
+}
+
+export async function fetchMemoryByIds(ids) {
+  if (!ids || ids.length === 0) return { memories: [] }
+  const q = encodeURIComponent(ids.join(','))
+  const res = await apiFetch(`/memory/by-ids?ids=${q}`)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load memories')
+  }
+  return res.json()
+}
+
+export async function resetMemoryBank() {
+  const res = await apiFetch('/memory/reset?confirm=true', { method: 'POST' })
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to reset memory')
+  }
 }

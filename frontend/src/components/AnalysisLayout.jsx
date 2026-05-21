@@ -1,13 +1,14 @@
-import { Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useState, useEffect, useCallback } from 'react'
+import { Outlet, useLocation, Link } from 'react-router-dom'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { PanelLeft } from 'lucide-react'
 import AnalysisSidebar from './AnalysisSidebar'
+import { fetchMemorySummary } from '../api'
+import { isAdmin } from '../auth'
 
 const SIDEBAR_OPEN_KEY = 'scout_analysis_sidebar_open'
 
 export default function AnalysisLayout() {
   const location = useLocation()
-  const navigate = useNavigate()
   const [repoInfo, setRepoInfo] = useState(() => {
     const saved = sessionStorage.getItem('scout_repoInfo')
     return saved ? JSON.parse(saved) : null
@@ -61,6 +62,35 @@ export default function AnalysisLayout() {
       return false
     }
   })
+
+  const [memoryTotal, setMemoryTotal] = useState(null)
+
+  const cascadeflowRun = useMemo(
+    () => analysisResult?.cascadeflow_run ?? rankedRepos?.cascadeflow_run ?? null,
+    [analysisResult, rankedRepos],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    const tick = () => {
+      fetchMemorySummary()
+        .then((s) => {
+          if (!cancelled) {
+            const n = s?.totals?.total_entries
+            setMemoryTotal(typeof n === 'number' ? n : null)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setMemoryTotal(null)
+        })
+    }
+    tick()
+    const id = setInterval(tick, 60000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [analysisResult, rankedRepos])
 
   // Persist activeProjectId and issueLocked to sessionStorage
   useEffect(() => {
@@ -175,22 +205,52 @@ export default function AnalysisLayout() {
           Menu
         </button>
       )}
-      <main className="flex-1 min-w-0 min-h-0 overflow-y-auto bg-app-bg">
-        <Outlet
-          context={{
-            analysisResult,
-            setAnalysisResult,
-            repoInfo,
-            repoUrl,
-            rankedRepos,
-            analysisNavOpen,
-            toggleAnalysisNav,
-            activeProjectId,
-            setActiveProjectId,
-            issueLocked,
-            setIssueLocked,
-          }}
-        />
+      <main className="flex-1 min-w-0 min-h-0 overflow-hidden bg-app-bg flex flex-col">
+        <div className="sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b border-app-border bg-app-bg/95 px-4 py-2 text-[11px] backdrop-blur-sm shrink-0">
+          {isAdmin() && (
+            <>
+              <span className="rounded-full border border-app-border bg-app-surface px-2 py-1 font-mono text-app-muted">
+                cascadeflow: {cascadeflowRun?.mode ?? '—'}
+              </span>
+              {cascadeflowRun != null && cascadeflowRun.cost != null && (
+                <span className="rounded-full border border-primary-500/20 bg-primary-500/10 px-2 py-1 font-mono text-primary-300">
+                  ~${Number(cascadeflowRun.cost).toFixed(5)} USD
+                </span>
+              )}
+              <Link
+                to="/analysis/agent-memory"
+                className="rounded-full border border-app-border px-2 py-1 font-medium text-app-muted hover:border-primary-500/40 hover:text-primary-400"
+              >
+                memories: {memoryTotal === null ? '—' : memoryTotal}
+              </Link>
+              <Link
+                to="/analysis/decision-trace"
+                className="rounded-full border border-app-border px-2 py-1 font-medium text-app-muted hover:border-primary-500/40 hover:text-primary-400"
+              >
+                trace
+              </Link>
+            </>
+          )}
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <Outlet
+            context={{
+              analysisResult,
+              setAnalysisResult,
+              repoInfo,
+              repoUrl,
+              rankedRepos,
+              analysisNavOpen,
+              toggleAnalysisNav,
+              activeProjectId,
+              setActiveProjectId,
+              issueLocked,
+              setIssueLocked,
+              cascadeflowRun,
+              memoryTotal,
+            }}
+          />
+        </div>
       </main>
     </div>
   )

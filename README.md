@@ -250,6 +250,62 @@ Open-Source-Scout/
 └── README.md
 ```
 
+## Runtime Intelligence (cascadeflow)
+
+[cascadeflow](https://docs.cascadeflow.ai/) instruments each Groq completion with budget caps, KPI-aware routing between tiered models, and an audit trace returned as `cascadeflow_run` on `/api/analyze`, `/api/search-repos`, and `/api/re-analyze-issue`.
+
+```mermaid
+flowchart LR
+  subgraph api [FastAPI request]
+    R[cascadeflow.run budget]
+  end
+  R --> G[GroqClient.complete]
+  G --> T[record step + estimated USD]
+  T --> JSON[JSON response + cascadeflow_run.trace]
+```
+
+| Agent | Cost weight | Latency weight | Quality weight |
+|-------|-------------|----------------|----------------|
+| Pathfinder | 0.60 | 0.30 | 0.10 |
+| Triage Nurse | 0.30 | 0.50 | 0.20 |
+| Archaeologist | 0.33 | 0.34 | 0.33 |
+| Senior Dev | 0.15 | 0.25 | 0.60 |
+
+Measured savings depend on workload and Groq pricing assumptions; run `python scripts/cascadeflow_demo.py` against your deployment to capture before/after numbers.
+
+Environment knobs:
+
+| Variable | Default | Purpose |
+|---------|---------|---------|
+| `CASCADEFLOW_MODE` | `observe` | `observe`, `enforce`, or `off` |
+| `CASCADEFLOW_BUDGET_USD` | `0.10` | Soft budget per API request |
+
+## Agent Memory (Hindsight)
+
+[Hindsight Cloud](https://hindsight.vectorize.io/) stores per-user banks (`HINDSIGHT_BANK_PREFIX`, default `scout`). The backend recalls context before Pathfinder / Triage Nurse / Archaeologist, reflects before Senior Dev, and retains structured facts via `/api/feedback/*`.
+
+```mermaid
+flowchart TB
+  subgraph bank [Per-user bank]
+    M[Mission + directives]
+    R[Retain facts]
+    Q[TEMPR retrieval]
+  end
+  FEED["/api/feedback/*"] --> R
+  PF[Pathfinder recall] --> Q
+  TN[Triage recall] --> Q
+  AR[Archaeologist recall] --> Q
+  SD[Senior Dev reflect] --> Q
+```
+
+TEMPR blends semantic, keyword, graph, and temporal strategies (`strategy="auto"` in the SDK wrapper). Observations consolidate noisy retains into durable notes surfaced on `/api/memory/summary` and the Agent Memory UI.
+
+| Variable | Purpose |
+|---------|---------|
+| `HINDSIGHT_API_URL` | Cloud or self-hosted endpoint |
+| `HINDSIGHT_API_KEY` | API key |
+| `HINDSIGHT_BANK_PREFIX` | Namespace prefix per bank |
+
 ## 🔧 Configuration
 
 ### Environment Variables

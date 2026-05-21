@@ -2,13 +2,22 @@
 Agent 0: Pathfinder - Repository discovery and ranking based on user's tech stack.
 """
 from typing import List, Optional, Dict
+from datetime import datetime, timezone
 import json
 import re
 
 from core.agents.base import BaseAgent
 from core.schemas import (
-    RankedRepo, RepoScoreBreakdown, PathfinderOutput
+    RankedRepo, RepoScoreBreakdown, PathfinderOutput, PathfinderSearchMeta
 )
+from core.memory.hindsight_client import get_scout_hindsight
+from core.memory.skipped_repos import (
+    merge_exclude_sets,
+    normalize_repo_id,
+    repo_matches_exclude,
+    skipped_ids_from_memories,
+)
+from core.runtime.groq_context import pipeline_user_id_var
 from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B
 
 
@@ -63,7 +72,9 @@ Be encouraging and help users find projects where they can make meaningful contr
         self,
         tech_stack: List[str],
         github_client,
-        top_n: int = 5
+        top_n: int = 5,
+        client_request_id: str = "",
+        exclude_repo_urls: Optional[List[str]] = None,
     ) -> PathfinderOutput:
         """
         Search and rank repositories based on user's tech stack.
@@ -76,16 +87,57 @@ Be encouraging and help users find projects where they can make meaningful contr
         Returns:
             PathfinderOutput with ranked repositories
         """
+        self.activate_agent_llm_context()
+        self._llm_personalization_calls = 0
         self.log(f"Searching repositories for tech stack: {', '.join(tech_stack)}")
-        
+
+        recalled_memory_ids: list[str] = []
+        memory_summary = ""
+        user_memory_section = ""
+        memories: list = []
+        exclude_ids: set[str] = set()
+        disliked_repos: list[dict[str, object]] = []
+        uid = pipeline_user_id_var.get()
+        if uid:
+            try:
+                hx = get_scout_hindsight()
+                memories = hx.recall_sync(
+                    uid,
+                    f"past tech stack preferences, skipped or disliked repositories, and repo history for stack: {','.join(tech_stack)}",
+                    top_k=15,
+                )
+                recalled_memory_ids = [
+                    str(m.get("memory_id") or "") for m in memories if m.get("memory_id")
+                ]
+                recalled_memory_ids = [x for x in recalled_memory_ids if x]
+                exclude_ids = skipped_ids_from_memories(memories)
+                disliked_repos = self._extract_disliked_repos(memories)
+                if memories:
+                    lines = "\n".join(f"- {(m.get('text') or '')[:400]}" for m in memories[:10])
+                    user_memory_section = f"\n\n## What I know about this user\n{lines}\n"
+                    memory_summary = (
+                        f"Influenced by {len(recalled_memory_ids)} past memories about your preferences"
+                    )
+            except Exception as e:
+                self.log(f"Hindsight recall skipped: {e}", level="warning")
+
+        exclude_ids = merge_exclude_sets(exclude_repo_urls, exclude_ids)
+        if exclude_ids:
+            self.log(f"Excluding {len(exclude_ids)} skipped repositories from ranking")
+
         # Normalize tech stack
         normalized_stack = [t.strip().lower() for t in tech_stack if t.strip()]
         
         if not normalized_stack:
-            return PathfinderOutput(
-                tech_stack=tech_stack,
-                ranked_repos=[],
-                search_queries_used=[]
+            return self._finalize_output(
+                tech_stack,
+                [],
+                [],
+                recalled_memory_ids,
+                memory_summary,
+                repos_discovered=0,
+                queries_run=0,
+                client_request_id=client_request_id,
             )
         
         # Generate search queries based on tech stack
@@ -100,35 +152,75 @@ Be encouraging and help users find projects where they can make meaningful contr
             except Exception as e:
                 self.log(f"Search failed for query '{query}': {e}", level="warning")
         
-        # Deduplicate by full_name
+        # Deduplicate by full_name and drop user-skipped repos
         seen = set()
         unique_repos = []
         for repo in all_repos:
             if repo.full_name not in seen:
                 seen.add(repo.full_name)
-                unique_repos.append(repo)
+                if not repo_matches_exclude(repo, exclude_ids):
+                    unique_repos.append(repo)
         
-        self.log(f"Found {len(unique_repos)} unique repositories")
+        self.log(f"Found {len(unique_repos)} unique repositories (after skip filter)")
         
         if not unique_repos:
-            return PathfinderOutput(
-                tech_stack=tech_stack,
-                ranked_repos=[],
-                search_queries_used=search_queries
+            return self._finalize_output(
+                tech_stack,
+                [],
+                search_queries,
+                recalled_memory_ids,
+                memory_summary,
+                repos_discovered=0,
+                queries_run=min(len(search_queries), 5),
+                client_request_id=client_request_id,
             )
         
         # Score and rank repositories
         ranked_repos = self._score_and_rank_repos(
-            unique_repos, 
+            unique_repos,
             normalized_stack,
             github_client,
-            top_n
+            top_n,
+            user_memory_section,
+            disliked_repos,
         )
         
+        return self._finalize_output(
+            tech_stack,
+            ranked_repos,
+            search_queries,
+            recalled_memory_ids,
+            memory_summary,
+            repos_discovered=len(unique_repos),
+            queries_run=min(len(search_queries), 5),
+            client_request_id=client_request_id,
+        )
+
+    def _finalize_output(
+        self,
+        tech_stack: List[str],
+        ranked_repos: List[RankedRepo],
+        search_queries: List[str],
+        recalled_memory_ids: List[str],
+        memory_summary: str,
+        *,
+        repos_discovered: int,
+        queries_run: int,
+        client_request_id: str,
+    ) -> PathfinderOutput:
         return PathfinderOutput(
             tech_stack=tech_stack,
             ranked_repos=ranked_repos,
-            search_queries_used=search_queries
+            search_queries_used=search_queries,
+            recalled_memory_ids=recalled_memory_ids,
+            memory_summary=memory_summary,
+            search_meta=PathfinderSearchMeta(
+                repos_discovered=repos_discovered,
+                search_queries_run=queries_run,
+                llm_personalization_calls=getattr(self, "_llm_personalization_calls", 0),
+                generated_at=datetime.now(timezone.utc).isoformat(),
+                client_request_id=client_request_id or "",
+            ),
         )
     
     def _generate_search_queries(self, tech_stack: List[str]) -> List[str]:
@@ -193,7 +285,9 @@ Be encouraging and help users find projects where they can make meaningful contr
         repos: list,
         user_stack: List[str],
         github_client,
-        top_n: int
+        top_n: int,
+        user_memory_section: str = "",
+        disliked_repos: Optional[list[dict[str, object]]] = None,
     ) -> List[RankedRepo]:
         """Score repositories and return top N ranked."""
         scored_repos = []
@@ -201,6 +295,10 @@ Be encouraging and help users find projects where they can make meaningful contr
         for repo in repos:
             try:
                 score_result = self._calculate_repo_score(repo, user_stack, github_client)
+                penalty = self._repo_dislike_penalty(repo, disliked_repos or [])
+                if penalty:
+                    score_result = dict(score_result)
+                    score_result["total"] = max(0, score_result["total"] - penalty)
                 scored_repos.append((repo, score_result))
             except Exception as e:
                 self.log(f"Failed to score {repo.full_name}: {e}", level="warning")
@@ -212,7 +310,7 @@ Be encouraging and help users find projects where they can make meaningful contr
         ranked = []
         for repo, score_result in scored_repos[:top_n]:
             # Get enhanced description from LLM
-            why_match = self._generate_match_reasons(repo, user_stack, score_result)
+            why_match = self._generate_match_reasons(repo, user_stack, score_result, user_memory_section)
             
             ranked.append(RankedRepo(
                 full_name=repo.full_name,
@@ -234,6 +332,51 @@ Be encouraging and help users find projects where they can make meaningful contr
             ))
         
         return ranked
+
+    def _extract_disliked_repos(self, memories: list) -> list[dict[str, object]]:
+        """Extract repo thumbs-down feedback from memories for ranking penalties."""
+        disliked: list[dict[str, object]] = []
+        for m in memories or []:
+            meta = m.get("metadata") if isinstance(m.get("metadata"), dict) else {}
+            if (meta.get("kind") or "").lower() != "thumbs":
+                continue
+            if (meta.get("vote") or "").lower() != "down":
+                continue
+            if (meta.get("target_type") or "").lower() != "repo":
+                continue
+            repo_url = meta.get("repo_url") or meta.get("target_id") or ""
+            repo_id = normalize_repo_id(repo_url or meta.get("repo_full_name") or "")
+            if not repo_id:
+                continue
+            language = (meta.get("language") or "").strip().lower()
+            topics = [
+                str(t).strip().lower()
+                for t in (meta.get("topics") or [])
+                if str(t).strip()
+            ]
+            disliked.append({
+                "id": repo_id,
+                "language": language,
+                "topics": set(topics),
+            })
+        return disliked
+
+    def _repo_dislike_penalty(self, repo, disliked_repos: list[dict[str, object]]) -> int:
+        if not disliked_repos:
+            return 0
+        repo_id = normalize_repo_id(getattr(repo, "html_url", "") or getattr(repo, "full_name", ""))
+        language = (getattr(repo, "language", "") or "").strip().lower()
+        topics = {t.lower() for t in getattr(repo, "topics", []) or []}
+        penalty = 0
+        for disliked in disliked_repos:
+            if repo_id and disliked.get("id") == repo_id:
+                return 40
+            if language and disliked.get("language") == language:
+                penalty += 8
+            disliked_topics = disliked.get("topics") or set()
+            if topics and disliked_topics and topics.intersection(disliked_topics):
+                penalty += 6
+        return min(penalty, 20)
     
     def _calculate_repo_score(
         self,
@@ -359,7 +502,8 @@ Be encouraging and help users find projects where they can make meaningful contr
         self,
         repo,
         user_stack: List[str],
-        score_result: dict
+        score_result: dict,
+        user_memory_section: str = "",
     ) -> List[str]:
         """Generate human-readable reasons why this repo matches the user."""
         try:
@@ -372,6 +516,7 @@ Stars: {repo.stargazers_count}
 Open Issues: {repo.open_issues_count}
 
 User's Tech Stack: {', '.join(user_stack)}
+{user_memory_section}
 
 Score Breakdown:
 - Tech Match: {score_result['tech_match']}/40
@@ -395,9 +540,11 @@ Example format:
                 model=self.model,
                 system_prompt=self.role_prompt,
                 temperature=0.3,
-                max_tokens=300
+                max_tokens=300,
+                agent_name=self.name,
             )
-            
+            self._llm_personalization_calls = getattr(self, "_llm_personalization_calls", 0) + 1
+
             # Parse JSON response
             json_match = re.search(r'\{[^{}]*"reasons"[^{}]*\}', response, re.DOTALL)
             if json_match:
