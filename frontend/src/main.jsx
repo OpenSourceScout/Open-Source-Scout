@@ -140,11 +140,11 @@ function RepositoriesView() {
               {/* Metrics Breakdown */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
                 {[
+                  ['active_score', 'Activity'],
+                  ['beginner_friendly', 'Beginner'],
                   ['tech_match', 'Tech Match'],
-                  ['beginner_friendliness', 'Beginner'],
-                  ['activity', 'Activity'],
-                  ['community', 'Community'],
-                  ['issue_availability', 'Issues'],
+                  ['issue_quality', 'Issues'],
+                  ['community_score', 'Community'],
                 ].map(([key, label]) => (
                   <div key={key} className="p-3 bg-app-bg rounded-xl border border-app-border">
                     <div className="text-[11px] font-semibold tracking-wide text-app-muted uppercase mb-1">{label}</div>

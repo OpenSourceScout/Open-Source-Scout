@@ -21,6 +21,13 @@ Set-Location $PSScriptRoot
 Write-Host "API: http://127.0.0.1:$ApiPort"
 Write-Host "Clone cache: $env:LOCALAPPDATA\OpenSourceScout\repos"
 Write-Host "Frontend: cd frontend; npm run dev   (Vite defaults to proxy http://localhost:$ApiPort)"
+$env:UV_LINK_MODE = "copy"
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+    uv sync 2>$null
+    uv run python -m uvicorn app.api:app --port $ApiPort
+    exit $LASTEXITCODE
+}
+
 $python = "python"
 if (Test-Path ".\.venv\Scripts\python.exe") {
     $python = ".\.venv\Scripts\python.exe"
@@ -28,4 +35,4 @@ if (Test-Path ".\.venv\Scripts\python.exe") {
     $python = ".\venv\Scripts\python.exe"
 }
 
-&$python -m uvicorn app.api:app --port $ApiPort
+& $python -m uvicorn app.api:app --port $ApiPort

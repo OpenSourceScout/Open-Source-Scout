@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import ScoutLogo from './ScoutLogo'
 
 const STEPS = [
+  'Understanding your search preferences…',
   'Querying GitHub for matching repositories…',
-  'Scoring repos for beginner-friendliness and activity…',
+  'Scoring activity, issues, stack fit, and community…',
   'Personalizing top matches with AI…',
 ]
 
-export default function PathfinderSearchLoader({ techStack = [] }) {
+export default function PathfinderSearchLoader({ techStack = [], searchPrompt = '' }) {
   const [stepIndex, setStepIndex] = useState(0)
 
   useEffect(() => {
@@ -17,7 +18,12 @@ export default function PathfinderSearchLoader({ techStack = [] }) {
     return () => clearInterval(id)
   }, [])
 
-  const stackLabel = techStack.length ? techStack.join(', ') : 'your tech stack'
+  const stackLabel = techStack.length ? techStack.join(', ') : null
+  const contextLabel = searchPrompt.trim()
+    ? `"${searchPrompt.trim().slice(0, 80)}${searchPrompt.length > 80 ? '…' : ''}"`
+    : stackLabel
+      ? stackLabel
+      : 'your preferences'
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] py-20 px-6">
@@ -29,7 +35,7 @@ export default function PathfinderSearchLoader({ techStack = [] }) {
       </div>
       <h2 className="text-xl font-semibold text-app-text mb-2">Searching live on GitHub</h2>
       <p className="text-app-muted text-sm text-center max-w-md mb-6">
-        Finding repositories for {stackLabel}. This runs a fresh search each time — not cached results.
+        Finding repositories for {contextLabel}. This runs a fresh search each time — not cached results.
       </p>
       <p className="text-sm text-primary-400 font-medium animate-pulse">{STEPS[stepIndex]}</p>
     </div>
