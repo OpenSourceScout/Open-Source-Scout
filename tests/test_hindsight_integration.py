@@ -164,7 +164,9 @@ def test_search_repos_calls_pathfinder_run(client):
         memory_summary="",
     )
 
-    with patch("app.api.PathfinderAgent") as PA:
+    with patch("app.api.PathfinderAgent") as PA, patch(
+        "app.api.GroqClient.for_agent", return_value=MagicMock()
+    ):
         PA.return_value.run.return_value = pf_out
         r = client.post(
             "/api/search-repos",

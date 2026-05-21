@@ -40,7 +40,8 @@ jobs:
     - name: Run Pytest
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        # Unit tests mock Groq; use a placeholder when the repo secret is unset (not .env).
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY != '' && secrets.GROQ_API_KEY || 'ci-dummy-groq-key' }}
       run: uv run pytest
 
   frontend-build:

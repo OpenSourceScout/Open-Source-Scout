@@ -110,9 +110,10 @@ class TestReAnalyzeErrors:
             html_url="https://github.com/a/b",
             clone_url="https://github.com/a/b.git",
         )
-        with patch("app.api.GitHubClient") as Gh, patch("app.api.GroqClient"):
+        with patch("app.api.GitHubClient") as Gh, patch("app.api.ScoutOrchestrator") as Orch:
             Gh.return_value.get_repo.return_value = repo
             Gh.return_value.get_issue.side_effect = RuntimeError("not found")
+            Orch.return_value = MagicMock()
             r = client.post(
                 "/api/re-analyze-issue",
                 headers=ANON_HEADERS,

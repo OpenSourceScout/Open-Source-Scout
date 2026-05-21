@@ -2,7 +2,17 @@ import os
 
 import pytest
 
-os.environ.setdefault("GROQ_API_KEY", "test-key-for-pytest")
+# CI sets GROQ_API_KEY from secrets; missing/empty secrets must not break unit tests.
+# .env is never loaded in GitHub Actions — only workflow env vars apply.
+_TEST_GROQ_KEY = "test-key-for-pytest"
+
+
+def _ensure_groq_test_keys() -> None:
+    if not (os.environ.get("GROQ_API_KEY") or "").strip():
+        os.environ["GROQ_API_KEY"] = _TEST_GROQ_KEY
+
+
+_ensure_groq_test_keys()
 
 
 @pytest.fixture

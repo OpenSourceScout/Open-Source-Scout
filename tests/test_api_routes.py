@@ -40,10 +40,14 @@ class TestAnalyzePhase1Mocked:
             html_url="https://github.com/a/b",
             clone_url="https://github.com/a/b.git",
         )
-        with patch("app.api.GitHubClient") as Gh, patch("app.api.GroqClient") as Gq:
+        with patch("app.api.GitHubClient") as Gh, patch("app.api.ScoutOrchestrator") as Orch:
             Gh.return_value.get_repo.return_value = repo
             Gh.return_value.get_issues.return_value = []
-            Gq.return_value = MagicMock()
+            Orch.return_value.run_phase1.return_value = {
+                "success": False,
+                "error": "No issues found matching criteria",
+                "repo": repo,
+            }
             r = client.post(
                 "/api/analyze",
                 headers=ANON_HEADERS,
