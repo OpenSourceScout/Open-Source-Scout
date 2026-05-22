@@ -555,6 +555,16 @@ export async function fetchMemorySummary() {
   return res.json()
 }
 
+export async function fetchMemoryGraph({ limit = 120, type } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (type) params.set('type', type)
+  const res = await apiFetch(`/memory/graph?${params}`)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load memory graph')
+  }
+  return res.json()
+}
+
 export async function adminListUsers(query = '') {
   const q = query ? `?query=${encodeURIComponent(query)}` : ''
   const res = await apiFetch(`/admin/users${q}`)
@@ -578,6 +588,17 @@ export async function adminMemorySummary(user_id) {
   const res = await apiFetch(`/admin/memory/summary?user_id=${encodeURIComponent(user_id)}`)
   if (!res.ok) {
     throw new Error((await responseErrorDetail(res)) || 'Failed to load memory summary')
+  }
+  return res.json()
+}
+
+export async function adminMemoryGraph(user_id, { limit = 120, type } = {}) {
+  if (!user_id) throw new Error('Missing user id')
+  const params = new URLSearchParams({ user_id: String(user_id), limit: String(limit) })
+  if (type) params.set('type', type)
+  const res = await apiFetch(`/admin/memory/graph?${params}`)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Failed to load memory graph')
   }
   return res.json()
 }

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Brain, RefreshCw, Trash2 } from 'lucide-react'
-import { fetchMemorySummary, resetMemoryBank } from '../api'
-import { mentalModelDescription, mentalModelEmptyHint } from '../utils/mentalModelText'
+import { fetchMemorySummary, resetMemoryBank, fetchMemoryGraph } from '../api'
+import MentalModelsPanel from '../components/MentalModelsPanel'
 
 function freshnessBadge(f) {
   const v = (f || 'stable').toLowerCase()
@@ -18,6 +18,9 @@ function freshnessBadge(f) {
 export default function AgentMemory() {
   const navigate = useNavigate()
   const [data, setData] = useState(null)
+  const [graphData, setGraphData] = useState(null)
+  const [graphError, setGraphError] = useState(null)
+  const [graphLoading, setGraphLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [resetStep, setResetStep] = useState(0)
@@ -26,10 +29,16 @@ export default function AgentMemory() {
   const load = useCallback(() => {
     setError(null)
     setLoading(true)
+    setGraphLoading(true)
+    setGraphError(null)
     fetchMemorySummary()
       .then(setData)
       .catch((e) => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false))
+    fetchMemoryGraph()
+      .then(setGraphData)
+      .catch((e) => setGraphError(e.message || 'Failed to load memory graph'))
+      .finally(() => setGraphLoading(false))
   }, [])
 
   useEffect(() => {
@@ -176,51 +185,14 @@ export default function AgentMemory() {
             </div>
           </section>
 
-          <section>
-            <h2 className="text-lg font-semibold text-app-text mb-1">Mental models I&apos;ve built</h2>
-            <p className="text-xs text-app-muted mb-4 max-w-2xl">
-              Living documents maintained by Hindsight (refreshed after new memories consolidate).
-              Different from the observation summaries above.
-            </p>
-            <ul className="space-y-2">
-              {curatedMental.length === 0 ? (
-                <li className="text-sm text-app-muted">
-                  {observations.length > 0
-                    ? 'Models are being created or refreshed — click Refresh in a few seconds.'
-                    : 'None yet. Use the app (feedback, skips, analysis), then refresh.'}
-                </li>
-              ) : (
-                curatedMental.map((m) => {
-                  const body = mentalModelDescription(m)
-                  return (
-                  <li
-                    key={`${m.source || 'mm'}-${m.id || m.title}`}
-                    className="rounded-lg border border-app-border bg-app-surface px-4 py-3 text-sm"
-                  >
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="font-medium text-app-text">{m.title}</span>
-                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] uppercase tracking-wide text-emerald-300">
-                        Curated
-                      </span>
-                    </div>
-                    {body ? (
-                      <p className="text-xs text-app-muted/90 leading-relaxed whitespace-pre-wrap">{body}</p>
-                    ) : (
-                      <p className="text-xs text-amber-300/90 leading-relaxed italic">
-                        {mentalModelEmptyHint(observations.length > 0)}
-                      </p>
-                    )}
-                    {m.created_at && (
-                      <p className="mt-1 text-xs text-app-muted">
-                        {typeof m.created_at === 'string' ? m.created_at : String(m.created_at)}
-                      </p>
-                    )}
-                  </li>
-                  )
-                })
-              )}
-            </ul>
-          </section>
+          <MentalModelsPanel
+            models={curatedMental}
+            observationsCount={observations.length}
+            graphData={graphData}
+            graphLoading={graphLoading}
+            graphError={graphError}
+            bankId={data?.bank_id}
+          />
 
           <section>
             <h2 className="text-lg font-semibold text-app-text mb-4">Recent facts</h2>
