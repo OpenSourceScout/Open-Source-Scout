@@ -979,6 +979,22 @@ def memory_summary(user_ctx: UserContext = Depends(get_current_user)):
     return payload
 
 
+@app.get("/api/memory/graph")
+def memory_graph(
+    user_ctx: UserContext = Depends(get_current_user),
+    limit: int = Query(120, ge=10, le=500),
+    memory_type: str | None = Query(None, alias="type"),
+):
+    hx = get_scout_hindsight()
+    hx.get_or_create_bank_sync(user_ctx.user_id)
+    payload = hx.memory_graph_sync(user_ctx.user_id, limit=limit, memory_type=memory_type)
+    if isinstance(payload, dict):
+        payload = dict(payload)
+        payload["hindsight_enabled"] = hx.enabled
+        payload["bank_id"] = user_ctx.bank_id
+    return payload
+
+
 @app.get("/api/memory/by-ids")
 def memory_by_ids(
     ids: str = Query(..., description="Comma-separated memory IDs"),
@@ -1080,6 +1096,25 @@ def admin_memory_summary(
         pt = dict(t)
         pt["total_entries"] = total_mem
         payload["totals"] = pt
+        payload["user_id"] = user_id
+        payload["hindsight_enabled"] = hx.enabled
+        payload["bank_id"] = hx.bank_for_user(user_id)
+    return payload
+
+
+@app.get("/api/admin/memory/graph")
+def admin_memory_graph(
+    request: Request,
+    user_id: str = Query(..., description="Target user id"),
+    limit: int = Query(120, ge=10, le=500),
+    memory_type: str | None = Query(None, alias="type"),
+):
+    _require_admin_user(request)
+    hx = get_scout_hindsight()
+    hx.get_or_create_bank_sync(user_id)
+    payload = hx.memory_graph_sync(user_id, limit=limit, memory_type=memory_type)
+    if isinstance(payload, dict):
+        payload = dict(payload)
         payload["user_id"] = user_id
         payload["hindsight_enabled"] = hx.enabled
     return payload

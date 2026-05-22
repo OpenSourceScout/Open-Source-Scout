@@ -963,6 +963,105 @@ class ScoutHindsightClient:
                 out.append({"memory_id": mid, "text": ""})
         return out
 
+    def memory_graph_sync(
+        self,
+        user_id: str,
+        *,
+        limit: int = 120,
+        memory_type: str | None = None,
+        max_edges: int = 1500,
+    ) -> dict[str, Any]:
+        """Fetch Hindsight graph data for Constellation-style visualization."""
+        empty = {"nodes": [], "edges": [], "total_units": 0, "limit": limit}
+        if not self.enabled or not self._client:
+            return empty
+        try:
+            return _run_sync_sdk(
+                self._memory_graph_sync_impl,
+                user_id,
+                limit,
+                memory_type,
+                max_edges,
+            )
+        except Exception as e:
+            logger.warning("Hindsight memory_graph_sync failed: %s", e)
+            return empty
+
+    def _memory_graph_sync_impl(
+        self,
+        user_id: str,
+        limit: int,
+        memory_type: str | None,
+        max_edges: int,
+    ) -> dict[str, Any]:
+        sdk = self._sdk_for_sync()
+        if not sdk:
+            return {"nodes": [], "edges": [], "total_units": 0, "limit": limit}
+        bank_id = self.bank_for_user(user_id)
+        try:
+            self._ensure_bank(bank_id)
+        except Exception:
+            pass
+        resp = self._hc_run_async(
+            sdk.memory.get_graph(
+                bank_id=bank_id,
+                limit=min(max(limit, 1), 500),
+                type=memory_type,
+            )
+        )
+        raw = resp.model_dump() if hasattr(resp, "model_dump") else resp
+        if not isinstance(raw, dict):
+            return {"nodes": [], "edges": [], "total_units": 0, "limit": limit}
+
+        nodes: list[dict[str, Any]] = []
+        for item in raw.get("nodes") or []:
+            data = item.get("data") if isinstance(item, dict) else None
+            if not isinstance(data, dict):
+                data = item if isinstance(item, dict) else {}
+            node_id = _scalar_text(data.get("id"))
+            if not node_id:
+                continue
+            nodes.append(
+                {
+                    "id": node_id,
+                    "label": _scalar_text(data.get("label") or data.get("text") or node_id),
+                    "text": _scalar_text(data.get("text") or ""),
+                    "context": _scalar_text(data.get("context") or data.get("type") or ""),
+                    "color": _scalar_text(data.get("color") or ""),
+                    "date": data.get("date"),
+                }
+            )
+
+        node_ids = {n["id"] for n in nodes}
+        edges: list[dict[str, Any]] = []
+        for item in raw.get("edges") or []:
+            if len(edges) >= max_edges:
+                break
+            data = item.get("data") if isinstance(item, dict) else None
+            if not isinstance(data, dict):
+                data = item if isinstance(item, dict) else {}
+            src = _scalar_text(data.get("source"))
+            tgt = _scalar_text(data.get("target"))
+            if not src or not tgt or src not in node_ids or tgt not in node_ids:
+                continue
+            edges.append(
+                {
+                    "source": src,
+                    "target": tgt,
+                    "link_type": _scalar_text(data.get("linkType") or data.get("link_type") or ""),
+                    "color": _scalar_text(data.get("color") or ""),
+                    "weight": data.get("weight"),
+                }
+            )
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "total_units": int(raw.get("total_units") or len(nodes)),
+            "limit": int(raw.get("limit") or limit),
+            "bank_id": bank_id,
+        }
+
     def memory_summary_sync(self, user_id: str) -> dict[str, Any]:
         if not self.enabled or not self._client:
             return self._memory_summary_payload_sync(user_id)
