@@ -1,8 +1,7 @@
-import { Outlet, useLocation, Link } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { PanelLeft } from 'lucide-react'
 import AnalysisSidebar from './AnalysisSidebar'
-import { fetchMemorySummary } from '../api'
 import { isAdmin } from '../auth'
 
 const SIDEBAR_OPEN_KEY = 'scout_analysis_sidebar_open'
@@ -63,34 +62,10 @@ export default function AnalysisLayout() {
     }
   })
 
-  const [memoryTotal, setMemoryTotal] = useState(null)
-
   const cascadeflowRun = useMemo(
     () => analysisResult?.cascadeflow_run ?? rankedRepos?.cascadeflow_run ?? null,
     [analysisResult, rankedRepos],
   )
-
-  useEffect(() => {
-    let cancelled = false
-    const tick = () => {
-      fetchMemorySummary()
-        .then((s) => {
-          if (!cancelled) {
-            const n = s?.totals?.total_entries
-            setMemoryTotal(typeof n === 'number' ? n : null)
-          }
-        })
-        .catch(() => {
-          if (!cancelled) setMemoryTotal(null)
-        })
-    }
-    tick()
-    const id = setInterval(tick, 60000)
-    return () => {
-      cancelled = true
-      clearInterval(id)
-    }
-  }, [analysisResult, rankedRepos])
 
   // Persist activeProjectId and issueLocked to sessionStorage
   useEffect(() => {
@@ -208,18 +183,6 @@ export default function AnalysisLayout() {
                   ~${Number(cascadeflowRun.cost).toFixed(5)} USD
                 </span>
               )}
-              <Link
-                to="/analysis/agent-memory"
-                className="rounded-full border border-app-border px-2 py-1 font-medium text-app-muted hover:border-primary-500/40 hover:text-primary-400"
-              >
-                memories: {memoryTotal === null ? '—' : memoryTotal}
-              </Link>
-              <Link
-                to="/analysis/decision-trace"
-                className="rounded-full border border-app-border px-2 py-1 font-medium text-app-muted hover:border-primary-500/40 hover:text-primary-400"
-              >
-                trace
-              </Link>
             </>
           )}
         </div>
@@ -238,7 +201,6 @@ export default function AnalysisLayout() {
               issueLocked,
               setIssueLocked,
               cascadeflowRun,
-              memoryTotal,
             }}
           />
         </div>

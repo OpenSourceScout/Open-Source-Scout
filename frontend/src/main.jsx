@@ -211,8 +211,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Route path="issues" element={<IssueRanking />} />
           <Route path="code" element={<CodeLocator />} />
           <Route path="briefing" element={<ContributorBriefing />} />
-          <Route path="decision-trace" element={<RequireAdmin><AdminDecisionTrace /></RequireAdmin>} />
-          <Route path="agent-memory" element={<RequireAdmin><AdminAgentMemory /></RequireAdmin>} />
           <Route path="qa-report" element={<RequireAdmin><QaReport /></RequireAdmin>} />
         </Route>
         <Route path="/editor" element={<RequireAuth><EditorWindow /></RequireAuth>} />
