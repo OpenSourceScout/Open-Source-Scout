@@ -350,10 +350,10 @@ export async function makeForkChoice(owner, repo, choice, issueNumber = null) {
 
 // --- Terminal endpoints ---
 
-export async function createTerminalSession({ owner, repo, ref = 'HEAD' }) {
+export async function createTerminalSession({ owner, repo, ref = 'HEAD', analysisData = null }) {
   const res = await apiFetch('/terminal/sessions', {
     method: 'POST',
-    body: JSON.stringify({ owner, repo, ref }),
+    body: JSON.stringify({ owner, repo, ref, analysis_data: analysisData || null }),
   })
   if (!res.ok) {
     throw new Error((await responseErrorDetail(res)) || 'Failed to create terminal session')

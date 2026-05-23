@@ -17,6 +17,7 @@ export default function TerminalDock({
   repo,
   refName,
   modifiedContentsKey,
+  analysisData = null,
 }) {
   const [session, setSession] = useState(null)
   const [terminals, setTerminals] = useState([])
@@ -179,6 +180,7 @@ export default function TerminalDock({
         owner,
         repo,
         ref: refName || 'HEAD',
+        analysisData,
       })
 
       setSession(data)

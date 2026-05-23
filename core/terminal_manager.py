@@ -53,6 +53,7 @@ class TerminalSessionState:
     owner: str
     repo: str
     ref: str
+    analysis_data: dict[str, Any] | None
     workspace_root: Path
     repo_root: Path
     created_at: float
@@ -91,6 +92,7 @@ class TerminalManager:
         owner: str,
         repo: str,
         ref: str = "HEAD",
+        analysis_data: dict[str, Any] | None = None,
         github_token: str | None = None,
     ) -> dict[str, Any]:
         owner = owner.strip()
@@ -133,11 +135,12 @@ class TerminalManager:
                 owner=owner,
                 repo=repo,
                 ref=ref,
+                analysis_data=self._normalize_analysis_data(analysis_data),
                 workspace_root=workspace_root,
                 repo_root=repo_root,
                 created_at=now,
                 last_accessed=now,
-                suggestions=self._build_suggestions(repo_root),
+                suggestions=self._build_suggestions(repo_root, analysis_data),
             )
             with self._lock:
                 self._sessions[session_id] = session
@@ -464,66 +467,335 @@ class TerminalManager:
             return f'cd /d "{target}"'
         return f'cd "{target}"'
 
-    def _build_suggestions(self, repo_root: Path) -> list[dict[str, str | None]]:
-        suggestions: list[dict[str, str | None]] = []
+    def _build_suggestions(
+        self,
+        repo_root: Path,
+        analysis_data: dict[str, Any] | None = None,
+    ) -> list[dict[str, str | None]]:
+        suggestions_with_priority: list[tuple[int, dict[str, str | None]]] = []
         seen: set[tuple[str, str]] = set()
+        profile = self._build_repo_profile(repo_root, analysis_data)
+        briefing_focus = self._briefing_focus(profile["briefing_text"])
 
-        def add(comment: str, command: str, cwd: str | None = None) -> None:
+        def add(priority: int, comment: str, command: str, cwd: str | None = None) -> None:
             key = ((cwd or "").strip(), command.strip())
             if key in seen:
                 return
             seen.add(key)
-            suggestions.append(
-                {
-                    "comment": comment,
-                    "command": command,
-                    "cwd": cwd,
-                }
+            suggestions_with_priority.append(
+                (
+                    priority,
+                    {
+                        "comment": comment,
+                        "command": command,
+                        "cwd": cwd,
+                    },
+                )
             )
 
-        has_pyproject = (repo_root / "pyproject.toml").exists()
-        has_requirements = (repo_root / "requirements.txt").exists()
-        has_api = (repo_root / "app" / "api.py").exists()
-        has_main_py = (repo_root / "main.py").exists()
-        has_tests = (repo_root / "tests").exists()
+        python_focus = profile["python_project"]
+        frontend_focus = profile["frontend_project"]
+        backend_focus = profile["backend_project"]
+        needs_tests = profile["has_tests"] or briefing_focus["test"]
+        wants_lint = briefing_focus["lint"]
 
-        root_scripts = self._package_scripts(repo_root / "package.json")
-        frontend_scripts = self._package_scripts(repo_root / "frontend" / "package.json")
+        if profile["python_tool"] == "uv" and python_focus:
+            python_comment = "# Install Python dependencies with uv"
+            if profile["python_stack_name"]:
+                python_comment = f"# Install Python dependencies for the {profile['python_stack_name']} stack"
+            add(10, python_comment, "uv sync")
+        elif profile["python_tool"] == "pip" and python_focus:
+            add(10, "# Install Python dependencies from requirements", "pip install -r requirements.txt")
 
-        if has_pyproject:
-            add("# Install Python dependencies with uv", "uv sync")
-        elif has_requirements:
-            add("# Install Python dependencies from requirements", "pip install -r requirements.txt")
+        if profile["root_package_manager"] and profile["root_package_json"]:
+            add(
+                12,
+                f"# Install root Node dependencies with {profile['root_package_manager']}",
+                f"{profile['root_package_manager']} install",
+            )
 
-        if has_api:
-            add("# Start the FastAPI backend", "uv run uvicorn app.api:app --reload --port 8003")
+        if profile["root_package_json"] and profile["root_dev_tool"]:
+            add(
+                13,
+                f"# Start the root app with {profile['root_dev_tool']}",
+                self._js_tool_command(profile["root_package_manager"], profile["root_dev_tool"], "dev"),
+            )
 
-        if has_main_py:
-            add("# Start the combined project launcher", "uv run python main.py")
+        if profile["root_package_json"] and profile["root_test_tools"]:
+            for offset, tool_name in enumerate(profile["root_test_tools"]):
+                add(
+                    15 + offset,
+                    f"# Run the root test suite with {tool_name}",
+                    self._js_tool_command(profile["root_package_manager"], tool_name, "test"),
+                )
 
-        if has_tests:
-            add("# Run backend tests", "uv run pytest")
+        if profile["root_package_json"] and profile["root_build_tool"]:
+            add(
+                17,
+                f"# Build the repo with {profile['root_build_tool']}",
+                self._js_tool_command(profile["root_package_manager"], profile["root_build_tool"], "build"),
+            )
 
-        if "install" in root_scripts or (repo_root / "package.json").exists():
-            add("# Install root Node dependencies", "npm install")
-        if "dev" in root_scripts:
-            add("# Run root frontend/server in dev mode", "npm run dev")
-        if "test" in root_scripts:
-            add("# Run root Node tests", "npm run test")
+        if profile["frontend_package_manager"] and frontend_focus:
+            add(
+                14,
+                f"# Install frontend dependencies with {profile['frontend_package_manager']}",
+                f"{profile['frontend_package_manager']} install",
+                cwd="frontend",
+            )
 
-        frontend_dir = repo_root / "frontend"
-        if frontend_dir.exists() and (frontend_dir / "package.json").exists():
-            add("# Install frontend dependencies", "npm install", cwd="frontend")
-            if "dev" in frontend_scripts:
-                add("# Start Vite frontend", "npm run dev", cwd="frontend")
-            if "build" in frontend_scripts:
-                add("# Build frontend for production", "npm run build", cwd="frontend")
-            if "test" in frontend_scripts:
-                add("# Run frontend unit tests", "npm run test", cwd="frontend")
+        if backend_focus and profile["has_api"]:
+            run_comment = "# Start the FastAPI backend"
+            if briefing_focus["backend"]:
+                run_comment = "# Start the backend highlighted in the briefing"
+            add(20, run_comment, "uv run uvicorn app.api:app --reload --port 8003")
 
-        add("# Check current git status", "git status")
+        if profile["has_main_py"]:
+            add(22, "# Start the combined project launcher", "uv run python main.py")
 
-        return suggestions
+        if frontend_focus and profile["frontend_dev_script"]:
+            dev_comment = "# Start the frontend dev server"
+            if briefing_focus["frontend"]:
+                dev_comment = "# Start the frontend called out in the briefing"
+            add(
+                24,
+                dev_comment,
+                f"{profile['frontend_package_manager']} run {profile['frontend_dev_script']}",
+                cwd="frontend",
+            )
+
+        if frontend_focus and profile["frontend_build_script"]:
+            add(
+                26,
+                "# Build the frontend for a production check",
+                f"{profile['frontend_package_manager']} run {profile['frontend_build_script']}",
+                cwd="frontend",
+            )
+
+        if frontend_focus and profile["frontend_test_script"]:
+            test_comment = "# Run the frontend test script"
+            if briefing_focus["test"]:
+                test_comment = "# Run the frontend tests highlighted in the briefing"
+            add(
+                28,
+                test_comment,
+                f"{profile['frontend_package_manager']} run {profile['frontend_test_script']}",
+                cwd="frontend",
+            )
+
+        if python_focus and needs_tests:
+            test_comment = "# Run backend tests"
+            if briefing_focus["test"]:
+                test_comment = "# Run the backend tests highlighted in the briefing"
+            if profile["python_tool"] == "uv":
+                add(30, test_comment, "uv run pytest")
+            else:
+                add(30, test_comment, "pytest")
+
+        if frontend_focus and profile["frontend_lint_script"] and wants_lint:
+            add(
+                32,
+                "# Run the frontend lint check",
+                f"{profile['frontend_package_manager']} run {profile['frontend_lint_script']}",
+                cwd="frontend",
+            )
+
+        if profile["has_git"]:
+            add(90, "# Check current git status", "git status")
+
+        suggestions_with_priority.sort(key=lambda item: (item[0], item[1]["cwd"] or "", item[1]["command"]))
+        return [item for _, item in suggestions_with_priority]
+
+    def _build_repo_profile(
+        self,
+        repo_root: Path,
+        analysis_data: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        root_package_json = repo_root / "package.json"
+        frontend_package_json = repo_root / "frontend" / "package.json"
+        root_scripts = self._package_scripts(root_package_json)
+        frontend_scripts = self._package_scripts(frontend_package_json)
+        root_package_manager = self._package_manager(root_package_json)
+        python_tool = "uv" if (repo_root / "pyproject.toml").exists() else ("pip" if (repo_root / "requirements.txt").exists() else None)
+        briefing_text = self._analysis_text(analysis_data)
+
+        return {
+            "python_tool": python_tool,
+            "python_project": python_tool is not None,
+            "python_stack_name": self._stack_name_from_analysis(briefing_text),
+            "backend_project": (repo_root / "app" / "api.py").exists() or (repo_root / "main.py").exists(),
+            "frontend_project": frontend_package_json.exists(),
+            "root_package_json": root_package_json.exists(),
+            "root_package_manager": root_package_manager,
+            "frontend_package_manager": self._package_manager(frontend_package_json),
+            "frontend_dev_script": self._preferred_script(frontend_scripts, "dev", "start"),
+            "frontend_build_script": self._preferred_script(frontend_scripts, "build", "preview"),
+            "frontend_test_script": self._preferred_script(frontend_scripts, "test", "test:unit", "vitest", "jest"),
+            "frontend_lint_script": self._preferred_script(frontend_scripts, "lint"),
+            "has_api": (repo_root / "app" / "api.py").exists(),
+            "has_main_py": (repo_root / "main.py").exists(),
+            "has_tests": (repo_root / "tests").exists(),
+            "has_git": (repo_root / ".git").exists(),
+            "briefing_text": briefing_text,
+            "root_scripts": root_scripts,
+            "frontend_scripts": frontend_scripts,
+            "root_dev_tool": self._detect_js_dev_tool(repo_root),
+            "root_test_tools": self._detect_js_test_tools(repo_root),
+            "root_build_tool": self._detect_js_build_tool(repo_root),
+        }
+
+    def _analysis_text(self, analysis_data: dict[str, Any] | None) -> str:
+        parts: list[str] = []
+        visited: set[int] = set()
+
+        def collect(value: Any) -> None:
+            if len(parts) >= 80:
+                return
+            if isinstance(value, str):
+                text = value.strip()
+                if text:
+                    parts.append(text)
+                return
+            if isinstance(value, dict):
+                obj_id = id(value)
+                if obj_id in visited:
+                    return
+                visited.add(obj_id)
+                for item in value.values():
+                    collect(item)
+                return
+            if isinstance(value, list):
+                obj_id = id(value)
+                if obj_id in visited:
+                    return
+                visited.add(obj_id)
+                for item in value:
+                    collect(item)
+
+        collect(analysis_data or {})
+        return " ".join(parts).lower()[:8000]
+
+    def _briefing_focus(self, briefing_text: str) -> dict[str, bool]:
+        lowered = briefing_text.lower()
+        return {
+            "test": any(token in lowered for token in ("test", "tests", "testing", "qa", "smoke", "verify")),
+            "build": any(token in lowered for token in ("build", "bundle", "compile", "release")),
+            "deploy": any(token in lowered for token in ("deploy", "ship", "publish")),
+            "frontend": any(token in lowered for token in ("frontend", "ui", "vite", "react", "next", "browser")),
+            "backend": any(token in lowered for token in ("backend", "api", "server", "fastapi", "flask", "django")),
+            "launcher": any(token in lowered for token in ("main.py", "launcher", "entrypoint", "run the app", "start the app")),
+            "lint": any(token in lowered for token in ("lint", "format", "formatting", "style")),
+        }
+
+    def _stack_name_from_analysis(self, briefing_text: str) -> str | None:
+        if any(token in briefing_text for token in ("fastapi", "flask", "django")):
+            return "Python"
+        if any(token in briefing_text for token in ("pytest", "uv ", "uvicorn")):
+            return "Python"
+        return None
+
+    def _detect_js_dev_tool(self, repo_root: Path) -> str | None:
+        if self._repo_has_any(repo_root, "vite.config"):
+            return "vite"
+        if self._repo_has_any(repo_root, "next.config"):
+            return "next"
+        if self._repo_has_any(repo_root, "nuxt.config"):
+            return "nuxt"
+        if self._repo_has_any(repo_root, "parcel.config"):
+            return "parcel"
+        if self._repo_has_any(repo_root, "webpack.config"):
+            return "webpack"
+        if self._repo_has_any(repo_root, "rollup.config"):
+            return "rollup"
+        return None
+
+    def _detect_js_test_tools(self, repo_root: Path) -> list[str]:
+        tools: list[str] = []
+        if self._repo_has_any(repo_root, "playwright.config"):
+            tools.append("playwright")
+        if self._repo_has_any(repo_root, "cypress.config"):
+            tools.append("cypress")
+        if self._repo_has_any(repo_root, "vitest.config"):
+            tools.append("vitest")
+        if self._repo_has_any(repo_root, "jest.config") or self._repo_has_any(repo_root, "__tests__"):
+            tools.append("jest")
+        if self._repo_has_any(repo_root, "mocha.opts", "mocha.config"):
+            tools.append("mocha")
+        return tools
+
+    def _detect_js_build_tool(self, repo_root: Path) -> str | None:
+        if self._repo_has_any(repo_root, "next.config"):
+            return "next"
+        if self._repo_has_any(repo_root, "vite.config"):
+            return "vite"
+        if self._repo_has_any(repo_root, "webpack.config"):
+            return "webpack"
+        if self._repo_has_any(repo_root, "rollup.config"):
+            return "rollup"
+        if self._repo_has_any(repo_root, "parcel.config"):
+            return "parcel"
+        return None
+
+    def _repo_has_any(self, repo_root: Path, *needles: str) -> bool:
+        try:
+            for needle in needles:
+                for path in repo_root.rglob(f"*{needle}*"):
+                    if path.is_file():
+                        return True
+        except Exception:
+            return False
+        return False
+
+    def _js_tool_command(self, package_manager: str, tool_name: str, purpose: str) -> str:
+        manager = (package_manager or "npm").strip() or "npm"
+        if tool_name == "next":
+            return f"{manager} exec next {purpose}"
+        if tool_name == "vite":
+            return f"{manager} exec vite {purpose}"
+        if tool_name == "nuxt":
+            return f"{manager} exec nuxt {purpose}"
+        if tool_name == "parcel":
+            return f"{manager} exec parcel {purpose}"
+        if tool_name == "webpack":
+            return f"{manager} exec webpack {purpose}"
+        if tool_name == "rollup":
+            return f"{manager} exec rollup {purpose}"
+        if tool_name == "playwright" and purpose == "test":
+            return f"{manager} exec playwright test"
+        if tool_name == "cypress" and purpose == "test":
+            return f"{manager} exec cypress run"
+        if tool_name == "vitest" and purpose == "test":
+            return f"{manager} exec vitest run"
+        if tool_name == "jest" and purpose == "test":
+            return f"{manager} exec jest --runInBand"
+        if tool_name == "mocha" and purpose == "test":
+            return f"{manager} exec mocha"
+        return f"{manager} exec {tool_name} {purpose}"
+
+    def _normalize_analysis_data(self, analysis_data: dict[str, Any] | None) -> dict[str, Any] | None:
+        if isinstance(analysis_data, dict):
+            return analysis_data
+        return None
+
+    def _preferred_script(self, scripts: set[str], *candidates: str) -> str | None:
+        for candidate in candidates:
+            if candidate in scripts:
+                return candidate
+        return None
+
+    def _package_manager(self, package_json_path: Path) -> str:
+        if not package_json_path.exists():
+            return "npm"
+        try:
+            data = json.loads(package_json_path.read_text(encoding="utf-8"))
+            package_manager = str(data.get("packageManager") or "").strip().lower()
+            if package_manager.startswith("pnpm"):
+                return "pnpm"
+            if package_manager.startswith("yarn"):
+                return "yarn"
+            return "npm"
+        except Exception:
+            return "npm"
 
     def _package_scripts(self, package_json_path: Path) -> set[str]:
         if not package_json_path.exists():

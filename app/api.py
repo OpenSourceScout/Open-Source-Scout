@@ -296,6 +296,7 @@ class TerminalCreateSessionRequest(BaseModel):
     owner: str
     repo: str
     ref: str = "HEAD"
+    analysis_data: dict[str, Any] | None = None
 
 
 class TerminalCreateTabRequest(BaseModel):
@@ -1871,6 +1872,7 @@ def create_terminal_session(body: TerminalCreateSessionRequest, request: Request
             owner=body.owner,
             repo=body.repo,
             ref=body.ref,
+            analysis_data=body.analysis_data,
             github_token=_get_github_token_for_user(request),
         )
         return payload

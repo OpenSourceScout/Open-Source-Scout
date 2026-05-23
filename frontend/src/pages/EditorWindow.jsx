@@ -822,6 +822,7 @@ export default function EditorWindow() {
               repo={repo}
               refName={branch}
               modifiedContentsKey={modifiedContentsKey}
+              analysisData={analysisData}
             />
           </ResizableTerminalPanel>
         </div>
