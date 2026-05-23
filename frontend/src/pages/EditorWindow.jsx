@@ -28,6 +28,9 @@ export default function EditorWindow() {
   const [searchParams] = useSearchParams()
   const location = useLocation()
   
+  const inputDark =
+    'px-3 py-1.5 bg-app-input border border-app-border rounded-lg text-sm text-app-text placeholder:text-app-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/50'
+  
   const ownerParam = searchParams.get('owner') || location.state?.repoInfo?.owner
   const repoParam = searchParams.get('repo') || location.state?.repoInfo?.name
   const pathParam = searchParams.get('path') || location.state?.filePath
