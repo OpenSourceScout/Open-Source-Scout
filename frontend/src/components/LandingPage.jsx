@@ -183,7 +183,6 @@ export default function LandingPage() {
               onKeyDown={(e) => e.key === 'Enter' && navigate('/dashboard?mode=repo')}
               className="group rounded-xl border border-[#1F2937] bg-[#111827] p-8 cursor-pointer transition-all duration-200 ease-out hover:border-[#3B82F6]/50 hover:-translate-y-0.5 hover:shadow-[0_20px_40px_-16px_rgba(0,0,0,0.5)]"
             >
-              <div className="h-36 rounded-lg bg-gradient-to-br from-[#3B82F6]/20 to-[#111827] border border-[#1F2937] mb-6 group-hover:border-[#3B82F6]/30 transition-colors duration-200" />
               <h3 className="text-xl font-semibold text-[#E6EDF3] mb-2 flex items-center gap-2">
                 I have a repository
                 <ClipboardList className="w-5 h-5 text-[#60A5FA]" />
@@ -203,7 +202,6 @@ export default function LandingPage() {
               onKeyDown={(e) => e.key === 'Enter' && navigate('/dashboard?mode=tech')}
               className="group rounded-xl border border-[#1F2937] bg-[#111827] p-8 cursor-pointer transition-all duration-200 ease-out hover:border-[#3B82F6]/50 hover:-translate-y-0.5 hover:shadow-[0_20px_40px_-16px_rgba(0,0,0,0.5)]"
             >
-              <div className="h-36 rounded-lg bg-gradient-to-br from-[#60A5FA]/15 to-[#111827] border border-[#1F2937] mb-6 group-hover:border-[#3B82F6]/30 transition-colors duration-200" />
               <h3 className="text-xl font-semibold text-[#E6EDF3] mb-2 flex items-center gap-2">
                 Find repos by my skills
                 <Search className="w-5 h-5 text-[#60A5FA]" />
