@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { ChevronRight, ChevronDown, FileCode, Folder, FolderOpen, AlertCircle } from 'lucide-react'
+import { devDebug } from '../utils/devLog'
 import './FileTree.css'
 
 /**
@@ -126,9 +127,9 @@ export default function FileTree({
     }
     computeDirHighlights(tree)
 
-    // Debug logging
+    // Debug logging (dev only)
     const highlightedInTree = flattenTree(tree).filter(item => item.highlighted).length
-    console.debug('FileTree built:', {
+    devDebug('FileTree built:', {
       totalInputFiles: files.length,
       fileEntriesProcessed: filteredFiles.length,
       treeRoots: Object.keys(tree).length,

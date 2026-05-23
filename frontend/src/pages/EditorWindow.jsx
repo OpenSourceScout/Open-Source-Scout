@@ -7,6 +7,7 @@ import FileTree from '../components/FileTree'
 import ScoutLogo from '../components/ScoutLogo'
 import TerminalDock from '../components/TerminalDock'
 import { getLanguage } from '../utils/editorLanguage'
+import { devDebug } from '../utils/devLog'
 import './EditorWindow.css'
 
 function extractHighlightedPathsFromAnalysis(analysis) {
@@ -199,8 +200,8 @@ export default function EditorWindow() {
         setHighlightedFiles(combinedHighlighted)
         setHighlightedCount(Math.max(data.highlighted_count || 0, combinedHighlighted.length))
         
-        // Debug logging
-        console.debug('Tree API Response:', {
+        // Debug logging (dev only)
+        devDebug('Tree API Response:', {
           totalFiles: data.files?.length || 0,
           directoriesCount: data.files?.filter(f => f.type === 'dir').length || 0,
           filesCount: data.files?.filter(f => f.type === 'file').length || 0,
@@ -208,7 +209,7 @@ export default function EditorWindow() {
           actualHighlightedInResponse: data.files?.filter(f => f.highlighted === true).length || 0,
           sampleHighlightedFiles: data.files?.filter(f => f.highlighted === true).slice(0, 3),
         })
-        console.debug(`Loaded ${data.files?.length || 0} files, ${data.highlighted_count || 0} highlighted`)
+        devDebug(`Loaded ${data.files?.length || 0} files, ${data.highlighted_count || 0} highlighted`)
       } catch (err) {
         console.error('Failed to load file tree:', err)
 
