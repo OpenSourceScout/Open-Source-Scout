@@ -12,7 +12,7 @@ from core.agents.base import BaseAgent
 from core.schemas import (
     GitHubIssue, GitHubRepo,
     Agent1Output, Agent2Output, Agent3Output,
-    PathfinderOutput,
+    PathfinderOutput, CodeReviewOutput,
     AgentTestResult, TestingAgentOutput,
 )
 from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B
@@ -71,6 +71,7 @@ class TestingAgent(BaseAgent):
         repo_path: Optional[Path] = None,
         file_tree: Optional[List[str]] = None,
         pathfinder_output: Optional[PathfinderOutput] = None,
+        code_review_output: Optional[CodeReviewOutput] = None,
     ) -> TestingAgentOutput:
         """Validate all upstream agent outputs and return a QA report."""
         self.activate_agent_llm_context()
@@ -80,6 +81,10 @@ class TestingAgent(BaseAgent):
         struct_issues_p = (
             self._validate_pathfinder_structural(pathfinder_output)
             if pathfinder_output else []
+        )
+        struct_issues_c = (
+            self._validate_code_reviewer_structural(code_review_output)
+            if code_review_output else []
         )
         struct_issues_1 = self._validate_agent1_structural(agent1_output)
         struct_issues_2 = self._validate_agent2_structural(agent2_output, repo_path)
@@ -91,6 +96,7 @@ class TestingAgent(BaseAgent):
             agent1_output, agent2_output, agent3_output,
             file_tree,
             pathfinder_output,
+            code_review_output,
         )
 
         # Merge structural + semantic results per agent
@@ -107,6 +113,10 @@ class TestingAgent(BaseAgent):
             ("Archaeologist", struct_issues_2, "archaeologist"),
             ("Senior Dev", struct_issues_3, "senior_dev"),
         ])
+        if code_review_output:
+            agents_to_validate.append(
+                ("Code Reviewer", struct_issues_c, "code_reviewer")
+            )
 
         for agent_name, struct_issues, sem_key in agents_to_validate:
             sem = semantic_results.get(sem_key, {})
@@ -130,6 +140,7 @@ class TestingAgent(BaseAgent):
         overall_score = sum(r.score for r in agent_results) // len(agent_results)
         overall_passed = all(r.passed for r in agent_results)
         retry_agents = [r.agent_name for r in agent_results if not r.passed]
+
 
         summary = self._generate_summary(agent_results, overall_score, overall_passed)
 
@@ -172,6 +183,17 @@ class TestingAgent(BaseAgent):
                     f"Repo {repo.full_name} has no match reasons"
                 )
 
+        return issues
+
+    def _validate_code_reviewer_structural(self, output: CodeReviewOutput) -> List[str]:
+        issues: List[str] = []
+        if not output.file_feedback:
+            issues.append("No file feedback produced by Code Reviewer")
+        if output.overall_status not in ("approved", "needs_improvement"):
+            issues.append(f"Invalid overall status: '{output.overall_status}'")
+        for fb in output.file_feedback:
+            if not fb.review_comments:
+                issues.append(f"No review comments for file: {fb.file_path}")
         return issues
 
     def _validate_agent1_structural(self, output: Agent1Output) -> List[str]:
@@ -268,6 +290,7 @@ class TestingAgent(BaseAgent):
         agent3_output: Agent3Output,
         file_tree: Optional[List[str]] = None,
         pathfinder_output: Optional[PathfinderOutput] = None,
+        code_review_output: Optional[CodeReviewOutput] = None,
     ) -> Dict:
         try:
             agent1_summary = {
@@ -354,6 +377,41 @@ class TestingAgent(BaseAgent):
                     '  },\n'
                 )
 
+            code_review_ctx = ""
+            code_review_prompt_section = ""
+            code_review_json_section = ""
+            if code_review_output:
+                code_review_summary = {
+                    "overall_status": code_review_output.overall_status,
+                    "summary": code_review_output.summary,
+                    "file_feedback_count": len(code_review_output.file_feedback),
+                    "feedbacks": [
+                        {
+                            "path": fb.file_path,
+                            "status": fb.status,
+                            "comments": fb.review_comments,
+                        }
+                        for fb in code_review_output.file_feedback
+                    ]
+                }
+                code_review_ctx = (
+                    f"\nAGENT 5 (Code Reviewer) Output:\n"
+                    f"{json.dumps(code_review_summary, indent=2)}\n"
+                )
+                code_review_prompt_section = (
+                    "\n**Code Reviewer:**\n"
+                    "- Are the code reviewer's comments helpful, educational, and constructive?\n"
+                    "- Does the status ('approved' vs 'needs_improvement') match the actual issues identified?\n"
+                )
+                code_review_json_section = (
+                    '  "code_reviewer": {\n'
+                    '    "score": <0-100>,\n'
+                    '    "issues": ["list of specific problems found"],\n'
+                    '    "suggestions": ["list of actionable improvement suggestions"],\n'
+                    '    "details": "brief explanation of evaluation"\n'
+                    '  },\n'
+                )
+
             prompt = f"""Evaluate the quality of these AI agents' outputs for a beginner open-source contribution tool.
 
 REPOSITORY: {repo.full_name} ({repo.language or 'Unknown'})
@@ -365,6 +423,7 @@ Issue Body: {(issue.body or 'No description')[:600]}
 Labels: {', '.join(issue.labels) if issue.labels else 'None'}
 {tree_ctx}
 {pathfinder_ctx}
+{code_review_ctx}
 AGENT 1 (Triage Nurse) Output:
 {json.dumps(agent1_summary, indent=2)}
 
@@ -391,13 +450,15 @@ For EACH agent, evaluate:
 - Are test commands appropriate for the tech stack?
 - Are the identified risks reasonable?
 
+{code_review_prompt_section}
+
 **Cross-agent consistency:**
 - Does Agent 3's briefing reference the files found by Agent 2?
 - Is there consistency in issue understanding across agents?
 
 Respond with JSON:
 {{
-{pathfinder_json_section}  "triage_nurse": {{
+{pathfinder_json_section}{code_review_json_section}  "triage_nurse": {{
     "score": <0-100>,
     "issues": ["list of specific problems found"],
     "suggestions": ["list of actionable improvement suggestions"],
