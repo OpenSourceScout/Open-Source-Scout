@@ -71,7 +71,27 @@ def test_operation_id_from_response_reads_dict():
     assert _operation_id_from_response({"operation_id": "op-abc"}) == "op-abc"
 
 
-def test_ensure_scout_mental_models_creates_missing():
+def test_ensure_scout_mental_models_creates_missing_without_blocking_wait():
+    from core.memory import hindsight_client as hc
+
+    sdk = MagicMock()
+    sdk.list_memories.return_value = {"items": []}
+    create_resp = MagicMock()
+    create_resp.operation_id = "op-create-1"
+    sdk.create_mental_model.return_value = create_resp
+
+    client = hc.ScoutHindsightClient()
+    client.enabled = True
+    client._client = MagicMock()
+    client._list_scout_mental_models_raw = MagicMock(return_value=[])
+    client._hc_run_async = MagicMock()
+
+    client._ensure_scout_mental_models(sdk, "scout:user:test-mm")
+    assert sdk.create_mental_model.call_count == len(hc.SCOUT_MENTAL_MODEL_SPECS)
+    client._hc_run_async.assert_not_called()
+
+
+def test_ensure_scout_mental_models_waits_when_requested():
     from core.memory import hindsight_client as hc
 
     sdk = MagicMock()
@@ -88,7 +108,7 @@ def test_ensure_scout_mental_models_creates_missing():
     status.status = "completed"
     client._hc_run_async = MagicMock(return_value=status)
 
-    client._ensure_scout_mental_models(sdk, "scout:user:test-mm")
+    client._ensure_scout_mental_models(sdk, "scout:user:test-mm", wait=True)
     assert sdk.create_mental_model.call_count == len(hc.SCOUT_MENTAL_MODEL_SPECS)
     client._hc_run_async.assert_called()
 
