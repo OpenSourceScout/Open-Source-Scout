@@ -1,24 +1,30 @@
 import { useEffect, useState } from 'react'
 import ScoutLogo from './ScoutLogo'
 
-const AGENT_STEPS = [
+const PHASE1_STEPS = [
+  { agent: 'Triage Nurse', message: 'Fetching and ranking open issues with AI…' },
+]
+
+const FULL_PIPELINE_STEPS = [
   { agent: 'Triage Nurse', message: 'Fetching and ranking open issues with AI…' },
   { agent: 'Archaeologist', message: 'Cloning the repo and locating relevant code…' },
   { agent: 'Senior Dev', message: 'Drafting fix plan and contributor briefing…' },
   { agent: 'Testing Agent', message: 'Validating agent outputs (QA loop)…' },
 ]
 
-export default function AgentPipelineLoader({ repoLabel = '' }) {
+export default function AgentPipelineLoader({ repoLabel = '', phase = 'phase1' }) {
+  const steps = phase === 'full' ? FULL_PIPELINE_STEPS : PHASE1_STEPS
   const [stepIndex, setStepIndex] = useState(0)
 
   useEffect(() => {
+    if (steps.length <= 1) return undefined
     const id = setInterval(() => {
-      setStepIndex((i) => (i + 1) % AGENT_STEPS.length)
+      setStepIndex((i) => (i + 1) % steps.length)
     }, 4500)
     return () => clearInterval(id)
-  }, [])
+  }, [steps.length])
 
-  const step = AGENT_STEPS[stepIndex]
+  const step = steps[stepIndex]
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] py-20 px-6">
@@ -28,11 +34,17 @@ export default function AgentPipelineLoader({ repoLabel = '' }) {
           <ScoutLogo className="h-12 w-12" />
         </div>
       </div>
-      <h2 className="text-xl font-semibold text-app-text mb-2">Running multi-agent analysis</h2>
+      <h2 className="text-xl font-semibold text-app-text mb-2">
+        {phase === 'full' ? 'Running multi-agent analysis' : 'Analyzing repository'}
+      </h2>
       <p className="text-app-muted text-sm text-center max-w-md mb-4">
         {repoLabel
-          ? `Analyzing ${repoLabel} — each agent calls Groq live (not cached results).`
-          : 'Each agent calls Groq live (not cached results).'}
+          ? phase === 'full'
+            ? `Analyzing ${repoLabel} — each agent calls Groq live (not cached results).`
+            : `Ranking issues for ${repoLabel} with Triage Nurse.`
+          : phase === 'full'
+            ? 'Each agent calls Groq live (not cached results).'
+            : 'Triage Nurse is fetching and ranking open issues.'}
       </p>
       <div className="rounded-xl border border-app-border bg-app-surface px-4 py-3 text-center max-w-md">
         <p className="text-xs font-semibold uppercase tracking-wide text-accent-400 mb-1">

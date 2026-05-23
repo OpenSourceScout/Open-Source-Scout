@@ -1,6 +1,6 @@
 import { useOutletContext, useNavigate, useLocation } from 'react-router-dom'
 import { useState, useEffect, useRef } from 'react'
-import { MapPin, FileCode, Package, AlertTriangle, Pencil } from 'lucide-react'
+import { MapPin, FileCode, Package, AlertTriangle, Pencil, ExternalLink } from 'lucide-react'
 import { getFileContent, saveProjectCodeLocator } from '../api'
 import MemoryCitationPill from '../components/MemoryCitationPill'
 
@@ -193,49 +193,72 @@ export default function CodeLocator() {
 
   return (
     <div className="h-full flex flex-col bg-app-bg text-app-text">
-      <header className="bg-app-surface border-b border-app-border px-6 py-4 shrink-0">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="min-w-0">
-            <h1 className="text-lg font-semibold text-app-text">Code Locator</h1>
-            <p className="text-sm text-app-muted">
-              {codeLocations.length} relevant code locations identified
-              {issueNumber != null && (
-                <span className="text-primary-400"> for issue #{issueNumber}</span>
-              )}
-            </p>
-            <div className="mt-2">
+      <header className="bg-app-surface/90 backdrop-blur-sm border-b border-app-border px-5 sm:px-8 py-4 shrink-0">
+        <div className="flex flex-col gap-3 max-w-[1400px]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h1 className="text-xl sm:text-2xl font-bold text-app-text tracking-tight">Code Locator</h1>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
               <MemoryCitationPill
                 recalledMemoryIds={analysisResult?.agent2_output?.recalled_memory_ids}
                 memorySummary={analysisResult?.agent2_output?.memory_summary}
               />
+              <button
+                type="button"
+                onClick={handleOpenInEditor}
+                disabled={!selectedFile}
+                className="bg-accent-500 text-[#0b0f14] px-4 py-2 rounded-lg text-sm font-semibold hover:bg-accent-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 transition-colors"
+              >
+                <Pencil className="w-4 h-4 shrink-0" />
+                Open in Editor
+              </button>
             </div>
-            {targetIssue && (
-              <div className="mt-2 text-sm text-app-text space-y-1">
-                <p className="font-medium leading-snug">{targetIssue.title}</p>
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-app-muted">
-                  {issueOpened && <span>Opened {issueOpened}</span>}
-                  {targetIssue.html_url && (
+          </div>
+
+          {targetIssue ? (
+            <div className="min-w-0 space-y-1.5">
+              <p className="text-sm sm:text-base text-app-text font-medium leading-snug line-clamp-2">
+                {issueNumber != null && (
+                  <span className="text-primary-400 font-semibold mr-2">#{issueNumber}</span>
+                )}
+                {targetIssue.title}
+              </p>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs sm:text-sm text-app-muted">
+                <span>
+                  {codeLocations.length} relevant file{codeLocations.length === 1 ? '' : 's'}
+                </span>
+                {issueOpened && (
+                  <>
+                    <span className="text-app-border" aria-hidden>·</span>
+                    <span>Opened {issueOpened}</span>
+                  </>
+                )}
+                {targetIssue.html_url && (
+                  <>
+                    <span className="text-app-border" aria-hidden>·</span>
                     <a
                       href={targetIssue.html_url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-primary-400 hover:underline"
+                      className="inline-flex items-center gap-1 text-primary-400 hover:underline"
                     >
-                      View issue on GitHub
+                      GitHub
+                      <ExternalLink className="w-3 h-3" />
                     </a>
-                  )}
-                </div>
+                  </>
+                )}
               </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={handleOpenInEditor}
-            disabled={!selectedFile}
-            className="bg-accent-500 text-[#0b0f14] px-4 py-2 rounded-lg font-semibold hover:bg-accent-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
-          >
-            <Pencil className="w-4 h-4" /> Open in Editor
-          </button>
+            </div>
+          ) : (
+            <p className="text-sm text-app-muted">
+              {codeLocations.length} relevant file{codeLocations.length === 1 ? '' : 's'} identified
+              {issueNumber != null && (
+                <>
+                  {' '}
+                  · Issue <span className="text-primary-400 font-medium">#{issueNumber}</span>
+                </>
+              )}
+            </p>
+          )}
         </div>
       </header>
 

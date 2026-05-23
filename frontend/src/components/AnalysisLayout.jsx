@@ -156,14 +156,6 @@ export default function AnalysisLayout() {
     }
   }, [location.state])
 
-  const handleBackToRepos = () => {
-    if (rankedRepos) {
-      navigate('/dashboard', { state: { rankedRepos } })
-    } else {
-      navigate('/dashboard')
-    }
-  }
-
   const clearAnalysis = () => {
     sessionStorage.removeItem('scout_analysisResult')
     sessionStorage.removeItem('scout_repoInfo')
@@ -188,7 +180,6 @@ export default function AnalysisLayout() {
       >
         <AnalysisSidebar
           repoInfo={repoInfo}
-          onBackToRepos={rankedRepos ? handleBackToRepos : null}
           onClearAnalysis={clearAnalysis}
           hasRankedRepos={!!rankedRepos}
           onCollapseNav={toggleAnalysisNav}

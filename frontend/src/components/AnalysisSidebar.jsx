@@ -41,7 +41,7 @@ const navClass = ({ isActive }) =>
       : 'text-app-muted hover:bg-app-elevated hover:text-app-text border border-transparent'
   }`
 
-export default function AnalysisSidebar({ repoInfo, onBackToRepos, hasRankedRepos, onCollapseNav }) {
+export default function AnalysisSidebar({ repoInfo, hasRankedRepos, onCollapseNav }) {
   const navigate = useNavigate()
   const [user, setUser] = useState(null)
 
@@ -101,15 +101,6 @@ export default function AnalysisSidebar({ repoInfo, onBackToRepos, hasRankedRepo
               <p className="text-xs text-app-muted truncate">{repoInfo.owner}</p>
             </div>
           </div>
-          {onBackToRepos && (
-            <button
-              type="button"
-              onClick={onBackToRepos}
-              className="mt-3 w-full text-xs text-primary-400 hover:text-primary-300 text-left transition-colors"
-            >
-              ← Back to repositories
-            </button>
-          )}
         </div>
       )}
 

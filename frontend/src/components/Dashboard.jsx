@@ -598,6 +598,7 @@ export default function Dashboard() {
 
         {loading && (inputMode === 'repo' || selectedRepo) ? (
           <AgentPipelineLoader
+            phase="phase1"
             repoLabel={
               selectedRepo?.full_name ||
               (repoUrl.trim().match(/github\.com\/([^/]+\/[^/]+)/)?.[1] ?? '')
