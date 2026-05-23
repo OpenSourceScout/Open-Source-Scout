@@ -158,6 +158,10 @@ app.add_middleware(
 # --- Request/Response models ---
 
 
+from core.agents.code_review_agent import CodeReviewAgent
+from core.schemas import GitHubIssue, Agent1Output # Import GitHubIssue and Agent1Output for the new endpoint
+
+
 class PushFileRequest(BaseModel):
     """Request body for pushing file content."""
 
@@ -173,6 +177,18 @@ class PushFilesRequest(BaseModel):
     """Request body for pushing multiple files in one commit."""
 
     files: list[dict]  # each: { file_path: str, content: str }
+    branch_name: str
+    commit_message: str
+    base_branch: str = "main"
+    target_mode: str | None = None  # 'original' | 'fork' | 'auto' (default)
+
+
+class ReviewAndPushRequest(BaseModel):
+    """Request body for the new review and push functionality."""
+
+    review_files: list[dict[str, str]]  # Each: { 'path': str, 'original': str, 'modified': str }
+    target_issue: GitHubIssue  # The selected GitHub issue
+    briefing_markdown: str  # The briefing report
     branch_name: str
     commit_message: str
     base_branch: str = "main"
@@ -571,6 +587,38 @@ def _record_phase1_issue_analysis(pool, user_id: int, body: AnalyzeRequest, resu
 
 
 # --- Endpoints ---
+
+
+@app.post("/api/repos/{owner}/{repo}/review-and-push")
+def review_and_push(
+    request: Request,
+    owner: str,
+    repo: str,
+    body: ReviewAndPushRequest,
+    user_ctx: UserContext = Depends(get_current_user),
+):
+    """
+    Performs a learning-focused code review and returns feedback.
+    The actual push to GitHub is handled by the frontend after receiving feedback.
+    """
+    try:
+        logger.info(f"Review and Push request received for {owner}/{repo}")
+
+        # Instantiate the Learning Reviewer agent (CodeReviewAgent alias)
+        groq_client = GroqClient.for_agent("Learning Reviewer")
+        review_agent = CodeReviewAgent(groq_client)
+
+        # Run the agent with the provided data
+        review_feedback = review_agent.run(
+            review_files=body.review_files,
+            target_issue=body.target_issue,
+            briefing_markdown=body.briefing_markdown,
+        )
+        logger.info(f"Code review completed for {owner}/{repo}")
+        return review_feedback
+    except Exception as e:
+        logger.error(f"Error during code review for {owner}/{repo}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def _enforce_free_tier_quota(request: Request):

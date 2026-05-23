@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } fr
 import { useSearchParams, useLocation } from 'react-router-dom'
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react'
 import { FileCode, Pencil, ChevronDown, PanelLeftClose, PanelLeftOpen, Download, FileDown } from 'lucide-react'
-import { getFileContent, pushFile, pushFilesBatch, exportPdf, feedbackExport } from '../api'
+import { getFileContent, pushFile, pushFilesBatch, exportPdf, feedbackExport, reviewAndPushCode } from '../api'
 import FileTree from '../components/FileTree'
 import ScoutLogo from '../components/ScoutLogo'
 import TerminalDock from '../components/TerminalDock'
@@ -72,9 +72,20 @@ export default function EditorWindow() {
   // UI state
   const [loading, setLoading] = useState(false)
   const [pushing, setPushing] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
   const [exportingBriefing, setExportingBriefing] = useState(false)
   const [error, setError] = useState(null)
   const [success, setSuccess] = useState(null)
+  const [reviewFeedback, setReviewFeedback] = useState(null)
+
+  const reviewFeedbackByPath = useMemo(() => {
+    if (!reviewFeedback?.file_feedback) return new Map()
+    const map = new Map()
+    reviewFeedback.file_feedback.forEach((entry) => {
+      if (entry?.file_path) map.set(entry.file_path, entry)
+    })
+    return map
+  }, [reviewFeedback])
 
   const [showReview, setShowReview] = useState(false)
   const [reviewFiles, setReviewFiles] = useState([]) // [{ path, original, modified }]
@@ -257,7 +268,7 @@ export default function EditorWindow() {
     const unique = Array.from(new Set(paths)).filter(Boolean)
     if (unique.length === 0) return
 
-    setPushing(true)
+    setReviewing(true)
     setError(null)
     try {
       // Load saved contents from sessionStorage
@@ -280,10 +291,31 @@ export default function EditorWindow() {
       setReviewFiles(built)
       setReviewSelectedPath(built[0]?.path || null)
       setShowReview(true)
+
+      const targetIssue = analysisData?.target_issue || analysisDataParam?.target_issue
+      try {
+        const reviewResult = await reviewAndPushCode(
+          owner.trim(),
+          repo.trim(),
+          {
+            review_files: built.map(f => ({ path: f.path, original: f.original, modified: f.modified })),
+            target_issue: targetIssue,
+            briefing_markdown: briefingMarkdown,
+            branch_name: branchName.trim() || 'scout-edit',
+            commit_message: commitMessage.trim() || 'Update via Open Source Scout',
+            base_branch: branch.trim() || 'main',
+            target_mode: 'auto',
+          }
+        )
+        setReviewFeedback(reviewResult)
+      } catch (err) {
+        setReviewFeedback(null)
+        setError(err.message || 'Code review failed')
+      }
     } catch (err) {
       setError(err.message || 'Failed to build review')
     } finally {
-      setPushing(false)
+      setReviewing(false)
     }
   }
 
@@ -310,6 +342,8 @@ export default function EditorWindow() {
     setSuccess(null)
     try {
       const filesPayload = reviewFiles.map(f => ({ file_path: f.path, content: f.modified }))
+
+      // Proceed with the push regardless of review feedback, as per user requirement
       const result = await pushFilesBatch(owner.trim(), repo.trim(), {
         files: filesPayload,
         branch_name: branchName.trim() || 'scout-edit',
@@ -446,24 +480,32 @@ export default function EditorWindow() {
                   placeholder="Branch"
                   value={branchName}
                   onChange={(e) => setBranchName(e.target.value)}
-                  disabled={pushing}
+                  disabled={pushing || reviewing}
                   className={`${inputDark} w-40`}
                 />
                 <input
                   placeholder="Message"
                   value={commitMessage}
                   onChange={(e) => setCommitMessage(e.target.value)}
-                  disabled={pushing}
+                  disabled={pushing || reviewing}
                   className={`${inputDark} w-64`}
                 />
               </div>
               <button
                 type="button"
                 onClick={handlePush}
-                disabled={pushing}
+                disabled={pushing || reviewing}
                 className="push-button"
               >
-                {pushing ? (
+                {reviewing ? (
+                  <>
+                    <svg className="spinner" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Reviewing...
+                  </>
+                ) : pushing ? (
                   <>
                     <svg className="spinner" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
@@ -486,7 +528,7 @@ export default function EditorWindow() {
                 <button
                   type="button"
                   onClick={handleDownloadBriefing}
-                  disabled={exportingBriefing}
+                  disabled={exportingBriefing || pushing || reviewing}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-app-muted border border-app-border rounded-lg hover:border-primary-500/40 hover:text-primary-400 transition-colors disabled:opacity-40"
                   title="Download contributor briefing as PDF"
                 >
@@ -517,7 +559,7 @@ export default function EditorWindow() {
                 <button
                   type="button"
                   onClick={handlePushAll}
-                  disabled={pushing}
+                  disabled={pushing || reviewing}
                   className="push-button-all"
                 >
                   Review & Push All ({modifiedFiles.size})
@@ -534,6 +576,12 @@ export default function EditorWindow() {
           <div className="review-dialog">
             <div className="review-header">
               <h2>Review changes</h2>
+              {reviewFeedback && (
+                <div className="review-feedback-summary">
+                  <p><strong>Review Status:</strong> {reviewFeedback.overall_status}</p>
+                  <p>{reviewFeedback.summary}</p>
+                </div>
+              )}
               <div className="review-meta">
                 <span className="text-xs text-app-muted">Branch:</span>
                 <span className="text-xs font-mono">{branchName}</span>
@@ -545,14 +593,22 @@ export default function EditorWindow() {
                 <div className="review-sidebar-title">Files ({reviewFiles.length})</div>
                 <div className="review-file-list">
                   {reviewFiles.map(f => (
-                    <button
-                      key={f.path}
-                      type="button"
-                      className={`review-file-item ${reviewSelectedPath === f.path ? 'selected' : ''}`}
-                      onClick={() => setReviewSelectedPath(f.path)}
-                    >
-                      <span className="truncate">{f.path}</span>
-                    </button>
+                    <div key={f.path}>
+                      <button
+                        type="button"
+                        className={`review-file-item ${reviewSelectedPath === f.path ? 'selected' : ''}`}
+                        onClick={() => setReviewSelectedPath(f.path)}
+                      >
+                        <span className="truncate">{f.path}</span>
+                      </button>
+                      {reviewFeedback && reviewSelectedPath === f.path && (
+                        <div className="review-file-feedback">
+                          {reviewFeedback.file_feedback.find(ff => ff.file_path === f.path)?.review_comments.map((comment, i) => (
+                            <p key={i} className="text-xs text-red-400">- {comment}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
                 <div className="review-sidebar-form">
@@ -560,7 +616,7 @@ export default function EditorWindow() {
                   <textarea
                     value={commitMessage}
                     onChange={(e) => setCommitMessage(e.target.value)}
-                    disabled={pushing}
+                    disabled={pushing || reviewing}
                     className="review-textarea"
                     rows={3}
                   />
@@ -568,7 +624,7 @@ export default function EditorWindow() {
                   <input
                     value={branchName}
                     onChange={(e) => setBranchName(e.target.value)}
-                    disabled={pushing}
+                    disabled={pushing || reviewing}
                     className="review-input"
                   />
                 </div>
@@ -599,7 +655,7 @@ export default function EditorWindow() {
                 type="button"
                 className="text-app-muted hover:text-app-text px-3 py-1.5 text-sm transition-colors"
                 onClick={() => setShowReview(false)}
-                disabled={pushing}
+                disabled={pushing || reviewing}
               >
                 Back
               </button>
@@ -610,7 +666,7 @@ export default function EditorWindow() {
               <button
                 type="button"
                 onClick={finalizePushFromReview}
-                disabled={pushing}
+                disabled={pushing || reviewing}
                 className="push-button"
               >
                 {pushing ? 'Pushing...' : `Final Push (${reviewFiles.length})`}
@@ -832,16 +888,34 @@ export default function EditorWindow() {
                     {highlightedFiles.length} files need attention
                   </p>
                   <div className="highlighted-files-list scroll">
-                    {highlightedFiles.map(file => (
-                      <div
-                        key={file}
-                        className="highlighted-file-item"
-                        onClick={() => handleFileSelect(file)}
-                      >
-                        <span className="truncate">{file.split('/').pop()}</span>
-                        {modifiedFiles.has(file) && <span className="badge">✓</span>}
-                      </div>
-                    ))}
+                    {highlightedFiles.map((file) => {
+                      const reviewEntry = reviewFeedbackByPath.get(file)
+                      const reviewNotes = reviewEntry?.review_comments || []
+                      return (
+                        <div key={file} className="highlighted-file-entry">
+                          <div
+                            className="highlighted-file-item"
+                            onClick={() => handleFileSelect(file)}
+                          >
+                            <span className="truncate">{file.split('/').pop()}</span>
+                            {modifiedFiles.has(file) && <span className="badge">✓</span>}
+                          </div>
+                          {reviewNotes.length > 0 && (
+                            <div className="highlighted-file-feedback">
+                              <span className="highlighted-file-feedback-label">Review</span>
+                              <span className="highlighted-file-feedback-text">
+                                {reviewNotes[0]}
+                              </span>
+                              {reviewNotes.length > 1 && (
+                                <span className="highlighted-file-feedback-more">
+                                  +{reviewNotes.length - 1} more
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
               </>

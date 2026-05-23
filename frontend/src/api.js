@@ -244,6 +244,17 @@ export async function pushFilesBatch(owner, repo, { files, branch_name, commit_m
   return res.json()
 }
 
+export async function reviewAndPushCode(owner, repo, payload) {
+  const res = await apiFetch(`/repos/${owner}/${repo}/review-and-push`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }, TIMEOUTS.analysis); // Using analysis timeout as it involves agent processing
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Code review failed')
+  }
+  return res.json();
+}
+
 export async function exportPdf(content) {
   const res = await apiFetch(`/export/pdf`, {
     method: 'POST',

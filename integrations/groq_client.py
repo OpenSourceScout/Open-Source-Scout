@@ -349,6 +349,7 @@ class GroqClient:
         system_prompt: Optional[str] = None,
         temperature: float = 0.3,
         agent_name: Optional[str] = None,
+        max_tokens: int = 8192,
     ) -> T:
         schema_json = json.dumps(response_model.model_json_schema(), indent=2)
 
@@ -367,7 +368,7 @@ Do not include any text before or after the JSON. Only output the JSON object.""
             model=model,
             system_prompt=json_system,
             temperature=temperature,
-            max_tokens=8192,
+            max_tokens=max_tokens,
             json_mode=True,
             agent_name=agent_name,
         )

@@ -152,6 +152,23 @@ class Agent3Output(BaseModel):
     memory_summary: str = Field(default="", description="Human-readable memory influence summary")
 
 
+# ==================== Review Agent: Learning Reviewer ====================
+
+class CodeReviewFileFeedback(BaseModel):
+    """Per-file review feedback for edited files."""
+    file_path: str = Field(description="Path of the reviewed file")
+    status: str = Field(default="needs_review", description="approved | needs_improvement | needs_review")
+    review_comments: List[str] = Field(default_factory=list, description="Learning-oriented feedback notes")
+
+
+class CodeReviewOutput(BaseModel):
+    """Output from the Learning Reviewer agent."""
+    overall_status: str = Field(description="approved | needs_improvement")
+    summary: str = Field(description="High-level summary of the review")
+    file_feedback: List[CodeReviewFileFeedback] = Field(default_factory=list)
+    can_push: bool = Field(default=True, description="Always true; users can still push")
+
+
 # ==================== Agent 4: Testing Agent ====================
 
 class AgentTestResult(BaseModel):

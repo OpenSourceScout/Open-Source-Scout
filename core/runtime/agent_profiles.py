@@ -13,6 +13,7 @@ AGENT_CANONICAL_NAMES = (
     "Archaeologist",
     "Senior Dev",
     "Testing Agent",
+    "Learning Reviewer",
 )
 
 # One Groq API key per agent (different accounts) to spread rate limits.
@@ -22,6 +23,7 @@ GROQ_API_KEY_ENV: Dict[str, str] = {
     "Archaeologist": "GROQ_API_KEY_ARCHAEOLOGIST",
     "Senior Dev": "GROQ_API_KEY_SENIOR_DEV",
     "Testing Agent": "GROQ_API_KEY_TESTING_AGENT",
+    "Learning Reviewer": "GROQ_API_KEY_REVIEWER",
 }
 
 KPI_WEIGHTS: Dict[str, Dict[str, float]] = {
@@ -30,6 +32,7 @@ KPI_WEIGHTS: Dict[str, Dict[str, float]] = {
     "Archaeologist": {"cost": 0.33, "latency": 0.34, "quality": 0.33},
     "Senior Dev": {"cost": 0.15, "latency": 0.25, "quality": 0.60},
     "Testing Agent": {"cost": 0.40, "latency": 0.35, "quality": 0.25},
+    "Learning Reviewer": {"cost": 0.25, "latency": 0.35, "quality": 0.40},
 }
 
 # Logical tier labels → Groq model *keys* understood by integrations.groq_client.GroqClient.MODELS
