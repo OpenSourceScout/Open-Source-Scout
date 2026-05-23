@@ -113,7 +113,7 @@ class ScoutOrchestrator:
         from core.agents.pathfinder import PathfinderAgent
         from core.agents.code_review_agent import CodeReviewAgent
         self.pathfinder = PathfinderAgent(_client("Pathfinder"), model=triage_m)
-        self.code_reviewer = CodeReviewAgent(_client("Code Reviewer"), model=fast_model)
+        self.code_reviewer = CodeReviewAgent(_client("Learning Reviewer"), model=fast_model)
 
         self._status_callback: Optional[Callable[[str], None]] = None
 
