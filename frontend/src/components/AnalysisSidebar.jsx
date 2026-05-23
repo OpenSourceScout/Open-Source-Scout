@@ -7,7 +7,6 @@ import {
   MapPin,
   FileText,
   ShieldCheck,
-  Settings,
   User,
   Package,
   FolderKanban,
@@ -32,7 +31,6 @@ const NAV_ITEMS = [
 
 const BOTTOM_NAV = [
   { path: '/projects', label: 'My Projects', Icon: FolderKanban },
-  { path: '/settings', label: 'Settings', Icon: Settings },
   { path: '/profile', label: 'Profile', Icon: User },
 ]
 

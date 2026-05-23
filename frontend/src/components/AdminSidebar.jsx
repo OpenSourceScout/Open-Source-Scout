@@ -1,6 +1,6 @@
 import { NavLink, Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, Gauge, Brain, Settings } from 'lucide-react'
+import { LayoutDashboard, Gauge, Brain } from 'lucide-react'
 import ScoutLogo from './ScoutLogo'
 import { getMe } from '../api'
 
@@ -49,27 +49,18 @@ export default function AdminSidebar() {
       </nav>
 
       <div className="mt-auto p-4 border-t border-app-border bg-app-surface/50 shrink-0">
-        <div className="flex items-center justify-between">
-          <Link
-            to="/profile"
-            className="flex items-center gap-3 flex-1 px-2 py-1.5 rounded-lg hover:bg-app-elevated transition-colors duration-200"
-          >
-            <div className="w-8 h-8 rounded-full bg-primary-500/20 border border-primary-500/30 flex items-center justify-center shrink-0 text-sm font-bold text-primary-400 uppercase">
-              {monogram}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-app-text truncate">{displayName}</p>
-              {userEmail && <p className="text-xs text-app-muted truncate">{userEmail}</p>}
-            </div>
-          </Link>
-          <Link
-            to="/settings"
-            className="p-2 text-app-muted hover:text-app-text rounded-lg hover:bg-app-elevated transition-colors duration-200 shrink-0"
-            title="Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </Link>
-        </div>
+        <Link
+          to="/profile"
+          className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-app-elevated transition-colors duration-200"
+        >
+          <div className="w-8 h-8 rounded-full bg-primary-500/20 border border-primary-500/30 flex items-center justify-center shrink-0 text-sm font-bold text-primary-400 uppercase">
+            {monogram}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-app-text truncate">{displayName}</p>
+            {userEmail && <p className="text-xs text-app-muted truncate">{userEmail}</p>}
+          </div>
+        </Link>
       </div>
     </aside>
   )

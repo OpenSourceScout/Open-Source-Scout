@@ -826,8 +826,8 @@ class GitHubClient:
             if not has_fork_scope:
                 raise PermissionError(
                     "Cannot fork the repository. Your GitHub token is missing the "
-                    "'public_repo' scope. Go to Settings → API Keys, paste a token "
-                    "with 'public_repo' checked, and save it."
+                    "'public_repo' scope. Sign in with GitHub or set GITHUB_TOKEN in .env "
+                    "with 'public_repo' enabled."
                 )
             fork_info = self.fork_repo(owner, repo)
             target_owner = fork_info["fork_owner"]

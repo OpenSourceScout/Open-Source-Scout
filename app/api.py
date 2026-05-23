@@ -1204,22 +1204,19 @@ def health():
     }
 
 
+def _user_row_to_profile(pool, user: dict, user_id: int) -> dict:
+    ca = user.get("created_at")
+    if ca is not None and hasattr(ca, "isoformat"):
+        user["created_at"] = ca.isoformat()
+    activity = fetch_user_activity(pool, user_id)
+    user.update(activity)
+    return user
+
+
 @app.get("/api/me")
 def me(request: Request):
-    auth = request.headers.get("authorization") or ""
-    if not auth.lower().startswith("bearer "):
-        raise HTTPException(status_code=401, detail="Missing bearer token")
-    token = auth.split(" ", 1)[1].strip()
-    try:
-        claims = decode_access_token(token)
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    pool = getattr(request.app.state, "db_pool", None)
-    if pool is None:
-        raise HTTPException(status_code=500, detail="Database not initialized")
-
-    user_id = int(claims.get("sub"))
+    user_id = _require_user_id(request)
+    pool = _require_pool(request)
     with pool.connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -1231,12 +1228,7 @@ def me(request: Request):
                 raise HTTPException(status_code=404, detail="User not found")
             cols = [d.name for d in cur.description]
             user = dict(zip(cols, row, strict=False))
-            ca = user.get("created_at")
-            if ca is not None and hasattr(ca, "isoformat"):
-                user["created_at"] = ca.isoformat()
-            activity = fetch_user_activity(pool, user_id)
-            user.update(activity)
-            return user
+    return _user_row_to_profile(pool, user, user_id)
 
 
 # --- Project endpoints ---

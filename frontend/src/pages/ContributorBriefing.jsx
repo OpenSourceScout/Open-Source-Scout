@@ -12,8 +12,6 @@ import {
   MapPin,
   AlertTriangle,
   Github,
-  PanelLeftClose,
-  PanelLeft,
   PanelRightClose,
   ChevronLeft,
 } from 'lucide-react'
@@ -46,8 +44,6 @@ export default function ContributorBriefing() {
   const {
     analysisResult,
     repoInfo,
-    analysisNavOpen = true,
-    toggleAnalysisNav,
     activeProjectId,
   } = outlet
   const navigate = useNavigate()
@@ -428,26 +424,6 @@ export default function ContributorBriefing() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
-              {typeof toggleAnalysisNav === 'function' && (
-                <button
-                  type="button"
-                  onClick={toggleAnalysisNav}
-                  className={toolBtn}
-                  title={analysisNavOpen ? 'Hide left navigation' : 'Show left navigation'}
-                >
-                  {analysisNavOpen ? (
-                    <>
-                      <PanelLeftClose className="w-4 h-4" />
-                      <span className="hidden sm:inline">Hide nav</span>
-                    </>
-                  ) : (
-                    <>
-                      <PanelLeft className="w-4 h-4" />
-                      <span className="hidden sm:inline">Show nav</span>
-                    </>
-                  )}
-                </button>
-              )}
               {prPanelOpen ? (
                 <button type="button" onClick={() => setPrPanelOpen(false)} className={`${toolBtn} hidden xl:inline-flex`}>
                   <PanelRightClose className="w-4 h-4" />

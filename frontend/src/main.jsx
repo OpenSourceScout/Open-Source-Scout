@@ -19,7 +19,6 @@ import Projects from './pages/Projects.jsx'
 import AnalysisDashboard from './pages/AnalysisDashboard.jsx'
 import AdminDecisionTrace from './pages/AdminDecisionTrace.jsx'
 import AdminAgentMemory from './pages/AdminAgentMemory.jsx'
-import SettingsPage from './pages/Settings.jsx'
 import './index.css'
 import { isLoggedIn, isAdmin } from './auth'
 import { RepoFeedbackBar } from './components/RepoFeedbackActions'
@@ -218,7 +217,6 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         </Route>
         <Route path="/editor" element={<RequireAuth><EditorWindow /></RequireAuth>} />
         <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
-        <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
         <Route path="/projects" element={<RequireAuth><Projects /></RequireAuth>} />
         <Route path="/admin/decision-trace" element={<RequireAdmin><AdminDecisionTrace /></RequireAdmin>} />
         <Route path="/admin/agent-memory" element={<RequireAdmin><AdminAgentMemory /></RequireAdmin>} />

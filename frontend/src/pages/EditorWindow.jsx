@@ -459,9 +459,6 @@ export default function EditorWindow() {
     }
   }, [])
 
-  const inputDark =
-    'px-3 py-1.5 bg-app-input border border-app-border rounded-lg text-sm text-app-text placeholder:text-app-muted/60 focus:outline-none focus:ring-2 focus:ring-primary-500/50'
-
   return (
     <div className="editor-window-container">
       {/* Header */}
@@ -475,6 +472,7 @@ export default function EditorWindow() {
         <div className="header-actions">
           {content && (
             <>
+<<<<<<< Updated upstream
               <div className="action-group">
                 <input
                   placeholder="Branch"
@@ -491,6 +489,8 @@ export default function EditorWindow() {
                   className={`${inputDark} w-64`}
                 />
               </div>
+=======
+>>>>>>> Stashed changes
               <button
                 type="button"
                 onClick={handlePush}
