@@ -46,4 +46,4 @@ COPY --from=frontend-build /frontend/dist ./frontend/dist
 EXPOSE 8080
 
 # Start FastAPI: echo the port for deploy log visibility, then exec uvicorn.
-CMD ["sh", "-c", "echo '>>> Starting uvicorn on port '${PORT:-8080} && exec uvicorn app.api:app --host 0.0.0.0 --port ${PORT:-8080}"]
+CMD ["sh", "-c", "echo \">>> Starting uvicorn on port ${PORT:-8080}\" && exec uvicorn app.api:app --host 0.0.0.0 --port ${PORT:-8080}"]
