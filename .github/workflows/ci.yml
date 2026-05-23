@@ -1,3 +1,4 @@
+# CI Pipeline for Open Source Scout
 name: CI Pipeline
 
 on:
