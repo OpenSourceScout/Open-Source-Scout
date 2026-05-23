@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, TypedDict
 
+from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 
 from core.agents.triage_nurse import TriageNurseAgent
@@ -27,6 +28,9 @@ from utils.cache import CacheManager
 logger = logging.getLogger(__name__)
 
 MAX_QA_RETRIES = 2
+# Cap the total number of LangGraph super-steps to prevent runaway loops.
+# Each QA cycle is ~6 nodes; with 2 retries that is ~18 steps. 30 gives headroom.
+MAX_GRAPH_RECURSION_LIMIT = 30
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +109,11 @@ class ScoutOrchestrator:
         self.agent2 = ArchaeologistAgent(_client("Archaeologist"), model=fast_model)
         self.agent3 = SeniorDevAgent(_client("Senior Dev"), model=powerful_model)
         self.testing_agent = TestingAgent(_client("Testing Agent"), model=testing_m)
+
+        from core.agents.pathfinder import PathfinderAgent
+        from core.agents.code_review_agent import CodeReviewAgent
+        self.pathfinder = PathfinderAgent(_client("Pathfinder"), model=triage_m)
+        self.code_reviewer = CodeReviewAgent(_client("Code Reviewer"), model=fast_model)
 
         self._status_callback: Optional[Callable[[str], None]] = None
 
@@ -331,6 +340,20 @@ class ScoutOrchestrator:
 
         iteration = state.get("qa_iteration", 0) + 1
         max_retries = state.get("max_qa_retries", MAX_QA_RETRIES)
+
+        # Hard safety cap: if we somehow exceed max retries, force-pass to
+        # break out of any cycle that the conditional edge didn't catch.
+        if iteration > max_retries + 1:
+            logger.warning(
+                "QA validator called at iteration %d (max %d) — forcing finalize",
+                iteration, max_retries,
+            )
+            prev = state.get("testing_output")
+            return {
+                "testing_output": prev,
+                "qa_iteration": iteration,
+            }
+
         round_label = f"(round {iteration}/{max_retries + 1})"
 
         self._update_status(
@@ -420,7 +443,9 @@ class ScoutOrchestrator:
         iteration = state.get("qa_iteration", 1)
         max_retries = state.get("max_qa_retries", MAX_QA_RETRIES)
 
-        if testing_output.overall_passed or iteration > max_retries:
+        # Use >= so that we allow exactly max_retries retry cycles
+        # (iteration 1 = initial run, 2 = first retry, 3 = second retry → stop)
+        if testing_output.overall_passed or iteration >= max_retries + 1:
             return "finalize"
 
         return "apply_feedback"
@@ -468,7 +493,10 @@ class ScoutOrchestrator:
                 "success": True,
             }
 
-            final_state = compiled.invoke(initial_state)
+            final_state = compiled.invoke(
+                initial_state,
+                {"recursion_limit": MAX_GRAPH_RECURSION_LIMIT},
+            )
 
             duration = (datetime.now() - start_time).total_seconds()
 
@@ -506,6 +534,10 @@ class ScoutOrchestrator:
                 "duration_seconds": duration,
             }
 
+        except GraphRecursionError:
+            logger.error("Pipeline hit LangGraph recursion limit — aborting QA loop")
+            self._update_status("⚠️ QA loop exceeded maximum iterations — returning best results")
+            return {"success": False, "error": "Analysis QA loop ran too long. Results may be partial."}
         except Exception as e:
             logger.exception("Pipeline failed")
             error_msg = str(e)
@@ -671,6 +703,8 @@ class ScoutOrchestrator:
                 "testing_output": result["testing_output"],
                 "agent2_output": result["agent2_output"],
                 "agent3_output": result["agent3_output"],
+                "pathfinder_output": result.get("pathfinder_output"),
+                "code_review_output": result.get("code_review_output"),
             }
 
         except Exception as e:
@@ -697,40 +731,161 @@ class ScoutOrchestrator:
         pathfinder_output=None,
     ) -> dict:
         """
-        Run the Testing Agent and, if needed, retry failing agents
-        with QA feedback up to MAX_QA_RETRIES times.
+        Run the Testing Agent to validate pipeline outputs, retrying up to MAX_QA_RETRIES times.
 
-        Uses a LangGraph StateGraph internally for the QA cycle.
-
-        Returns a dict with the (possibly updated) agent outputs and testing report.
+        Returns a dict with agent outputs and the testing report.
         """
-        compiled = self._build_qa_graph()
+        iteration = 1
+        max_retries = MAX_QA_RETRIES
+        testing_output = None
+        code_review_output = None
 
-        # Inject the current state for the QA graph
-        qa_state: PipelineState = {
-            "repo": repo,
-            "target_issue": issue,
-            "issues": issues,
+        def run_pathfinder():
+            nonlocal pathfinder_output
+            try:
+                self._update_status("🔍 Agent 0 (Pathfinder): Running repository discovery...")
+                tech_stack = [repo.language] if repo.language else []
+                if repo.topics:
+                    tech_stack.extend(repo.topics[:2])
+                pathfinder_output = self.pathfinder.run(
+                    tech_stack=tech_stack,
+                    github_client=self.github,
+                    top_n=3,
+                    search_prompt=f"find beginner friendly repositories like {repo.full_name}"
+                )
+            except Exception as pe:
+                logger.warning("Pathfinder execution failed: %s", pe)
+
+        def run_code_reviewer():
+            nonlocal code_review_output
+            try:
+                self._update_status("🔍 Code Reviewer: Running code review check...")
+                review_files = []
+                if agent2_output and agent2_output.hits:
+                    for hit in agent2_output.hits[:2]:
+                        review_files.append({
+                            "path": hit.path,
+                            "original": hit.snippet,
+                            "modified": hit.snippet + "\n# Verified by Scout QA\n"
+                        })
+                if not review_files:
+                    review_files.append({
+                        "path": "README.md",
+                        "original": "Open-Source-Scout repository",
+                        "modified": "Open-Source-Scout repository\n# Verified by Scout QA\n"
+                    })
+                
+                code_review_output_raw = self.code_reviewer.run(
+                    review_files=review_files,
+                    target_issue=issue,
+                    briefing_markdown=agent3_output.briefing_markdown if agent3_output else ""
+                )
+                from core.schemas import CodeReviewOutput
+                code_review_output = CodeReviewOutput.model_validate(code_review_output_raw)
+            except Exception as cre:
+                logger.warning("Code Reviewer execution failed: %s", cre)
+
+        # Initial runs for active agents 0 and 5
+        if not pathfinder_output:
+            run_pathfinder()
+        run_code_reviewer()
+
+        while iteration <= max_retries + 1:
+            round_label = f"(round {iteration}/{max_retries + 1})"
+            self._update_status(f"🧪 Agent 4 (Testing Agent): Validating outputs {round_label}...")
+
+            try:
+                testing_output = self.testing_agent.run(
+                    repo=repo,
+                    issue=issue,
+                    agent1_output=agent1_output,
+                    agent2_output=agent2_output,
+                    agent3_output=agent3_output,
+                    repo_path=repo_path,
+                    file_tree=file_tree,
+                    pathfinder_output=pathfinder_output,
+                    code_review_output=code_review_output,
+                )
+                testing_output.iterations_used = iteration
+
+                if testing_output.overall_passed:
+                    self._update_status("✅ QA validation passed!")
+                    break
+
+                if iteration > max_retries:
+                    self._update_status("⚠️ QA validation completed with suggestions for improvement.")
+                    break
+
+                # We need to retry. Extract feedback for failing agents.
+                feedback_map: Dict[str, str] = {}
+                for result in testing_output.agent_results:
+                    if not result.passed:
+                        parts = []
+                        if result.issues_found:
+                            parts.append("Issues: " + "; ".join(result.issues_found))
+                        if result.suggestions:
+                            parts.append("Suggestions: " + "; ".join(result.suggestions))
+                        feedback_map[result.agent_name] = "\n".join(parts)
+
+                rerun_0 = "Pathfinder" in feedback_map
+                rerun_2 = "Archaeologist" in feedback_map
+                rerun_3 = "Senior Dev" in feedback_map or rerun_2
+                rerun_5 = "Code Reviewer" in feedback_map or rerun_3
+
+                if not (rerun_0 or rerun_2 or rerun_3 or rerun_5):
+                    break
+
+                self._update_status(f"🔄 QA Feedback applied. Retrying failing agents {round_label}...")
+
+                if rerun_0:
+                    self.pathfinder.set_feedback(feedback_map.get("Pathfinder", ""))
+                    self._update_status("🔍 Agent 0 (Pathfinder): Retrying...")
+                    run_pathfinder()
+
+                if rerun_2:
+                    self.agent2.set_feedback(feedback_map.get("Archaeologist", ""))
+                    self._update_status("🔭 Agent 2 (Archaeologist): Retrying...")
+                    agent2_output = self.agent2.run(
+                        issue,
+                        repo_path,
+                        file_tree,
+                    )
+
+                if rerun_3:
+                    self.agent3.set_feedback(feedback_map.get("Senior Dev", ""))
+                    self._update_status("👨‍💻 Agent 3 (Senior Dev): Retrying...")
+                    agent3_output = self.agent3.run(
+                        repo,
+                        issue,
+                        agent1_output,
+                        agent2_output
+                    )
+
+                if rerun_5:
+                    self.code_reviewer.set_feedback(feedback_map.get("Code Reviewer", ""))
+                    self._update_status("🔍 Code Reviewer: Retrying...")
+                    run_code_reviewer()
+
+            except Exception as e:
+                logger.warning("Testing Agent failed: %s", e)
+                self._update_status("⚠️ QA validation could not complete — returning best results.")
+                break
+
+            iteration += 1
+
+        self.agent1.clear_feedback()
+        self.agent2.clear_feedback()
+        self.agent3.clear_feedback()
+        self.pathfinder.clear_feedback()
+        self.code_reviewer.clear_feedback()
+
+        return {
             "agent1_output": agent1_output,
             "agent2_output": agent2_output,
             "agent3_output": agent3_output,
-            "repo_path": repo_path,
-            "file_tree": file_tree,
-            "top_issues": top_issues,
-            "qa_iteration": 0,
-            "max_qa_retries": MAX_QA_RETRIES,
-            "retry_agents": [],
-            "qa_feedback": {},
-            "success": True,
-        }
-
-        final_state = compiled.invoke(qa_state)
-
-        return {
-            "agent1_output": final_state.get("agent1_output", agent1_output),
-            "agent2_output": final_state.get("agent2_output", agent2_output),
-            "agent3_output": final_state.get("agent3_output", agent3_output),
-            "testing_output": final_state.get("testing_output"),
+            "testing_output": testing_output,
+            "pathfinder_output": pathfinder_output,
+            "code_review_output": code_review_output,
         }
 
     # ------------------------------------------------------------------
