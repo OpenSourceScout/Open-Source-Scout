@@ -111,6 +111,8 @@ def test_qa_loop_retries_archaeologist_then_passes():
     orch.testing_agent.run = MagicMock(side_effect=qa_run)
     orch.agent2.run = MagicMock(return_value=a2)
     orch.agent3.run = MagicMock(return_value=a3)
+    orch.pathfinder.run = MagicMock(return_value=None)
+    orch.code_reviewer.run = MagicMock(return_value={})
 
     out = orch._run_qa_loop(
         repo=repo,
