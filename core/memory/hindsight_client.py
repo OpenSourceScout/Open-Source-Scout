@@ -493,7 +493,9 @@ class ScoutHindsightClient:
                 logger.warning("refresh_mental_model %s for %s failed: %s", mm_id, bank_id, e)
         self._wait_for_hindsight_operations(sdk, bank_id, op_ids)
 
-    def _ensure_scout_mental_models(self, sdk: Any, bank_id: str) -> None:
+    def _ensure_scout_mental_models(
+        self, sdk: Any, bank_id: str, *, wait: bool = False
+    ) -> None:
         """Provision Scout curated mental models (idempotent). Observations alone are not mental models."""
         if not sdk or not SCOUT_MENTAL_MODEL_SPECS:
             return
@@ -531,8 +533,14 @@ class ScoutHindsightClient:
                         "create_mental_model %s for %s failed: %s", mm_id, bank_id, e
                     )
 
-            if create_ops:
+            if create_ops and wait:
                 self._wait_for_hindsight_operations(sdk, bank_id, create_ops)
+            elif create_ops:
+                logger.info(
+                    "Queued %s mental model create op(s) for %s (non-blocking)",
+                    len(create_ops),
+                    bank_id,
+                )
         except Exception as e:
             logger.warning("ensure_scout_mental_models failed for %s: %s", bank_id, e)
 
@@ -810,7 +818,9 @@ class ScoutHindsightClient:
                 out.append({"memory_id": mid, "text": ""})
         return out
 
-    def _memory_summary_payload_sync(self, user_id: str) -> dict[str, Any]:
+    def _memory_summary_payload_sync(
+        self, user_id: str, *, refresh_mental_models: bool = False
+    ) -> dict[str, Any]:
         """Sync memory summary (runs on hindsight worker thread when called from uvicorn)."""
         if not self.enabled or not self._client:
             return {
@@ -826,7 +836,9 @@ class ScoutHindsightClient:
         except Exception:
             pass
         try:
-            self._ensure_scout_mental_models(sdk, bank_id)
+            self._ensure_scout_mental_models(
+                sdk, bank_id, wait=refresh_mental_models
+            )
         except Exception:
             pass
 
@@ -863,14 +875,19 @@ class ScoutHindsightClient:
             logger.warning("list observations failed: %s", e)
 
         try:
-            self._sync_scout_mental_model_content(sdk, bank_id, user_id)
+            if refresh_mental_models:
+                self._sync_scout_mental_model_content(sdk, bank_id, user_id)
         except Exception as e:
             logger.warning("sync_scout_mental_model_content failed: %s", e)
 
         try:
             for model in self._list_scout_mental_models_raw(sdk, bank_id)[:20]:
                 row = _mental_model_row(model, source="curated")
-                if _mental_model_content_empty(row.get("description") or "") and observations:
+                if (
+                    refresh_mental_models
+                    and _mental_model_content_empty(row.get("description") or "")
+                    and observations
+                ):
                     spec = next(
                         (s for s in SCOUT_MENTAL_MODEL_SPECS if s["id"] == row.get("id")),
                         None,
@@ -1062,9 +1079,13 @@ class ScoutHindsightClient:
             "bank_id": bank_id,
         }
 
-    def memory_summary_sync(self, user_id: str) -> dict[str, Any]:
+    def memory_summary_sync(
+        self, user_id: str, *, refresh_mental_models: bool = False
+    ) -> dict[str, Any]:
         if not self.enabled or not self._client:
-            return self._memory_summary_payload_sync(user_id)
+            return self._memory_summary_payload_sync(
+                user_id, refresh_mental_models=refresh_mental_models
+            )
         try:
             try:
                 asyncio.get_running_loop()
@@ -1072,11 +1093,17 @@ class ScoutHindsightClient:
             except RuntimeError:
                 in_loop = False
             if not in_loop:
-                return self._memory_summary_payload_sync(user_id)
+                return self._memory_summary_payload_sync(
+                    user_id, refresh_mental_models=refresh_mental_models
+                )
             future = _HINDSIGHT_SYNC_POOL.submit(
-                self._memory_summary_payload_sync, user_id
+                self._memory_summary_payload_sync,
+                user_id,
+                refresh_mental_models,
             )
             return future.result(timeout=MEMORY_SUMMARY_SYNC_TIMEOUT_SEC)
         except Exception as e:
             logger.warning("Hindsight memory_summary_sync failed: %s", e)
-            return self._memory_summary_payload_sync(user_id)
+            return self._memory_summary_payload_sync(
+                user_id, refresh_mental_models=refresh_mental_models
+            )

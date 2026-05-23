@@ -1007,10 +1007,15 @@ def feedback_thumbs(
 
 
 @app.get("/api/memory/summary")
-def memory_summary(user_ctx: UserContext = Depends(get_current_user)):
+def memory_summary(
+    user_ctx: UserContext = Depends(get_current_user),
+    refresh_mental_models: bool = Query(False),
+):
     hx = get_scout_hindsight()
-    hx.get_or_create_bank_sync(user_ctx.user_id)
-    payload = hx.memory_summary_sync(user_ctx.user_id)
+    payload = hx.memory_summary_sync(
+        user_ctx.user_id,
+        refresh_mental_models=refresh_mental_models,
+    )
     t = payload.get("totals") or {}
     try:
         total_mem = int(t.get("facts", 0)) + int(t.get("observations", 0)) + int(t.get("mental_models", 0))
@@ -1129,11 +1134,14 @@ def admin_decision_traces(
 def admin_memory_summary(
     request: Request,
     user_id: str = Query(..., description="Target user id"),
+    refresh_mental_models: bool = Query(False),
 ):
     _require_admin_user(request)
     hx = get_scout_hindsight()
-    hx.get_or_create_bank_sync(user_id)
-    payload = hx.memory_summary_sync(user_id)
+    payload = hx.memory_summary_sync(
+        user_id,
+        refresh_mental_models=refresh_mental_models,
+    )
     t = payload.get("totals") or {}
     try:
         total_mem = int(t.get("facts", 0)) + int(t.get("observations", 0)) + int(t.get("mental_models", 0))

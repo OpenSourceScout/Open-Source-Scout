@@ -3,17 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Brain, RefreshCw, Trash2 } from 'lucide-react'
 import { fetchMemorySummary, resetMemoryBank, fetchMemoryGraph } from '../api'
 import MentalModelsPanel from '../components/MentalModelsPanel'
-
-function freshnessBadge(f) {
-  const v = (f || 'stable').toLowerCase()
-  const map = {
-    stable: 'bg-slate-500/15 text-slate-300 border-slate-500/25',
-    strengthening: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25',
-    weakening: 'bg-amber-500/15 text-amber-300 border-amber-500/25',
-    stale: 'bg-red-500/15 text-red-300 border-red-500/25',
-  }
-  return map[v] || map.stable
-}
+import { MemoryObservationCard, MemoryFactRow } from '../components/MemoryEntryCards'
 
 export default function AgentMemory() {
   const navigate = useNavigate()
@@ -26,12 +16,12 @@ export default function AgentMemory() {
   const [resetStep, setResetStep] = useState(0)
   const [resetting, setResetting] = useState(false)
 
-  const load = useCallback(() => {
+  const load = useCallback(({ refreshMentalModels = false } = {}) => {
     setError(null)
     setLoading(true)
     setGraphLoading(true)
     setGraphError(null)
-    fetchMemorySummary()
+    fetchMemorySummary({ refresh_mental_models: refreshMentalModels })
       .then(setData)
       .catch((e) => setError(e.message || 'Failed to load'))
       .finally(() => setLoading(false))
@@ -111,7 +101,7 @@ export default function AgentMemory() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={load}
+            onClick={() => load({ refreshMentalModels: true })}
             disabled={loading}
             className="inline-flex items-center gap-2 rounded-lg border border-app-border px-4 py-2 text-sm text-app-muted hover:border-primary-500/40 hover:text-primary-400 disabled:opacity-50"
           >
@@ -169,17 +159,7 @@ export default function AgentMemory() {
                 <p className="text-sm text-app-muted">No consolidated observations yet.</p>
               ) : (
                 observations.map((o) => (
-                  <div
-                    key={o.id || o.text}
-                    className="rounded-xl border border-app-border bg-app-surface p-4 flex flex-wrap gap-3 justify-between"
-                  >
-                    <p className="text-sm text-app-text/90 flex-1 min-w-[200px]">{o.text}</p>
-                    <span
-                      className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${freshnessBadge(o.freshness)}`}
-                    >
-                      {o.freshness || 'stable'}
-                    </span>
-                  </div>
+                  <MemoryObservationCard key={o.id || o.text} observation={o} />
                 ))
               )}
             </div>
@@ -196,22 +176,11 @@ export default function AgentMemory() {
 
           <section>
             <h2 className="text-lg font-semibold text-app-text mb-4">Recent facts</h2>
-            <ul className="space-y-2">
+            <ul className="space-y-2.5">
               {facts.length === 0 ? (
                 <li className="text-sm text-app-muted">No raw memories listed.</li>
               ) : (
-                facts.map((f) => (
-                  <li
-                    key={f.id || `${f.text}-${f.mentioned_at}`}
-                    className="rounded-lg border border-app-border bg-app-bg px-4 py-3 text-xs text-app-muted flex flex-wrap gap-2"
-                  >
-                    <span className="rounded bg-app-elevated px-1.5 py-0.5 font-mono text-[10px] text-primary-300 border border-app-border">
-                      {f.kind || 'world'}
-                    </span>
-                    <span className="text-app-text/90 flex-1">{f.text}</span>
-                    {f.mentioned_at && <span className="text-app-muted/80">{String(f.mentioned_at)}</span>}
-                  </li>
-                ))
+                facts.map((f) => <MemoryFactRow key={f.id || `${f.text}-${f.mentioned_at}`} fact={f} />)
               )}
             </ul>
           </section>

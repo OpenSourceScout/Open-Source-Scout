@@ -23,6 +23,7 @@ export function ensureAnonUserId() {
 // Different timeouts for different operations
 const TIMEOUTS = {
   default: 30000,      // 30 seconds for quick operations
+  memory: 180000,      // 3 minutes — Hindsight summary/graph can be slow on first load
   analysis: 600000,    // 10 minutes for full analysis
   reAnalysis: 600000,  // 10 minutes for re-analysis
 }
@@ -558,8 +559,11 @@ export async function getReadmeSummary(owner, repo, { fresh = false } = {}) {
   return summary
 }
 
-export async function fetchMemorySummary() {
-  const res = await apiFetch('/memory/summary')
+export async function fetchMemorySummary({ refresh_mental_models = false } = {}) {
+  const params = new URLSearchParams()
+  if (refresh_mental_models) params.set('refresh_mental_models', 'true')
+  const q = params.toString()
+  const res = await apiFetch(`/memory/summary${q ? `?${q}` : ''}`, {}, TIMEOUTS.memory)
   if (!res.ok) {
     throw new Error((await responseErrorDetail(res)) || 'Failed to load memory summary')
   }
@@ -569,7 +573,7 @@ export async function fetchMemorySummary() {
 export async function fetchMemoryGraph({ limit = 120, type } = {}) {
   const params = new URLSearchParams({ limit: String(limit) })
   if (type) params.set('type', type)
-  const res = await apiFetch(`/memory/graph?${params}`)
+  const res = await apiFetch(`/memory/graph?${params}`, {}, TIMEOUTS.memory)
   if (!res.ok) {
     throw new Error((await responseErrorDetail(res)) || 'Failed to load memory graph')
   }
@@ -594,9 +598,11 @@ export async function adminDecisionTraces({ user_id } = {}) {
   return res.json()
 }
 
-export async function adminMemorySummary(user_id) {
+export async function adminMemorySummary(user_id, { refresh_mental_models = false } = {}) {
   if (!user_id) throw new Error('Missing user id')
-  const res = await apiFetch(`/admin/memory/summary?user_id=${encodeURIComponent(user_id)}`)
+  const params = new URLSearchParams({ user_id: String(user_id) })
+  if (refresh_mental_models) params.set('refresh_mental_models', 'true')
+  const res = await apiFetch(`/admin/memory/summary?${params}`, {}, TIMEOUTS.memory)
   if (!res.ok) {
     throw new Error((await responseErrorDetail(res)) || 'Failed to load memory summary')
   }
@@ -607,7 +613,7 @@ export async function adminMemoryGraph(user_id, { limit = 120, type } = {}) {
   if (!user_id) throw new Error('Missing user id')
   const params = new URLSearchParams({ user_id: String(user_id), limit: String(limit) })
   if (type) params.set('type', type)
-  const res = await apiFetch(`/admin/memory/graph?${params}`)
+  const res = await apiFetch(`/admin/memory/graph?${params}`, {}, TIMEOUTS.memory)
   if (!res.ok) {
     throw new Error((await responseErrorDetail(res)) || 'Failed to load memory graph')
   }

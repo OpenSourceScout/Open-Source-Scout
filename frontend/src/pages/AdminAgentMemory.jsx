@@ -1,19 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Brain, Search, AlertTriangle } from 'lucide-react'
+import { Brain, Search, AlertTriangle, RefreshCw } from 'lucide-react'
 import { adminListUsers, adminMemorySummary, adminMemoryGraph } from '../api'
 import AdminSidebar from '../components/AdminSidebar'
 import MentalModelsPanel from '../components/MentalModelsPanel'
-
-function freshnessBadge(f) {
-  const v = (f || 'stable').toLowerCase()
-  const map = {
-    stable: 'bg-slate-500/15 text-slate-300 border-slate-500/25',
-    strengthening: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25',
-    weakening: 'bg-amber-500/15 text-amber-300 border-amber-500/25',
-    stale: 'bg-red-500/15 text-red-300 border-red-500/25',
-  }
-  return map[v] || map.stable
-}
+import { MemoryObservationCard, MemoryFactRow } from '../components/MemoryEntryCards'
 
 function userLabel(user) {
   return user.display_name || user.email || `User ${user.id}`
@@ -52,7 +42,7 @@ export default function AdminAgentMemory() {
     }
   }, [userQuery])
 
-  const loadSummary = async (user) => {
+  const loadSummary = async (user, { refreshMentalModels = false } = {}) => {
     if (!user) return
     setSelectedUser(user)
     setLoadingSummary(true)
@@ -60,21 +50,28 @@ export default function AdminAgentMemory() {
     setError(null)
     setGraphError(null)
     try {
-      const [data, graph] = await Promise.all([
-        adminMemorySummary(String(user.id)),
-        adminMemoryGraph(String(user.id)).catch((e) => {
-          setGraphError(e.message || 'Failed to load memory graph')
-          return null
-        }),
-      ])
+      const data = await adminMemorySummary(String(user.id), {
+        refresh_mental_models: refreshMentalModels,
+      })
       setSummary(data)
-      setGraphData(graph)
     } catch (e) {
       setError(e.message || 'Failed to load memory summary')
       setSummary(null)
       setGraphData(null)
+      setGraphLoading(false)
+      setLoadingSummary(false)
+      return
     } finally {
       setLoadingSummary(false)
+    }
+
+    try {
+      const graph = await adminMemoryGraph(String(user.id))
+      setGraphData(graph)
+    } catch (e) {
+      setGraphError(e.message || 'Failed to load memory graph')
+      setGraphData(null)
+    } finally {
       setGraphLoading(false)
     }
   }
@@ -154,16 +151,29 @@ export default function AdminAgentMemory() {
 
           {selectedUser && (
             <div className="rounded-xl border border-app-border bg-app-surface p-4">
-              <div className="text-xs uppercase tracking-wide text-app-muted mb-2">Selected user</div>
-              <div className="text-lg font-semibold text-app-text">{userLabel(selectedUser)}</div>
-              <div className="text-sm text-app-muted">{selectedUser.email}</div>
-              <div className="mt-2 text-xs text-app-muted">Total entries: {totals.total_entries ?? '—'}</div>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs uppercase tracking-wide text-app-muted mb-2">Selected user</div>
+                  <div className="text-lg font-semibold text-app-text">{userLabel(selectedUser)}</div>
+                  <div className="text-sm text-app-muted">{selectedUser.email}</div>
+                  <div className="mt-2 text-xs text-app-muted">Total entries: {totals.total_entries ?? '—'}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => loadSummary(selectedUser, { refreshMentalModels: true })}
+                  disabled={loadingSummary}
+                  className="inline-flex items-center gap-2 rounded-lg border border-app-border px-3 py-2 text-xs text-app-muted hover:border-primary-500/40 hover:text-primary-400 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${loadingSummary ? 'animate-spin' : ''}`} />
+                  Refresh mental models
+                </button>
+              </div>
             </div>
           )}
 
           {loadingSummary && selectedUser && (
             <div className="rounded-xl border border-app-border bg-app-surface p-6 text-sm text-app-muted">
-              Loading memory summary… Curated mental models may take up to a minute to generate.
+              Loading memory summary… Use &quot;Refresh mental models&quot; if curated models need regeneration (may take up to 3 minutes).
             </div>
           )}
 
@@ -177,19 +187,7 @@ export default function AdminAgentMemory() {
                     <p className="text-sm text-app-muted">No consolidated observations yet.</p>
                   ) : (
                     observations.map((o) => (
-                      <div
-                        key={o.id || o.text}
-                        className="rounded-xl border border-app-border bg-app-surface p-4 flex flex-wrap gap-3 justify-between"
-                      >
-                        <p className="text-sm text-app-text/90 flex-1 min-w-[200px]">{o.text}</p>
-                        <span
-                          className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-medium capitalize ${freshnessBadge(
-                            o.freshness,
-                          )}`}
-                        >
-                          {o.freshness || 'stable'}
-                        </span>
-                      </div>
+                      <MemoryObservationCard key={o.id || o.text} observation={o} />
                     ))
                   )}
                 </div>
@@ -208,22 +206,11 @@ export default function AdminAgentMemory() {
 
               <section>
                 <h2 className="text-lg font-semibold text-app-text mb-4">Recent facts</h2>
-                <ul className="space-y-2">
+                <ul className="space-y-2.5">
                   {facts.length === 0 ? (
                     <li className="text-sm text-app-muted">No raw memories listed.</li>
                   ) : (
-                    facts.map((f) => (
-                      <li
-                        key={f.id || `${f.text}-${f.mentioned_at}`}
-                        className="rounded-lg border border-app-border bg-app-bg px-4 py-3 text-xs text-app-muted flex flex-wrap gap-2"
-                      >
-                        <span className="rounded bg-app-elevated px-1.5 py-0.5 font-mono text-[10px] text-primary-300 border border-app-border">
-                          {f.kind || 'world'}
-                        </span>
-                        <span className="text-app-text/90 flex-1">{f.text}</span>
-                        {f.mentioned_at && <span className="text-app-muted/80">{String(f.mentioned_at)}</span>}
-                      </li>
-                    ))
+                    facts.map((f) => <MemoryFactRow key={f.id || `${f.text}-${f.mentioned_at}`} fact={f} />)
                   )}
                 </ul>
               </section>
