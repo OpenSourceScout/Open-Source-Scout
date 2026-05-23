@@ -753,6 +753,16 @@ def re_analyze_issue(
             scorer = IssueScorer()
             ranked = scorer.rank_issues(issues, top_n=3)
             logger.info("re-analyze: ranking context issues done")
+
+            # Ensure target_issue is in the ranked list for QA structural validation
+            ranked_nums = {iss.number for iss, _ in ranked}
+            if target_issue.number not in ranked_nums:
+                target_score = scorer.score_issue(target_issue)
+                if len(ranked) >= 3:
+                    ranked[2] = (target_issue, target_score)
+                else:
+                    ranked.append((target_issue, target_score))
+
             ranked_issues = [
                 RankedIssue(
                     number=iss.number,
