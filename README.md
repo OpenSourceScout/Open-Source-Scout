@@ -1,357 +1,336 @@
-# Open Source Scout 🔭
+# Open Source Scout
 
-An AI-powered multi-agent system that helps beginners contribute to open-source projects by automating the journey from **issue discovery → code location → fix planning → PR drafting**.
+An AI-powered multi-agent platform that helps beginners contribute to open-source projects — from **repository discovery** and **issue ranking** through **code location**, **fix planning**, **QA validation**, **in-editor review**, and **PR drafting**.
 
-## 🌟 Features
+Built with **FastAPI**, **React (Vite)**, **LangGraph**, **Groq**, optional **Hindsight** memory, and **Cascadeflow** runtime intelligence.
 
-- **Tech Stack Discovery**: Find repositories matching your skills using the Pathfinder agent
-- **Smart Issue Ranking**: Automatically finds and ranks beginner-friendly issues
-- **Code Location**: Searches the codebase to find exactly where changes are needed
-- **Contributor Briefing**: Generates comprehensive fix plans with step-by-step instructions
-- **PR Draft Generation**: Creates ready-to-use branch names, commit messages, and PR descriptions
-- **Export Options**: Download briefings as Markdown or PDF
+---
 
-## 🚀 Quick Start
+## Features
+
+### Discovery and analysis
+- **Pathfinder** — find repositories matching your tech stack and preferences
+- **Triage Nurse** — rank beginner-friendly issues with explainable scores
+- **Archaeologist** — locate relevant files, symbols, and snippets in the repo
+- **Senior Dev** — generate contributor briefings and PR drafts
+- **Testing Agent** — QA validation with an iterative feedback loop (LangGraph)
+- **Learning Reviewer** — educational code review in the Monaco editor (no auto-patches)
+
+### Product experience
+- **GitHub OAuth** sign-in with per-user projects persisted in Postgres
+- **Monaco editor** with file tree, diff view, save/push, and integrated terminal
+- **Export** briefings as Markdown or PDF
+- **Agent Memory** — per-user Hindsight bank with observations, mental models, and a 3D constellation graph
+- **Admin tools** — Decision Trace and cross-user Agent Memory (admin role only)
+- **Feedback loop** — thumbs, skips, exports, and issue interactions feed Hindsight retains
+
+### Runtime intelligence
+- **Cascadeflow** — budget caps, KPI-aware model routing, and audit traces on analysis endpoints
+
+---
+
+## Quick start (local development)
 
 ### Prerequisites
 
-- Python 3.11 or higher
-- [uv](https://docs.astral.sh/uv/) (recommended) or pip
-- Node.js 18+ (for React frontend)
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip + venv
+- Node.js 20+ (frontend)
 - Git
 - (Optional) [ripgrep](https://github.com/BurntSushi/ripgrep) for faster code search
 
-### Installation
+### 1. Clone and install
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/SamarthPyati/Open-Source-Scout.git
-   cd Open-Source-Scout
-   ```
-
-2. **Install Python dependencies using uv (recommended)**
-   ```bash
-   # Install uv if you haven't already
-   # Windows PowerShell:
-   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-   
-   # Linux/Mac:
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   
-   # Sync dependencies (creates .venv automatically)
-   uv sync
-   ```
-
-   **Alternative: Using pip**
-   ```bash
-   python -m venv venv
-   
-   # Windows
-   venv\Scripts\activate
-   
-   # Linux/Mac
-   source venv/bin/activate
-   
-   pip install -r requirements.txt
-   ```
-
-3. **Install frontend dependencies**
-   ```bash
-   cd frontend
-   npm install
-   cd ..
-   ```
-
-4. **Set up environment variables**
-   ```bash
-   # Copy the example file
-   cp .env.example .env    # Linux/Mac
-   copy .env.example .env  # Windows
-   
-   # Edit .env and add your API keys:
-   # GROQ_API_KEY=your_groq_key          (Required - get from https://console.groq.com/keys)
-   # GITHUB_TOKEN=your_github_token      (Optional but recommended for higher rate limits)
-   ```
-
-### Running the App
-
-You need **two terminals** - one for the backend, one for the frontend.
-
-**Terminal 1 - Start the FastAPI backend:**
 ```bash
-# Using uv (recommended)
-uv run uvicorn app.api:app --reload --port 8003
+git clone https://github.com/SamarthPyati/Open-Source-Scout.git
+cd Open-Source-Scout
 
-# Or using pip (with venv activated)
-python -m uvicorn app.api:app --reload --port 8003
+# Backend
+uv sync
+
+# Frontend
+cd frontend && npm install && cd ..
 ```
 
-**Terminal 2 - Start the React frontend:**
+### 2. Environment
+
+```bash
+cp .env.example .env   # Linux/Mac
+copy .env.example .env # Windows
+```
+
+Minimum for local dev:
+
+| Variable | Purpose |
+|----------|---------|
+| `GROQ_API_KEY` | Fallback Groq key (or set per-agent keys — see `.env.example`) |
+| `NEON_DATABASE_URL` | Postgres for auth, projects, and user data |
+| `AUTH_JWT_SECRET` | JWT signing secret |
+
+Optional but recommended:
+
+| Variable | Purpose |
+|----------|---------|
+| `GITHUB_TOKEN` | Higher GitHub API rate limits |
+| `CLIENT_ID` / `CLIENT_SECRET` / `GITHUB_REDIRECT_URI` | GitHub OAuth (`Continue with GitHub`) |
+| `HINDSIGHT_API_URL` / `HINDSIGHT_API_KEY` | Agent memory and personalization |
+
+See [`.env.example`](.env.example) for the full list, including per-agent Groq keys and production CORS settings.
+
+### 3. Run (two terminals)
+
+**Terminal 1 — backend (port 8003):**
+
+```powershell
+# Windows (recommended — no --reload, stable on OneDrive)
+.\run-backend.ps1
+```
+
+```bash
+# Linux/Mac or manual
+uv run uvicorn app.api:app --port 8003
+```
+
+**Terminal 2 — frontend:**
+
 ```bash
 cd frontend
 npm run dev
 ```
 
-**Open the app:** Navigate to **http://localhost:5173** in your browser.
+Open **http://localhost:5173**. Vite proxies `/api` to the backend on port 8003.
 
-### Quick Start Summary (TL;DR)
+---
 
-```bash
-# Clone and setup
-git clone https://github.com/SamarthPyati/Open-Source-Scout.git
-cd Open-Source-Scout
+## How to use
 
-# Backend setup
-uv sync
-cp .env.example .env
-# Edit .env and add GROQ_API_KEY
+### Find repos by tech stack
+1. Sign in and open the **Dashboard**
+2. Enter technologies or a natural-language prompt
+3. Review Pathfinder-ranked repositories and select one
+4. Walk through **Issues → Code Locator → Briefing → Editor**
 
-# Frontend setup
-cd frontend && npm install && cd ..
+### Analyze a repository directly
+1. Paste a public GitHub URL on the Dashboard
+2. Run analysis to rank issues, then click **Analyze This Issue** for full pipeline output
 
-# Run (in separate terminals)
-# Terminal 1: uv run uvicorn app.api:app --reload --port 8003
-# Terminal 2: cd frontend && npm run dev
+### Editor and PR workflow
+1. Open the **Editor** from Code Locator or Briefing
+2. Edit highlighted files in Monaco (diff view available)
+3. Use **Learning Reviewer** feedback before push
+4. Save & push to your fork, then open a PR using the generated draft
 
-# Open http://localhost:5173
-```
+### Agent Memory
+- Users: **Profile → Agent Memory** (observations, mental models, recent facts)
+- Admins: **Admin → Agent Memory** (browse any user's bank)
+- Use **Refresh mental models** when curated Hindsight documents need regeneration
 
-### API Endpoints
+---
 
-| Endpoint | Method | Description |
-|---------|--------|-------------|
-| `/api/health` | GET | Health check |
-| `/api/search-repos` | POST | Search repos by tech stack (Pathfinder agent) |
-| `/api/analyze` | POST | Run full 3-agent analysis pipeline |
-| `/api/export/pdf` | POST | Export markdown to PDF |
-| `/api/repos/{owner}/{repo}/files/{path}` | GET | Fetch file content (`?ref=main`) |
-| `/api/repos/{owner}/{repo}/push` | POST | Push edited file (forks if needed) |
+## Architecture
 
-## 📖 How to Use
+### Multi-agent pipeline (LangGraph)
 
-### Option 1: Tech Stack Discovery (Recommended for Beginners)
-1. Click **"Find by Tech Stack"** on the landing page
-2. Add your technologies (e.g., Python, React, TypeScript)
-3. Click **"Find Repositories"** - the Pathfinder agent discovers matching repos
-4. Select a repository from the ranked results
-5. The system analyzes and displays:
-   - **Issue Ranking**: Top beginner-friendly issues
-   - **Code Locator**: Where to make changes
-   - **Contributor Briefing**: Step-by-step fix plan + PR draft
+| Agent | Role |
+|-------|------|
+| **Pathfinder** | Repository discovery and ranking by tech fit |
+| **Triage Nurse** | Issue fetching and beginner-friendly ranking |
+| **Archaeologist** | Code search and relevance mapping |
+| **Senior Dev** | Briefing, implementation plan, PR draft |
+| **Testing Agent** | Structural + semantic QA with retry loop |
+| **Learning Reviewer** | Educational review of user edits vs issue + briefing |
 
-### Option 2: Direct Repository Analysis
-1. Click **"Analyze Repository"** on the landing page
-2. Paste a GitHub repository URL (e.g., `https://github.com/tiangolo/fastapi`)
-3. Click **"Analyze"** to run the 3-agent pipeline
-4. Explore the results in the sidebar views
+Orchestration lives in [`core/orchestrator.py`](core/orchestrator.py) using a **LangGraph** state machine with conditional QA retry edges.
 
-### Exporting Results
-- **Markdown**: Download the briefing as a `.md` file
-- **PDF**: Generate a formatted PDF document
-- **PR Draft**: Use the suggested branch name, commit message, and PR title/body when creating your PR from the editor (after Save & Push)
+Per-agent Groq keys and KPI weights are defined in [`core/runtime/agent_profiles.py`](core/runtime/agent_profiles.py).
 
-## 🎯 Demo Examples
-
-Try these repositories to see Open Source Scout in action:
-
-### Example 1: FastAPI
-```
-https://github.com/tiangolo/fastapi
-```
-A popular Python web framework with well-maintained beginner issues.
-
-### Example 2: httpx
-```
-https://github.com/encode/httpx
-```
-A modern HTTP client with good documentation and clear issues.
-
-## 🏗️ Architecture
-
-### Multi-Agent Pipeline
-
-| Agent | Role | Model |
-|-------|------|-------|
-| **Pathfinder** | Discovers and ranks repositories based on user's tech stack | qwen-qwq-32b |
-| **Triage Nurse** | Fetches and ranks issues by beginner-friendliness | qwen-qwq-32b |
-| **Archaeologist** | Searches codebase, identifies files/functions | qwen-qwq-32b |
-| **Senior Dev** | Creates fix plan, tests, and PR draft | llama-3.3-70b |
-
-### Two Input Modes
-
-1. **Repository URL**: Enter a GitHub repo directly → Triage Nurse → Archaeologist → Senior Dev
-2. **Tech Stack**: Enter your skills → Pathfinder finds repos → Select repo → Full pipeline
-
-### Pathfinder Scoring (Repository Discovery, 0-100)
-
-| Component | Max Points | Description |
-|-----------|------------|-------------|
-| Tech Match | 40 | How well repo matches user's skills |
-| Beginner Friendliness | 25 | Good first issues, contributing guides |
-| Activity Level | 15 | Recent commits, active maintenance |
-| Community Health | 10 | Contributors, responsiveness |
-| Issue Availability | 10 | Number and quality of open issues |
-
-### Issue Scoring Algorithm (0-100)
-
-| Component | Max Points | Description |
-|-----------|------------|-------------|
-| Labels | 25 | `good first issue`, `help wanted`, etc. |
-| Clarity | 20 | Description quality, formatting, examples |
-| Activity | 15 | Recent updates, comment activity |
-| Size Estimate | 20 | Estimated effort level |
-| Risk Penalty | -20 | Complexity, breaking changes, security |
-
-## 📁 Project Structure
+### Key backend modules
 
 ```
 Open-Source-Scout/
 ├── app/
-│   └── api.py               # FastAPI backend (REST)
-├── frontend/                 # React + Vite + Tailwind CSS
-│   ├── src/
-│   │   ├── main.jsx         # App entry, routes
-│   │   ├── api.js           # API client functions
-│   │   ├── components/
-│   │   │   ├── LandingPage.jsx    # Home page
-│   │   │   ├── Dashboard.jsx      # Tech stack / repo input
-│   │   │   ├── AnalysisLayout.jsx # Analysis view wrapper
-│   │   │   └── AnalysisSidebar.jsx
-│   │   └── pages/
-│   │       ├── IssueRanking.jsx       # Ranked issues view
-│   │       ├── CodeLocator.jsx        # Code location view
-│   │       ├── ContributorBriefing.jsx # Briefing + PR draft
-│   │       └── EditorWindow.jsx       # Monaco editor
-│   └── package.json
+│   ├── api.py              # FastAPI REST + WebSocket terminal + SPA serve
+│   ├── auth_routes.py      # GitHub OAuth + JWT
+│   └── db.py               # Neon Postgres schema and queries
 ├── core/
-│   ├── agents/
-│   │   ├── pathfinder.py    # Repository discovery (Agent 0)
-│   │   ├── triage_nurse.py  # Issue ranking (Agent 1)
-│   │   ├── archaeologist.py # Code location (Agent 2)
-│   │   └── senior_dev.py    # Fix planning (Agent 3)
-│   ├── scoring.py           # Scoring algorithm
-│   ├── orchestrator.py      # Pipeline coordination
-│   └── schemas.py           # Pydantic models
-├── integrations/
-│   ├── github_client.py     # GitHub API
-│   └── groq_client.py       # Groq LLM API
-├── utils/
-│   ├── cache.py             # Caching
-│   ├── code_search.py       # ripgrep/Python search
-│   ├── pdf_generator.py     # PDF export
-│   └── text_chunking.py     # Token management
-├── tests/
-│   ├── test_scoring.py      # Scoring tests
-│   └── test_schemas.py      # Schema tests
-├── pyproject.toml            # Python dependencies (uv)
-├── uv.lock                   # Locked dependencies
-├── requirements.txt          # Dependencies (pip fallback)
-├── .env.example              # Environment template
-└── README.md
+│   ├── agents/             # Pathfinder, Triage, Archaeologist, Senior Dev, Testing, Learning Reviewer
+│   ├── memory/             # Hindsight client wrapper
+│   ├── orchestrator.py     # LangGraph pipeline + QA loop
+│   ├── scoring.py          # Issue scoring (0–100)
+│   └── schemas.py          # Pydantic models
+├── frontend/src/           # React + Vite + Tailwind
+├── integrations/           # GitHub + Groq clients
+├── tests/                  # Pytest suite (131+ tests)
+├── Dockerfile              # Multi-stage: build frontend + serve via FastAPI
+└── .github/workflows/ci.yml
 ```
 
-## Runtime Intelligence (cascadeflow)
+### Frontend routes
 
-[cascadeflow](https://docs.cascadeflow.ai/) instruments each Groq completion with budget caps, KPI-aware routing between tiered models, and an audit trace returned as `cascadeflow_run` on `/api/analyze`, `/api/search-repos`, and `/api/re-analyze-issue`.
+| Route | Access | Description |
+|-------|--------|-------------|
+| `/dashboard` | Auth | Start analysis or tech-stack search |
+| `/analysis/issues` | Auth | Ranked issues |
+| `/analysis/code` | Auth | Code locator results |
+| `/analysis/briefing` | Auth | Contributor briefing + PR draft |
+| `/analysis/qa-report` | Admin | QA testing output |
+| `/editor` | Auth | Monaco editor + terminal |
+| `/projects` | Auth | Saved projects |
+| `/admin/decision-trace` | Admin | Cascadeflow traces |
+| `/admin/agent-memory` | Admin | Per-user memory banks |
 
-```mermaid
-flowchart LR
-  subgraph api [FastAPI request]
-    R[cascadeflow.run budget]
-  end
-  R --> G[GroqClient.complete]
-  G --> T[record step + estimated USD]
-  T --> JSON[JSON response + cascadeflow_run.trace]
-```
-
-| Agent | Cost weight | Latency weight | Quality weight |
-|-------|-------------|----------------|----------------|
-| Pathfinder | 0.60 | 0.30 | 0.10 |
-| Triage Nurse | 0.30 | 0.50 | 0.20 |
-| Archaeologist | 0.33 | 0.34 | 0.33 |
-| Senior Dev | 0.15 | 0.25 | 0.60 |
-
-Measured savings depend on workload and Groq pricing assumptions; run `python scripts/cascadeflow_demo.py` against your deployment to capture before/after numbers.
-
-Environment knobs:
-
-| Variable | Default | Purpose |
-|---------|---------|---------|
-| `CASCADEFLOW_MODE` | `observe` | `observe`, `enforce`, or `off` |
-| `CASCADEFLOW_BUDGET_USD` | `0.10` | Soft budget per API request |
-
-## Agent Memory (Hindsight)
-
-[Hindsight Cloud](https://hindsight.vectorize.io/) stores per-user banks (`HINDSIGHT_BANK_PREFIX`, default `scout`). The backend recalls context before Pathfinder / Triage Nurse / Archaeologist, reflects before Senior Dev, and retains structured facts via `/api/feedback/*`.
-
-```mermaid
-flowchart TB
-  subgraph bank [Per-user bank]
-    M[Mission + directives]
-    R[Retain facts]
-    Q[TEMPR retrieval]
-  end
-  FEED["/api/feedback/*"] --> R
-  PF[Pathfinder recall] --> Q
-  TN[Triage recall] --> Q
-  AR[Archaeologist recall] --> Q
-  SD[Senior Dev reflect] --> Q
-```
-
-TEMPR blends semantic, keyword, graph, and temporal strategies (`strategy="auto"` in the SDK wrapper). Observations consolidate noisy retains into durable notes surfaced on `/api/memory/summary` and the Agent Memory UI.
-
-| Variable | Purpose |
-|---------|---------|
-| `HINDSIGHT_API_URL` | Cloud or self-hosted endpoint |
-| `HINDSIGHT_API_KEY` | API key |
-| `HINDSIGHT_BANK_PREFIX` | Namespace prefix per bank |
-
-## 🔧 Configuration
-
-### Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GROQ_API_KEY` | Yes | Groq API key for LLM access |
-| `GITHUB_TOKEN` | No | GitHub token for higher rate limits (5000 vs 60 req/hr) |
-| `NEON_DATABASE_URL` | No* | Neon Postgres connection string (required for signup/login) |
-| `AUTH_JWT_SECRET` | No* | Secret used to sign JWTs (required for signup/login) |
-
-### Model Selection
-
-The app offers three model configurations:
-- **Recommended** (default): Balanced speed and quality
-- **Fast**: Prioritizes speed for quick analysis
-- **Balanced**: Uses powerful model for all agents
-
-## 🧪 Running Tests
-
-```bash
-# Run all tests
-python -m pytest tests/ -v
-
-# Run specific test file
-python -m pytest tests/test_scoring.py -v
-```
-
-## ⚠️ Important Notes
-
-- **No Auto-Commits**: This tool generates guidance only—it never modifies upstream repos
-- **Public Repos Only**: Works with any public GitHub repository
-- **Rate Limits**: Without a GitHub token, you're limited to 60 requests/hour
-- **Large Repos**: Uses efficient code search to handle large codebases
-
-## 📄 License
-
-This project is open-source and available under the [MIT License](LICENSE).
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to:
-- Open issues for bugs or feature requests
-- Submit pull requests
-- Share feedback on the scoring algorithm
+Admin access requires `users.role = 'admin'` in Postgres.
 
 ---
 
-Built with ❤️ using FastAPI, React, and the GitHub API.
+## API overview
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health + DB status |
+| `/api/me` | GET | Current user (JWT) |
+| `/api/search-repos` | POST | Pathfinder repo search |
+| `/api/analyze` | POST | Phase 1 — issue ranking |
+| `/api/re-analyze-issue` | POST | Phases 2–4 + QA loop for one issue |
+| `/api/repos/{owner}/{repo}/review-and-push` | POST | Learning Reviewer + push |
+| `/api/repos/{owner}/{repo}/push` | POST | Push single file |
+| `/api/repos/{owner}/{repo}/push-batch` | POST | Push multiple files |
+| `/api/repos/{owner}/{repo}/tree` | GET | File tree for editor |
+| `/api/memory/summary` | GET | User memory bank summary |
+| `/api/memory/graph` | GET | Hindsight graph for constellation view |
+| `/api/feedback/*` | POST | Retains for Hindsight (thumbs, skips, etc.) |
+| `/api/projects` | GET/POST | User projects CRUD |
+| `/api/admin/*` | GET | Admin decision traces and memory |
+
+Full route list: [`app/api.py`](app/api.py).
+
+---
+
+## Production deployment
+
+The repo includes a **multi-stage Dockerfile** that builds the React app and serves it from FastAPI (single process on `$PORT`).
+
+### Railway / Docker checklist
+
+Set these environment variables in your host:
+
+```env
+APP_ENV=production
+FRONTEND_URL=https://your-public-app-url
+ALLOWED_ORIGINS=https://your-public-app-url
+NEON_DATABASE_URL=postgresql://...
+AUTH_JWT_SECRET=<long-random-string>
+GITHUB_TOKEN=...
+GROQ_API_KEY=...                    # or per-agent keys
+GROQ_API_KEY_REVIEWER=...
+CLIENT_ID=...
+CLIENT_SECRET=...
+GITHUB_REDIRECT_URI=https://your-public-app-url/api/auth/github/callback
+HINDSIGHT_API_URL=https://api.hindsight.vectorize.io
+HINDSIGHT_API_KEY=...
+```
+
+Also update your **GitHub OAuth App** callback URL to match `GITHUB_REDIRECT_URI`.
+
+When `APP_ENV=production` (or Railway's `RAILWAY_ENVIRONMENT=production`), CORS restricts origins to `ALLOWED_ORIGINS` + `FRONTEND_URL` — localhost defaults are not used.
+
+Build and run locally with Docker:
+
+```bash
+docker build -t open-source-scout .
+docker run -p 8080:8080 --env-file .env open-source-scout
+```
+
+---
+
+## Agent Memory (Hindsight)
+
+[Hindsight](https://hindsight.vectorize.io/) stores per-user banks (`HINDSIGHT_BANK_PREFIX`, default `scout`).
+
+- **Retain** — feedback endpoints write structured facts
+- **Recall / Reflect** — agents pull context before ranking, search, and briefing
+- **Consolidation** — observations and curated mental models surface on `/api/memory/summary`
+- **Graph** — `/api/memory/graph` powers the 3D constellation UI
+
+Memory summary loads are **fast by default**; use `?refresh_mental_models=true` (or the UI **Refresh mental models** button) to trigger full Hindsight regeneration (may take 1–3 minutes).
+
+| Variable | Purpose |
+|----------|---------|
+| `HINDSIGHT_API_URL` | Cloud or self-hosted endpoint |
+| `HINDSIGHT_API_KEY` | API key |
+| `HINDSIGHT_BANK_PREFIX` | Bank namespace prefix |
+
+---
+
+## Cascadeflow
+
+[cascadeflow](https://docs.cascadeflow.ai/) instruments Groq calls with budget caps and returns `cascadeflow_run` traces on analysis endpoints.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `CASCADEFLOW_MODE` | `observe` | `observe`, `enforce`, or `off` |
+| `CASCADEFLOW_BUDGET_USD` | `0.10` | Soft budget per API request |
+
+Demo: `python scripts/cascadeflow_demo.py`
+
+---
+
+## Testing
+
+### Backend
+
+```bash
+uv run pytest              # full suite
+uv run pytest tests/test_scoring.py -v
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm run test               # Vitest unit tests
+npm run build              # production build
+npm run test:e2e           # Playwright (mocked backend)
+```
+
+CI runs on every push to `main`: backend pytest, frontend build, Vitest, and Playwright e2e (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
+
+---
+
+## Configuration reference
+
+See [`.env.example`](.env.example) for all variables. Summary:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GROQ_API_KEY` | Yes* | Fallback Groq key (*or all per-agent keys) |
+| `GROQ_API_KEY_PATHFINDER` … `GROQ_API_KEY_REVIEWER` | No | Per-agent keys (spread rate limits) |
+| `NEON_DATABASE_URL` | Yes | Postgres for auth and projects |
+| `AUTH_JWT_SECRET` | Yes | JWT signing secret |
+| `GITHUB_TOKEN` | No | GitHub API rate limits (5000 vs 60 req/hr) |
+| `CLIENT_ID` / `CLIENT_SECRET` | No | GitHub OAuth |
+| `GITHUB_REDIRECT_URI` / `FRONTEND_URL` | No | OAuth redirects |
+| `ALLOWED_ORIGINS` | Prod | Comma-separated CORS origins |
+| `APP_ENV` | No | Set `production` when deployed |
+| `HINDSIGHT_*` | No | Agent memory |
+| `CASCADEFLOW_*` | No | Runtime intelligence |
+| `OSS_REPO_CACHE` | No | Clone cache dir (use outside OneDrive on Windows) |
+
+---
+
+## Important notes
+
+- **Guidance, not autopilot** — generates plans and drafts; you review and push changes yourself
+- **Public repos only** — works with public GitHub repositories
+- **Rate limits** — add `GITHUB_TOKEN` for production use
+- **Windows + OneDrive** — set `OSS_REPO_CACHE` to a path outside OneDrive if git clone fails; use `.\run-backend.ps1` (port 8003)
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+## Contributing
+
+Issues and pull requests are welcome. Please run `uv run pytest` and `cd frontend && npm run test && npm run build` before submitting.
