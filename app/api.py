@@ -143,8 +143,22 @@ _default_origins = [
     "http://127.0.0.1:5174",
     "http://127.0.0.1:5175",
 ]
-_extra = os.getenv("ALLOWED_ORIGINS", "")
-_allowed_origins = _default_origins + [o.strip() for o in _extra.split(",") if o.strip()]
+_extra = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
+_frontend_url = (os.getenv("FRONTEND_URL") or "").strip().rstrip("/")
+if _frontend_url and _frontend_url not in _extra:
+    _extra.append(_frontend_url)
+_env_label = (os.getenv("APP_ENV") or os.getenv("RAILWAY_ENVIRONMENT") or "").lower()
+_is_production = _env_label in ("production", "prod")
+if _is_production and _extra:
+    _allowed_origins = list(dict.fromkeys(_extra))
+elif _is_production:
+    logger.warning(
+        "Production environment detected but ALLOWED_ORIGINS/FRONTEND_URL unset; "
+        "using localhost CORS defaults"
+    )
+    _allowed_origins = list(dict.fromkeys(_default_origins))
+else:
+    _allowed_origins = list(dict.fromkeys(_default_origins + _extra))
 
 app.add_middleware(
     CORSMiddleware,
