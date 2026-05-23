@@ -472,7 +472,6 @@ export default function EditorWindow() {
         <div className="header-actions">
           {content && (
             <>
-<<<<<<< Updated upstream
               <div className="action-group">
                 <input
                   placeholder="Branch"
@@ -489,8 +488,6 @@ export default function EditorWindow() {
                   className={`${inputDark} w-64`}
                 />
               </div>
-=======
->>>>>>> Stashed changes
               <button
                 type="button"
                 onClick={handlePush}
