@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { PanelLeft } from 'lucide-react'
 import AnalysisSidebar from './AnalysisSidebar'
 import { isAdmin } from '../auth'
+import { subscribeCodeReviewSync } from '../utils/codeReviewSync'
 
 const SIDEBAR_OPEN_KEY = 'scout_analysis_sidebar_open'
 
@@ -101,6 +102,14 @@ export default function AnalysisLayout() {
       sessionStorage.removeItem('scout_analysisResult')
     }
   }
+
+  useEffect(() => {
+    return subscribeCodeReviewSync(({ analysisResult: incoming }) => {
+      if (incoming) {
+        setAnalysisResult(incoming)
+      }
+    })
+  }, [])
 
   useEffect(() => {
     if (location.state) {

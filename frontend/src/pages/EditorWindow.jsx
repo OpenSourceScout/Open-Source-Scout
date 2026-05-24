@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback, useRef, useMemo, useLayoutEffect } fr
 import { useSearchParams, useLocation } from 'react-router-dom'
 import MonacoEditor, { DiffEditor } from '@monaco-editor/react'
 import { FileCode, Pencil, ChevronDown, PanelLeftClose, PanelLeftOpen, Download, FileDown } from 'lucide-react'
-import { getFileContent, pushFile, pushFilesBatch, exportPdf, feedbackExport, reviewAndPushCode } from '../api'
+import { getFileContent, pushFile, pushFilesBatch, exportPdf, feedbackExport, reviewAndPushCode, saveProjectAnalysisResult, saveProjectTesting } from '../api'
 import FileTree from '../components/FileTree'
 import ScoutLogo from '../components/ScoutLogo'
 import TerminalDock from '../components/TerminalDock'
 import { getLanguage } from '../utils/editorLanguage'
 import { devDebug } from '../utils/devLog'
+import { mergeCodeReviewIntoAnalysis, publishCodeReviewSync } from '../utils/codeReviewSync'
 import './EditorWindow.css'
 
 function extractHighlightedPathsFromAnalysis(analysis) {
@@ -319,6 +320,39 @@ export default function EditorWindow() {
           }
         )
         setReviewFeedback(reviewResult)
+
+        const baseAnalysis =
+          analysisDataParam ||
+          (() => {
+            try {
+              const raw = sessionStorage.getItem('scout_analysisResult')
+              return raw ? JSON.parse(raw) : null
+            } catch {
+              return null
+            }
+          })()
+
+        if (baseAnalysis?.testing_output && reviewResult?.code_reviewer_qa) {
+          const merged = mergeCodeReviewIntoAnalysis(baseAnalysis, reviewResult)
+          try {
+            sessionStorage.setItem('scout_analysisResult', JSON.stringify(merged))
+          } catch {
+            /* ignore quota errors */
+          }
+          publishCodeReviewSync(merged)
+
+          const projectId = baseAnalysis.activeProjectId ?? analysisDataParam?.activeProjectId
+          if (projectId) {
+            saveProjectAnalysisResult(projectId, merged).catch((err) =>
+              console.warn('Could not persist code review analysis:', err),
+            )
+            if (merged.testing_output) {
+              saveProjectTesting(projectId, merged.testing_output).catch((err) =>
+                console.warn('Could not persist code review QA:', err),
+              )
+            }
+          }
+        }
       } catch (err) {
         setReviewFeedback(null)
         setError(err.message || 'Code review failed')

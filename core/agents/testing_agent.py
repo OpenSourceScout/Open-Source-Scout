@@ -159,6 +159,36 @@ class TestingAgent(BaseAgent):
             iterations_used=1,
         )
 
+    def score_code_reviewer(
+        self,
+        repo: GitHubRepo,
+        issue: GitHubIssue,
+        code_review_output: CodeReviewOutput,
+    ) -> AgentTestResult:
+        """Score Learning Reviewer output from the editor Review & Push flow."""
+        self.activate_agent_llm_context()
+        self.log("Scoring Code Reviewer output from editor review")
+
+        struct_issues = self._validate_code_reviewer_structural(code_review_output)
+        sem = self._validate_code_reviewer_semantic(repo, issue, code_review_output)
+
+        all_issues = struct_issues + sem.get("issues", [])
+        suggestions = sem.get("suggestions", [])
+        sem_score = sem.get("score", 70)
+
+        structural_penalty = min(len(struct_issues) * 10, 40)
+        final_score = max(0, min(100, sem_score - structural_penalty))
+        passed = final_score >= PASS_THRESHOLD and len(struct_issues) == 0
+
+        return AgentTestResult(
+            agent_name="Code Reviewer",
+            passed=passed,
+            score=final_score,
+            issues_found=all_issues,
+            suggestions=suggestions,
+            details=sem.get("details", ""),
+        )
+
     # ------------------------------------------------------------------
     # Structural validators (deterministic)
     # ------------------------------------------------------------------
@@ -501,6 +531,72 @@ Respond with JSON:
                 "triage_nurse": default,
                 "archaeologist": default,
                 "senior_dev": default,
+            }
+
+    def _validate_code_reviewer_semantic(
+        self,
+        repo: GitHubRepo,
+        issue: GitHubIssue,
+        code_review_output: CodeReviewOutput,
+    ) -> Dict:
+        try:
+            code_review_summary = {
+                "overall_status": code_review_output.overall_status,
+                "summary": code_review_output.summary,
+                "file_feedback_count": len(code_review_output.file_feedback),
+                "feedbacks": [
+                    {
+                        "path": fb.file_path,
+                        "status": fb.status,
+                        "comments": fb.review_comments,
+                    }
+                    for fb in code_review_output.file_feedback
+                ],
+            }
+
+            prompt = f"""Evaluate the quality of the Learning Reviewer (Code Reviewer) output for a beginner open-source contribution tool.
+
+REPOSITORY: {repo.full_name} ({repo.language or 'Unknown'})
+Description: {repo.description or 'N/A'}
+
+TARGET ISSUE #{issue.number}: {issue.title}
+Issue Body: {(issue.body or 'No description')[:600]}
+Labels: {', '.join(issue.labels) if issue.labels else 'None'}
+
+CODE REVIEWER OUTPUT:
+{json.dumps(code_review_summary, indent=2)}
+
+Evaluate:
+- Are the review comments helpful, educational, and constructive for a beginner?
+- Does the status ('approved' vs 'needs_improvement') match the issues identified?
+- Is the feedback specific to the changed files?
+
+Respond with JSON:
+{{
+  "score": <0-100>,
+  "issues": ["list of specific problems found"],
+  "suggestions": ["list of actionable improvement suggestions"],
+  "details": "brief explanation of evaluation"
+}}"""
+
+            response = self.groq.complete(
+                prompt=prompt,
+                model=self.model,
+                system_prompt=self.role_prompt,
+                temperature=0.3,
+                max_tokens=1200,
+                json_mode=True,
+            )
+
+            return json.loads(response)
+
+        except Exception as e:
+            self.log(f"Code Reviewer semantic validation failed: {e}", level="warning")
+            return {
+                "score": 70,
+                "issues": [],
+                "suggestions": [],
+                "details": "Semantic validation unavailable",
             }
 
     # ------------------------------------------------------------------

@@ -173,7 +173,8 @@ app.add_middleware(
 
 
 from core.agents.code_review_agent import CodeReviewAgent
-from core.schemas import GitHubIssue, Agent1Output # Import GitHubIssue and Agent1Output for the new endpoint
+from core.agents.testing_agent import TestingAgent
+from core.schemas import GitHubIssue, Agent1Output, GitHubRepo, CodeReviewOutput
 
 
 class PushFileRequest(BaseModel):
@@ -629,8 +630,25 @@ def review_and_push(
             target_issue=body.target_issue,
             briefing_markdown=body.briefing_markdown,
         )
+        code_review_output = CodeReviewOutput.model_validate(review_feedback)
+
+        github_repo = GitHubRepo(
+            full_name=f"{owner}/{repo}",
+            html_url=f"https://github.com/{owner}/{repo}",
+            clone_url=f"https://github.com/{owner}/{repo}.git",
+            default_branch=body.base_branch or "main",
+        )
+        testing_agent = TestingAgent(groq_client)
+        code_reviewer_qa = testing_agent.score_code_reviewer(
+            repo=github_repo,
+            issue=body.target_issue,
+            code_review_output=code_review_output,
+        )
+
         logger.info(f"Code review completed for {owner}/{repo}")
-        return review_feedback
+        payload = dict(review_feedback)
+        payload["code_reviewer_qa"] = code_reviewer_qa.model_dump()
+        return payload
     except Exception as e:
         logger.error(f"Error during code review for {owner}/{repo}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))

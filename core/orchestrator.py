@@ -738,7 +738,6 @@ class ScoutOrchestrator:
         iteration = 1
         max_retries = MAX_QA_RETRIES
         testing_output = None
-        code_review_output = None
 
         def run_pathfinder():
             nonlocal pathfinder_output
@@ -756,39 +755,10 @@ class ScoutOrchestrator:
             except Exception as pe:
                 logger.warning("Pathfinder execution failed: %s", pe)
 
-        def run_code_reviewer():
-            nonlocal code_review_output
-            try:
-                self._update_status("🔍 Code Reviewer: Running code review check...")
-                review_files = []
-                if agent2_output and agent2_output.hits:
-                    for hit in agent2_output.hits[:2]:
-                        review_files.append({
-                            "path": hit.path,
-                            "original": hit.snippet,
-                            "modified": hit.snippet + "\n# Verified by Scout QA\n"
-                        })
-                if not review_files:
-                    review_files.append({
-                        "path": "README.md",
-                        "original": "Open-Source-Scout repository",
-                        "modified": "Open-Source-Scout repository\n# Verified by Scout QA\n"
-                    })
-                
-                code_review_output_raw = self.code_reviewer.run(
-                    review_files=review_files,
-                    target_issue=issue,
-                    briefing_markdown=agent3_output.briefing_markdown if agent3_output else ""
-                )
-                from core.schemas import CodeReviewOutput
-                code_review_output = CodeReviewOutput.model_validate(code_review_output_raw)
-            except Exception as cre:
-                logger.warning("Code Reviewer execution failed: %s", cre)
-
-        # Initial runs for active agents 0 and 5
+        # Initial run for Pathfinder only. Code Reviewer runs from the editor
+        # Review & Push flow and is scored separately on the QA page.
         if not pathfinder_output:
             run_pathfinder()
-        run_code_reviewer()
 
         while iteration <= max_retries + 1:
             round_label = f"(round {iteration}/{max_retries + 1})"
@@ -804,7 +774,6 @@ class ScoutOrchestrator:
                     repo_path=repo_path,
                     file_tree=file_tree,
                     pathfinder_output=pathfinder_output,
-                    code_review_output=code_review_output,
                 )
                 testing_output.iterations_used = iteration
 
@@ -830,9 +799,8 @@ class ScoutOrchestrator:
                 rerun_0 = "Pathfinder" in feedback_map
                 rerun_2 = "Archaeologist" in feedback_map
                 rerun_3 = "Senior Dev" in feedback_map or rerun_2
-                rerun_5 = "Code Reviewer" in feedback_map or rerun_3
 
-                if not (rerun_0 or rerun_2 or rerun_3 or rerun_5):
+                if not (rerun_0 or rerun_2 or rerun_3):
                     break
 
                 self._update_status(f"🔄 QA Feedback applied. Retrying failing agents {round_label}...")
@@ -861,11 +829,6 @@ class ScoutOrchestrator:
                         agent2_output
                     )
 
-                if rerun_5:
-                    self.code_reviewer.set_feedback(feedback_map.get("Code Reviewer", ""))
-                    self._update_status("🔍 Code Reviewer: Retrying...")
-                    run_code_reviewer()
-
             except Exception as e:
                 logger.warning("Testing Agent failed: %s", e)
                 self._update_status("⚠️ QA validation could not complete — returning best results.")
@@ -877,7 +840,6 @@ class ScoutOrchestrator:
         self.agent2.clear_feedback()
         self.agent3.clear_feedback()
         self.pathfinder.clear_feedback()
-        self.code_reviewer.clear_feedback()
 
         return {
             "agent1_output": agent1_output,
@@ -885,7 +847,6 @@ class ScoutOrchestrator:
             "agent3_output": agent3_output,
             "testing_output": testing_output,
             "pathfinder_output": pathfinder_output,
-            "code_review_output": code_review_output,
         }
 
     # ------------------------------------------------------------------
