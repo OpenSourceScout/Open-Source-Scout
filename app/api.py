@@ -348,6 +348,34 @@ def _to_jsonable(obj):
     return jsonable_encoder(obj)
 
 
+def _pipeline_testing_output(testing_output):
+    """Strip Code Reviewer from pipeline QA — that agent is editor-only."""
+    if testing_output is None:
+        return None
+
+    data = jsonable_encoder(testing_output)
+    if not isinstance(data, dict):
+        return data
+
+    agent_results = [
+        result
+        for result in data.get("agent_results", [])
+        if result.get("agent_name") != "Code Reviewer"
+    ]
+    if len(agent_results) == len(data.get("agent_results", [])):
+        return data
+
+    data = {**data, "agent_results": agent_results}
+    if agent_results:
+        data["overall_score"] = sum(result["score"] for result in agent_results) // len(agent_results)
+        data["overall_passed"] = all(result["passed"] for result in agent_results)
+        data["retry_agents"] = [
+            result["agent_name"] for result in agent_results if not result["passed"]
+        ]
+        data["retry_recommended"] = not data["overall_passed"]
+    return data
+
+
 def _optional_user_id(request: Request) -> int | None:
     auth = request.headers.get("authorization") or ""
     if not auth.lower().startswith("bearer "):
@@ -869,7 +897,7 @@ def re_analyze_issue(
                 "target_issue": target_issue,
                 "agent2_output": final_agent2,
                 "agent3_output": final_agent3,
-                "testing_output": testing_result.get("testing_output"),
+                "testing_output": _pipeline_testing_output(testing_result.get("testing_output")),
             }
             pool = getattr(request.app.state, "db_pool", None)
             uid = _optional_user_id(request)

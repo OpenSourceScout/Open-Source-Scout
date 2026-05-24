@@ -38,6 +38,7 @@ export function mergeCodeReviewIntoAnalysis(analysisResult, reviewPayload) {
   return {
     ...analysisResult,
     code_review_output: codeReviewOutput,
+    editor_code_review_completed: true,
     testing_output: {
       ...testing,
       agent_results: agentResults,
@@ -77,16 +78,20 @@ export function subscribeCodeReviewSync(callback) {
   return () => window.removeEventListener('storage', handler)
 }
 
-export function getVisibleAgentResults(testingOutput, hasCodeReview) {
+export function shouldShowCodeReviewer(analysisResult) {
+  return analysisResult?.editor_code_review_completed === true
+}
+
+export function getVisibleAgentResults(testingOutput, showCodeReviewer) {
   const agentResults = testingOutput?.agent_results || []
-  if (hasCodeReview) return agentResults
+  if (showCodeReviewer) return agentResults
   return agentResults.filter((result) => result.agent_name !== 'Code Reviewer')
 }
 
-export function getVisibleTestingSummary(testingOutput, hasCodeReview) {
+export function getVisibleTestingSummary(testingOutput, showCodeReviewer) {
   if (!testingOutput) return null
 
-  const agentResults = getVisibleAgentResults(testingOutput, hasCodeReview)
+  const agentResults = getVisibleAgentResults(testingOutput, showCodeReviewer)
   if (agentResults.length === 0) return testingOutput
 
   const overallScore = Math.floor(

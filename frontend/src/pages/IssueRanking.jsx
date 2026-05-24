@@ -133,6 +133,8 @@ export default function IssueRanking() {
         agent2_output: result.agent2_output,
         agent3_output: result.agent3_output,
         testing_output: result.testing_output,
+        code_review_output: undefined,
+        editor_code_review_completed: false,
       })
       // Persist all outputs to the project in DB
       if (activeProjectId) {
@@ -173,6 +175,8 @@ export default function IssueRanking() {
           agent2_output: result.agent2_output,
           agent3_output: result.agent3_output,
           testing_output: result.testing_output,
+          code_review_output: undefined,
+          editor_code_review_completed: false,
         }
         saveProjectAnalysisResult(activeProjectId, mergedResult).catch(
           (err) => console.warn('Could not persist full analysis result:', err)

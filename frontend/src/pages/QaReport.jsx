@@ -2,7 +2,7 @@ import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useMemo } from 'react'
 import { ShieldCheck, AlertTriangle, CheckCircle2, XCircle, Lightbulb, RefreshCw, ClipboardList } from 'lucide-react'
 import { saveProjectTesting } from '../api'
-import { getVisibleTestingSummary } from '../utils/codeReviewSync'
+import { getVisibleTestingSummary, shouldShowCodeReviewer } from '../utils/codeReviewSync'
 
 function getScoreColor(score) {
   if (score >= 80) return 'text-emerald-400'
@@ -22,9 +22,8 @@ export default function QaReport() {
 
   const testing = useMemo(() => {
     const raw = analysisResult?.testing_output
-    const hasCodeReview = !!analysisResult?.code_review_output
-    return getVisibleTestingSummary(raw, hasCodeReview)
-  }, [analysisResult?.testing_output, analysisResult?.code_review_output])
+    return getVisibleTestingSummary(raw, shouldShowCodeReviewer(analysisResult))
+  }, [analysisResult])
 
   // Persist testing output to DB when available
   const savedTestingRef = useRef(false)
