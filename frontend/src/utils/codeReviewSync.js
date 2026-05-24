@@ -1,9 +1,62 @@
 export const CODE_REVIEW_SYNC_KEY = 'scout_code_review_sync'
 
+export function isCodeReviewerAgent(name) {
+  return typeof name === 'string' && name.trim().toLowerCase() === 'code reviewer'
+}
+
 function stripCodeReviewerQa(reviewPayload) {
   if (!reviewPayload || typeof reviewPayload !== 'object') return null
   const { code_reviewer_qa: _qa, ...codeReviewOutput } = reviewPayload
   return codeReviewOutput
+}
+
+export function stripCodeReviewerFromTesting(testingOutput) {
+  if (!testingOutput) return testingOutput
+
+  const agentResults = (testingOutput.agent_results || []).filter(
+    (result) => !isCodeReviewerAgent(result.agent_name),
+  )
+  if (agentResults.length === (testingOutput.agent_results || []).length) {
+    return {
+      ...testingOutput,
+      retry_agents: (testingOutput.retry_agents || []).filter((name) => !isCodeReviewerAgent(name)),
+    }
+  }
+
+  const overallScore = agentResults.length
+    ? Math.floor(agentResults.reduce((sum, result) => sum + result.score, 0) / agentResults.length)
+    : testingOutput.overall_score
+  const overallPassed = agentResults.length
+    ? agentResults.every((result) => result.passed)
+    : testingOutput.overall_passed
+  const retryAgents = (testingOutput.retry_agents || []).filter((name) => !isCodeReviewerAgent(name))
+
+  return {
+    ...testingOutput,
+    agent_results: agentResults,
+    overall_score: overallScore,
+    overall_passed: overallPassed,
+    retry_agents: retryAgents,
+    retry_recommended: !overallPassed || retryAgents.length > 0,
+  }
+}
+
+export function sanitizeAnalysisResult(analysisResult) {
+  if (!analysisResult) return analysisResult
+
+  const next = { ...analysisResult }
+
+  if (next.testing_output) {
+    next.testing_output = stripCodeReviewerFromTesting(next.testing_output)
+  }
+
+  if (!next.editor_code_reviewer_qa) {
+    delete next.editor_code_reviewer_qa
+    delete next.code_review_output
+    delete next.editor_code_review_completed
+  }
+
+  return next
 }
 
 export function mergeCodeReviewIntoAnalysis(analysisResult, reviewPayload) {
@@ -11,42 +64,13 @@ export function mergeCodeReviewIntoAnalysis(analysisResult, reviewPayload) {
     return analysisResult
   }
 
-  const codeReviewOutput = stripCodeReviewerQa(reviewPayload)
-  const codeReviewerQa = reviewPayload.code_reviewer_qa
-  const testing = analysisResult.testing_output
-    ? { ...analysisResult.testing_output }
-    : null
-
-  if (!testing) {
-    return {
-      ...analysisResult,
-      code_review_output: codeReviewOutput,
-    }
-  }
-
-  const agentResults = (testing.agent_results || []).filter(
-    (result) => result.agent_name !== 'Code Reviewer',
-  )
-  agentResults.push(codeReviewerQa)
-
-  const overallScore = Math.floor(
-    agentResults.reduce((sum, result) => sum + result.score, 0) / agentResults.length,
-  )
-  const overallPassed = agentResults.every((result) => result.passed)
-  const failedAgents = agentResults.filter((result) => !result.passed).map((result) => result.agent_name)
+  const sanitized = sanitizeAnalysisResult(analysisResult)
 
   return {
-    ...analysisResult,
-    code_review_output: codeReviewOutput,
+    ...sanitized,
+    code_review_output: stripCodeReviewerQa(reviewPayload),
+    editor_code_reviewer_qa: reviewPayload.code_reviewer_qa,
     editor_code_review_completed: true,
-    testing_output: {
-      ...testing,
-      agent_results: agentResults,
-      overall_score: overallScore,
-      overall_passed: overallPassed,
-      retry_recommended: !overallPassed,
-      retry_agents: failedAgents,
-    },
   }
 }
 
@@ -78,80 +102,21 @@ export function subscribeCodeReviewSync(callback) {
   return () => window.removeEventListener('storage', handler)
 }
 
-export function shouldShowCodeReviewer(analysisResult) {
-  return analysisResult?.editor_code_review_completed === true
+export function getPipelineTestingSummary(testingOutput) {
+  return stripCodeReviewerFromTesting(testingOutput)
 }
 
-export function stripCodeReviewerFromTesting(testingOutput) {
-  if (!testingOutput) return testingOutput
+export function getQaDisplayResults(analysisResult) {
+  const pipeline = getPipelineTestingSummary(analysisResult?.testing_output)
+  const pipelineResults = pipeline?.agent_results || []
+  const editorQa = analysisResult?.editor_code_reviewer_qa
 
-  const agentResults = (testingOutput.agent_results || []).filter(
-    (result) => result.agent_name !== 'Code Reviewer',
-  )
-  if (agentResults.length === (testingOutput.agent_results || []).length) {
-    return testingOutput
+  if (!editorQa) {
+    return { testing: pipeline, agentResults: pipelineResults }
   }
-
-  const overallScore = agentResults.length
-    ? Math.floor(agentResults.reduce((sum, result) => sum + result.score, 0) / agentResults.length)
-    : testingOutput.overall_score
-  const overallPassed = agentResults.length
-    ? agentResults.every((result) => result.passed)
-    : testingOutput.overall_passed
-  const retryAgents = (testingOutput.retry_agents || []).filter((name) => name !== 'Code Reviewer')
 
   return {
-    ...testingOutput,
-    agent_results: agentResults,
-    overall_score: overallScore,
-    overall_passed: overallPassed,
-    retry_agents: retryAgents,
-    retry_recommended: !overallPassed || retryAgents.length > 0,
-  }
-}
-
-export function sanitizeAnalysisResult(analysisResult) {
-  if (!analysisResult) return analysisResult
-
-  if (shouldShowCodeReviewer(analysisResult)) {
-    return analysisResult
-  }
-
-  const next = { ...analysisResult, editor_code_review_completed: false }
-  delete next.code_review_output
-
-  if (next.testing_output) {
-    next.testing_output = stripCodeReviewerFromTesting(next.testing_output)
-  }
-
-  return next
-}
-
-export function getVisibleAgentResults(testingOutput, showCodeReviewer) {
-  const agentResults = testingOutput?.agent_results || []
-  if (showCodeReviewer) return agentResults
-  return agentResults.filter((result) => result.agent_name !== 'Code Reviewer')
-}
-
-export function getVisibleTestingSummary(testingOutput, showCodeReviewer) {
-  if (!testingOutput) return null
-
-  const agentResults = getVisibleAgentResults(testingOutput, showCodeReviewer)
-  if (agentResults.length === 0) return stripCodeReviewerFromTesting(testingOutput)
-
-  const overallScore = Math.floor(
-    agentResults.reduce((sum, result) => sum + result.score, 0) / agentResults.length,
-  )
-  const overallPassed = agentResults.every((result) => result.passed)
-
-  return {
-    ...testingOutput,
-    agent_results: agentResults,
-    overall_score: overallScore,
-    overall_passed: overallPassed,
-    retry_agents: (testingOutput.retry_agents || []).filter((name) => name !== 'Code Reviewer'),
-    retry_recommended:
-      !overallPassed ||
-      (testingOutput.retry_agents || []).some((name) => name !== 'Code Reviewer'),
+    testing: pipeline,
+    agentResults: [...pipelineResults, editorQa],
   }
 }

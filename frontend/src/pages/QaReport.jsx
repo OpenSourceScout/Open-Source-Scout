@@ -2,7 +2,7 @@ import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useMemo } from 'react'
 import { ShieldCheck, AlertTriangle, CheckCircle2, XCircle, Lightbulb, RefreshCw, ClipboardList } from 'lucide-react'
 import { saveProjectTesting } from '../api'
-import { getVisibleTestingSummary, shouldShowCodeReviewer } from '../utils/codeReviewSync'
+import { getQaDisplayResults, sanitizeAnalysisResult } from '../utils/codeReviewSync'
 
 function getScoreColor(score) {
   if (score >= 80) return 'text-emerald-400'
@@ -17,15 +17,32 @@ function getScoreBarColor(score) {
 }
 
 export default function QaReport() {
-  const { analysisResult, repoInfo, activeProjectId } = useOutletContext()
+  const { analysisResult, setAnalysisResult, repoInfo, activeProjectId } = useOutletContext()
   const navigate = useNavigate()
 
-  const testing = useMemo(() => {
-    const raw = analysisResult?.testing_output
-    return getVisibleTestingSummary(raw, shouldShowCodeReviewer(analysisResult))
-  }, [analysisResult])
+  const { testing, agentResults } = useMemo(
+    () => getQaDisplayResults(analysisResult),
+    [analysisResult],
+  )
 
-  // Persist testing output to DB when available
+  const cleanedRef = useRef(false)
+  useEffect(() => {
+    if (!analysisResult || cleanedRef.current) return
+
+    const sanitized = sanitizeAnalysisResult(analysisResult)
+    const hadPipelineCodeReviewer = (analysisResult.testing_output?.agent_results || []).some(
+      (result) => result.agent_name === 'Code Reviewer',
+    )
+    const needsCleanup =
+      hadPipelineCodeReviewer ||
+      (!sanitized.editor_code_reviewer_qa && analysisResult.code_review_output)
+
+    if (needsCleanup) {
+      cleanedRef.current = true
+      setAnalysisResult(sanitized)
+    }
+  }, [analysisResult, setAnalysisResult])
+
   const savedTestingRef = useRef(false)
   useEffect(() => {
     if (
@@ -119,7 +136,8 @@ export default function QaReport() {
                   Pipeline QA {testing.overall_passed ? 'PASSED' : 'NEEDS IMPROVEMENT'}
                 </h2>
                 <p className={`text-sm ${testing.overall_passed ? 'text-emerald-400/90' : 'text-red-400/90'}`}>
-                  All agent outputs have been validated by the Testing Agent
+                  Pipeline agents validated by the Testing Agent
+                  {analysisResult.editor_code_reviewer_qa ? ' · Editor review shown separately below' : ''}
                 </p>
               </div>
             </div>
@@ -132,7 +150,7 @@ export default function QaReport() {
 
         <h3 className="text-lg font-semibold text-app-text mb-4">Agent Results</h3>
         <div className="space-y-4 mb-6">
-          {testing.agent_results?.map((result, idx) => (
+          {agentResults?.map((result, idx) => (
             <div
               key={idx}
               className={`bg-app-surface rounded-xl border p-5 ${
@@ -157,6 +175,9 @@ export default function QaReport() {
                     >
                       {result.passed ? 'Passed' : 'Needs Improvement'}
                     </span>
+                    {result.agent_name === 'Code Reviewer' && analysisResult.editor_code_reviewer_qa && (
+                      <span className="ml-2 text-xs text-app-muted">From editor Review &amp; Push</span>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">

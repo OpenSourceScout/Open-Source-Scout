@@ -134,6 +134,7 @@ export default function IssueRanking() {
         agent2_output: result.agent2_output,
         agent3_output: result.agent3_output,
         testing_output: result.testing_output,
+        editor_code_reviewer_qa: undefined,
         editor_code_review_completed: false,
       }))
       // Persist all outputs to the project in DB
@@ -175,6 +176,7 @@ export default function IssueRanking() {
           agent2_output: result.agent2_output,
           agent3_output: result.agent3_output,
           testing_output: result.testing_output,
+          editor_code_reviewer_qa: undefined,
           editor_code_review_completed: false,
         })
         saveProjectAnalysisResult(activeProjectId, mergedResult).catch(

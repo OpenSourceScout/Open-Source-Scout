@@ -1265,12 +1265,17 @@ def export_pdf(body: ExportPdfRequest):
 @app.get("/api/health")
 def health():
     """Health check for load balancers / readiness probes."""
+    import os
+
     db_pool = getattr(app.state, "db_pool", None)
     db_init_error = getattr(app.state, "db_init_error", None)
     return {
         "status": "ok",
         "db_initialized": db_pool is not None,
         "db_error": db_init_error,
+        "build": os.getenv("RAILWAY_GIT_COMMIT_SHA")
+        or os.getenv("GIT_COMMIT")
+        or "dev",
     }
 
 

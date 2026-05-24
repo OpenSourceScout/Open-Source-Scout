@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { sanitizeAnalysisResult, shouldShowCodeReviewer } from './codeReviewSync'
+import {
+  getQaDisplayResults,
+  mergeCodeReviewIntoAnalysis,
+  sanitizeAnalysisResult,
+} from './codeReviewSync'
 
 describe('codeReviewSync', () => {
-  it('hides Code Reviewer from saved pipeline QA until editor review completes', () => {
+  it('always removes Code Reviewer from pipeline QA data', () => {
     const analysis = {
       code_review_output: { overall_status: 'approved', summary: 'old pipeline data' },
       testing_output: {
@@ -15,39 +19,50 @@ describe('codeReviewSync', () => {
         retry_agents: ['Senior Dev', 'Code Reviewer'],
         retry_recommended: true,
         summary: 'Pipeline QA Status: NEEDS IMPROVEMENT',
-        iterations_used: 1,
+        iterations_used: 2,
       },
     }
 
     const sanitized = sanitizeAnalysisResult(analysis)
+    const { agentResults, testing } = getQaDisplayResults(sanitized)
 
-    expect(shouldShowCodeReviewer(sanitized)).toBe(false)
     expect(sanitized.code_review_output).toBeUndefined()
-    expect(sanitized.testing_output.agent_results.map((result) => result.agent_name)).toEqual([
-      'Senior Dev',
-    ])
-    expect(sanitized.testing_output.retry_agents).toEqual(['Senior Dev'])
+    expect(agentResults.map((result) => result.agent_name)).toEqual(['Senior Dev'])
+    expect(testing.retry_agents).toEqual(['Senior Dev'])
   })
 
-  it('keeps Code Reviewer when editor review completed', () => {
-    const analysis = {
-      editor_code_review_completed: true,
-      code_review_output: { overall_status: 'approved', summary: 'editor review' },
-      testing_output: {
-        overall_score: 70,
-        overall_passed: true,
-        agent_results: [
-          { agent_name: 'Senior Dev', passed: true, score: 70 },
-          { agent_name: 'Code Reviewer', passed: true, score: 70 },
-        ],
-        retry_agents: [],
-        retry_recommended: false,
-        summary: 'ok',
-        iterations_used: 1,
+  it('shows Code Reviewer only from editor_code_reviewer_qa', () => {
+    const analysis = mergeCodeReviewIntoAnalysis(
+      {
+        testing_output: {
+          overall_score: 60,
+          overall_passed: false,
+          agent_results: [{ agent_name: 'Senior Dev', passed: false, score: 50 }],
+          retry_agents: ['Senior Dev'],
+          retry_recommended: true,
+          summary: 'Pipeline QA Status: NEEDS IMPROVEMENT',
+          iterations_used: 1,
+        },
       },
-    }
+      {
+        overall_status: 'needs_improvement',
+        summary: 'Editor review',
+        code_reviewer_qa: {
+          agent_name: 'Code Reviewer',
+          passed: false,
+          score: 55,
+          issues_found: ['Missing permission check'],
+          suggestions: ['Add hasPermission guard'],
+          details: 'Editor QA',
+        },
+      },
+    )
 
-    const sanitized = sanitizeAnalysisResult(analysis)
-    expect(sanitized.testing_output.agent_results).toHaveLength(2)
+    const { agentResults } = getQaDisplayResults(analysis)
+
+    expect(agentResults).toHaveLength(2)
+    expect(agentResults[1].agent_name).toBe('Code Reviewer')
+    expect(agentResults[1].score).toBe(55)
+    expect(analysis.testing_output.agent_results).toHaveLength(1)
   })
 })
