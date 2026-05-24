@@ -223,9 +223,19 @@ export default function EditorWindow() {
           setFileTree(fallbackFiles)
           setHighlightedFiles(fallbackHighlightedFiles)
           setHighlightedCount(fallbackHighlightedFiles.length)
-          setError(
-            `GitHub file tree is rate-limited right now (${err.message}). Showing Code Locator highlighted files only.`
-          )
+
+          const msg = err.message || ''
+          let reason
+          if (msg.includes('401') || msg.toLowerCase().includes('unauthorized')) {
+            reason = 'GitHub token is missing or expired'
+          } else if (msg.includes('403') || msg.toLowerCase().includes('forbidden')) {
+            reason = 'GitHub access forbidden — token may lack required scopes'
+          } else if (msg.includes('429') || msg.toLowerCase().includes('rate')) {
+            reason = 'GitHub API rate limit reached'
+          } else {
+            reason = msg || 'GitHub API unavailable'
+          }
+          setError(`Could not load file tree: ${reason}. Showing Code Locator highlighted files only.`)
           return
         }
 
