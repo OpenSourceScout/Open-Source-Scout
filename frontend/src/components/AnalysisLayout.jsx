@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { PanelLeft } from 'lucide-react'
 import AnalysisSidebar from './AnalysisSidebar'
 import { isAdmin } from '../auth'
-import { subscribeCodeReviewSync } from '../utils/codeReviewSync'
+import { subscribeCodeReviewSync, sanitizeAnalysisResult } from '../utils/codeReviewSync'
 
 const SIDEBAR_OPEN_KEY = 'scout_analysis_sidebar_open'
 
@@ -30,7 +30,12 @@ export default function AnalysisLayout() {
   })
   const [analysisResult, setAnalysisResultRaw] = useState(() => {
     const saved = sessionStorage.getItem('scout_analysisResult')
-    return saved ? JSON.parse(saved) : null
+    if (!saved) return null
+    try {
+      return sanitizeAnalysisResult(JSON.parse(saved))
+    } catch {
+      return null
+    }
   })
   const [rankedRepos, setRankedRepos] = useState(() => {
     const saved = sessionStorage.getItem('scout_rankedRepos')
@@ -95,9 +100,10 @@ export default function AnalysisLayout() {
 
   // Persist analysisResult to sessionStorage whenever it changes
   const setAnalysisResult = (result) => {
-    setAnalysisResultRaw(result)
-    if (result) {
-      sessionStorage.setItem('scout_analysisResult', JSON.stringify(result))
+    const sanitized = sanitizeAnalysisResult(result)
+    setAnalysisResultRaw(sanitized)
+    if (sanitized) {
+      sessionStorage.setItem('scout_analysisResult', JSON.stringify(sanitized))
     } else {
       sessionStorage.removeItem('scout_analysisResult')
     }

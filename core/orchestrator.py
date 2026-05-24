@@ -841,6 +841,9 @@ class ScoutOrchestrator:
         self.agent3.clear_feedback()
         self.pathfinder.clear_feedback()
 
+        if testing_output is not None:
+            testing_output = self._strip_pipeline_code_reviewer(testing_output)
+
         return {
             "agent1_output": agent1_output,
             "agent2_output": agent2_output,
@@ -848,6 +851,35 @@ class ScoutOrchestrator:
             "testing_output": testing_output,
             "pathfinder_output": pathfinder_output,
         }
+
+    @staticmethod
+    def _strip_pipeline_code_reviewer(testing_output):
+        """Code Reviewer is editor-only; never return it from pipeline QA."""
+        if testing_output is None:
+            return None
+
+        filtered = [
+            result for result in testing_output.agent_results
+            if result.agent_name != "Code Reviewer"
+        ]
+        if len(filtered) == len(testing_output.agent_results):
+            return testing_output
+
+        from core.schemas import TestingAgentOutput
+
+        overall_score = sum(result.score for result in filtered) // len(filtered)
+        overall_passed = all(result.passed for result in filtered)
+        retry_agents = [result.agent_name for result in filtered if not result.passed]
+
+        return TestingAgentOutput(
+            overall_passed=overall_passed,
+            overall_score=overall_score,
+            agent_results=filtered,
+            summary=testing_output.summary,
+            retry_recommended=not overall_passed,
+            retry_agents=retry_agents,
+            iterations_used=testing_output.iterations_used,
+        )
 
     # ------------------------------------------------------------------
     # Helpers

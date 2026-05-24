@@ -12,6 +12,7 @@ import {
 } from '../api'
 import MemoryCitationPill from '../components/MemoryCitationPill'
 import { IssueFeedbackThumbs } from '../components/RepoFeedbackActions'
+import { sanitizeAnalysisResult } from '../utils/codeReviewSync'
 
 function getDifficultyFromLabels(labels) {
   if (!labels || labels.length === 0) return null
@@ -126,16 +127,15 @@ export default function IssueRanking() {
         issue_number: issue.number,
         pathfinder_output: rankedRepos || undefined,
       })
-      setAnalysisResult({
+      setAnalysisResult(sanitizeAnalysisResult({
         ...analysisResult,
         cascadeflow_run: result.cascadeflow_run ?? analysisResult?.cascadeflow_run,
         target_issue: result.target_issue,
         agent2_output: result.agent2_output,
         agent3_output: result.agent3_output,
         testing_output: result.testing_output,
-        code_review_output: undefined,
         editor_code_review_completed: false,
-      })
+      }))
       // Persist all outputs to the project in DB
       if (activeProjectId) {
         try {
@@ -168,16 +168,15 @@ export default function IssueRanking() {
           )
         }
         // Save the full merged analysis result as a reliable fallback
-        const mergedResult = {
+        const mergedResult = sanitizeAnalysisResult({
           ...analysisResult,
           cascadeflow_run: result.cascadeflow_run ?? analysisResult?.cascadeflow_run,
           target_issue: result.target_issue,
           agent2_output: result.agent2_output,
           agent3_output: result.agent3_output,
           testing_output: result.testing_output,
-          code_review_output: undefined,
           editor_code_review_completed: false,
-        }
+        })
         saveProjectAnalysisResult(activeProjectId, mergedResult).catch(
           (err) => console.warn('Could not persist full analysis result:', err)
         )

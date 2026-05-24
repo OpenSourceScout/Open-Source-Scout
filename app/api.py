@@ -2162,7 +2162,14 @@ if _dist_dir.is_dir():
             return FileResponse(str(candidate))
         # Fall back to SPA index.html for all other paths
         index = _dist_dir / "index.html"
-        return HTMLResponse(content=index.read_text(), status_code=200)
+        return HTMLResponse(
+            content=index.read_text(),
+            status_code=200,
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+            },
+        )
 
 
 if __name__ == "__main__":

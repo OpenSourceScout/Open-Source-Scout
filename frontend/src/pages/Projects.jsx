@@ -19,6 +19,7 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 import { getProjects, renameProject, deleteProject, getProjectById } from '../api'
+import { sanitizeAnalysisResult } from '../utils/codeReviewSync'
 
 function formatDate(iso) {
   if (!iso) return ''
@@ -96,14 +97,14 @@ export default function Projects() {
 
       // Reconstruct analysisResult from per-step DB columns
       const baseResult = full.analysis_result || {}
-      const analysisResult = {
+      const analysisResult = sanitizeAnalysisResult({
         ...baseResult,
         // Override with per-step stored data if available
         ...(full.target_issue ? { target_issue: full.target_issue } : {}),
         ...(full.code_locator_output ? { agent2_output: full.code_locator_output } : {}),
         ...(full.briefing_output ? { agent3_output: full.briefing_output } : {}),
         ...(full.testing_output ? { testing_output: full.testing_output } : {}),
-      }
+      })
       const repoUrl = full.repo_url || null
 
       // Store in session for AnalysisLayout to pick up
