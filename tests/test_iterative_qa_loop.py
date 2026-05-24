@@ -129,3 +129,56 @@ def test_qa_loop_retries_archaeologist_then_passes():
     assert orch.agent2.run.call_count >= 1
     assert orch.agent3.run.call_count >= 1
     assert out["testing_output"].overall_passed is True
+
+
+def test_qa_loop_single_pass_when_max_retries_zero():
+    issue = make_github_issue(number=8, title="Single pass issue")
+    repo = GitHubRepo(
+        full_name="o/r",
+        html_url="https://github.com/o/r",
+        clone_url="https://github.com/o/r.git",
+    )
+    a1, a2, a3 = _minimal_agent_outputs(issue)
+
+    github = MagicMock()
+    groq = MagicMock()
+    orch = ScoutOrchestrator(github_client=github, groq_client=groq)
+
+    orch.testing_agent.run = MagicMock(
+        return_value=QAOutput(
+            overall_passed=False,
+            overall_score=40,
+            agent_results=[
+                AgentTestResult(
+                    agent_name="Archaeologist",
+                    passed=False,
+                    score=30,
+                    issues_found=["hits incomplete"],
+                    suggestions=["add symbol names"],
+                )
+            ],
+            summary="needs retry",
+            retry_recommended=True,
+            retry_agents=["Archaeologist"],
+        )
+    )
+    orch.agent2.run = MagicMock(return_value=a2)
+    orch.agent3.run = MagicMock(return_value=a3)
+    orch.pathfinder.run = MagicMock(return_value=None)
+
+    out = orch._run_qa_loop(
+        repo=repo,
+        issue=issue,
+        issues=[issue],
+        agent1_output=a1,
+        agent2_output=a2,
+        agent3_output=a3,
+        repo_path=Path("."),
+        file_tree=["a.py"],
+        top_issues=3,
+        max_qa_retries=0,
+    )
+
+    assert orch.testing_agent.run.call_count == 1
+    assert orch.agent2.run.call_count == 0
+    assert out["testing_output"].overall_passed is False

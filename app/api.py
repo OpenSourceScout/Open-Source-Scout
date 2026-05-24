@@ -74,7 +74,7 @@ from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B, MODEL_
 # In-process README LLM summaries (avoid re-generating on every dashboard visit)
 _readme_summary_cache: dict[str, tuple[str, float]] = {}
 README_SUMMARY_CACHE_TTL_SEC = 86400.0
-from core.orchestrator import ScoutOrchestrator
+from core.orchestrator import ScoutOrchestrator, MAX_QA_RETRIES
 from core.agents.pathfinder import PathfinderAgent
 from core.terminal_manager import (
     SessionNotFoundError,
@@ -416,6 +416,24 @@ def _require_admin_user(request: Request) -> int:
     if role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return uid
+
+
+def _user_is_admin(request: Request) -> bool:
+    """Return True when the authenticated user has admin role."""
+    uid = _optional_user_id(request)
+    if uid is None:
+        return False
+    pool = getattr(request.app.state, "db_pool", None)
+    if not pool:
+        return False
+    try:
+        with pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("select role from users where id = %s", (uid,))
+                row = cur.fetchone()
+                return row is not None and row[0] == "admin"
+    except Exception:
+        return False
 
 
 def _require_terminal_manager(request: Request) -> TerminalManager:
@@ -868,10 +886,13 @@ def re_analyze_issue(
                 except Exception:
                     pass
     
-            # Phase 4 — Testing Agent with QA feedback loop
-            # If any agent fails QA, they are re-run with feedback (up to 2 retries).
-            # The returned agent outputs may be improved versions after retries.
-            logger.info("re-analyze: running QA cycle")
+            # Phase 4 — Testing Agent with QA feedback loop (admin only; users get one pass)
+            max_qa_retries = MAX_QA_RETRIES if _user_is_admin(request) else 0
+            logger.info(
+                "re-analyze: running QA cycle (max_retries=%d, admin=%s)",
+                max_qa_retries,
+                max_qa_retries > 0,
+            )
             testing_result = orchestrator.run_testing(
                 repo=repo,
                 issue=target_issue,
@@ -881,6 +902,7 @@ def re_analyze_issue(
                 repo_path=phase2.get("repo_path"),
                 file_tree=phase2.get("file_tree"),
                 pathfinder_output=pathfinder,
+                max_qa_retries=max_qa_retries,
             )
             if not testing_result.get("success"):
                 raise HTTPException(

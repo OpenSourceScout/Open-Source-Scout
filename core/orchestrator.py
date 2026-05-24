@@ -683,6 +683,7 @@ class ScoutOrchestrator:
         repo_path: Optional[Path] = None,
         file_tree: Optional[List[str]] = None,
         pathfinder_output=None,
+        max_qa_retries: int | None = None,
     ) -> dict:
         """Run QA Testing Agent with feedback loop using LangGraph."""
         try:
@@ -696,6 +697,7 @@ class ScoutOrchestrator:
                 repo_path=repo_path or Path("."),
                 file_tree=file_tree or [],
                 pathfinder_output=pathfinder_output,
+                max_qa_retries=max_qa_retries,
             )
 
             return {
@@ -729,14 +731,15 @@ class ScoutOrchestrator:
         file_tree: List[str],
         top_issues: int = 3,
         pathfinder_output=None,
+        max_qa_retries: int | None = None,
     ) -> dict:
         """
-        Run the Testing Agent to validate pipeline outputs, retrying up to MAX_QA_RETRIES times.
+        Run the Testing Agent to validate pipeline outputs, retrying up to max_qa_retries times.
 
         Returns a dict with agent outputs and the testing report.
         """
         iteration = 1
-        max_retries = MAX_QA_RETRIES
+        max_retries = MAX_QA_RETRIES if max_qa_retries is None else max(0, max_qa_retries)
         testing_output = None
 
         def run_pathfinder():
