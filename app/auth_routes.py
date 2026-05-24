@@ -1,6 +1,7 @@
 import logging
 import os
 import secrets
+import time
 from urllib.parse import quote_plus, urlencode
 
 import requests
@@ -25,8 +26,26 @@ GITHUB_AUTH_URL = "https://github.com/login/oauth/authorize"
 GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
 GITHUB_API_USER = "https://api.github.com/user"
 GITHUB_API_EMAILS = "https://api.github.com/user/emails"
-OAUTH_STATE_COOKIE = "gh_oauth_state"
 OAUTH_STATE_MAX_AGE = 600
+
+# Server-side OAuth state store — avoids cookie/proxy forwarding issues in dev.
+# Maps state token → expiry timestamp.
+_oauth_states: dict[str, float] = {}
+
+
+def _store_oauth_state(state: str) -> None:
+    now = time.monotonic()
+    # Prune expired entries
+    expired = [k for k, exp in _oauth_states.items() if exp <= now]
+    for k in expired:
+        _oauth_states.pop(k, None)
+    _oauth_states[state] = now + OAUTH_STATE_MAX_AGE
+
+
+def _consume_oauth_state(state: str) -> bool:
+    """Return True if state is valid (and remove it); False otherwise."""
+    exp = _oauth_states.pop(state, None)
+    return exp is not None and exp > time.monotonic()
 
 
 def _github_oauth_settings():
@@ -147,7 +166,7 @@ def _oauth_error_redirect(frontend_url: str, message: str) -> RedirectResponse:
 
 
 @router.get("/github")
-def github_oauth_start(request: Request):
+def github_oauth_start():
     client_id, _, redirect_uri, frontend_url = _github_oauth_settings()
     if not client_id or not redirect_uri:
         raise HTTPException(
@@ -155,6 +174,7 @@ def github_oauth_start(request: Request):
             detail="GitHub OAuth is not configured. Set CLIENT_ID (or GITHUB_OAUTH_CLIENT_ID) and GITHUB_REDIRECT_URI.",
         )
     state = secrets.token_urlsafe(32)
+    _store_oauth_state(state)
     params = urlencode(
         {
             "client_id": client_id,
@@ -164,17 +184,7 @@ def github_oauth_start(request: Request):
         }
     )
     url = f"{GITHUB_AUTH_URL}?{params}"
-    resp = RedirectResponse(url=url, status_code=302)
-    resp.set_cookie(
-        key=OAUTH_STATE_COOKIE,
-        value=state,
-        max_age=OAUTH_STATE_MAX_AGE,
-        httponly=True,
-        samesite="lax",
-        path="/",
-        secure=request.url.scheme == "https",
-    )
-    return resp
+    return RedirectResponse(url=url, status_code=302)
 
 
 @router.get("/github/callback")
@@ -194,8 +204,7 @@ def github_oauth_callback(
     if not code or not state:
         return _oauth_error_redirect(frontend_url, "Missing authorization code")
 
-    cookie_state = request.cookies.get(OAUTH_STATE_COOKIE)
-    if not cookie_state or cookie_state != state:
+    if not _consume_oauth_state(state):
         return _oauth_error_redirect(frontend_url, "Invalid or expired OAuth state")
 
     if not client_id or not client_secret or not redirect_uri:
@@ -284,10 +293,8 @@ def github_oauth_callback(
 
     jwt_token = create_access_token(user_id=int(user["id"]), email=user["email"])
     fragment = urlencode({"access_token": jwt_token, "token_type": "bearer"})
-    resp = RedirectResponse(
+    return RedirectResponse(
         url=f"{frontend_url}/oauth/callback#{fragment}",
         status_code=302,
     )
-    resp.delete_cookie(OAUTH_STATE_COOKIE, path="/")
-    return resp
 
