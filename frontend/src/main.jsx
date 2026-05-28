@@ -24,6 +24,7 @@ import { isLoggedIn, isAdmin } from './auth'
 import { RepoFeedbackBar } from './components/RepoFeedbackActions'
 import { FeedbackProvider, useFeedbackActions } from './context/FeedbackContext'
 import { filterRankedRepos } from './utils/skippedRepos'
+import { PageTitleUpdater } from './utils/usePageTitle'
 
 // RepositoriesView - shows ranked repos from tech stack search
 function RepositoriesView() {
@@ -199,6 +200,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <FeedbackProvider>
     <BrowserRouter>
+      <PageTitleUpdater />
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />

@@ -1,8 +1,28 @@
 # Open Source Scout
 
-An AI-powered multi-agent platform that helps beginners contribute to open-source projects — from **repository discovery** and **issue ranking** through **code location**, **fix planning**, **QA validation**, **in-editor review**, and **PR drafting**.
+**Open source help for beginners** — find **good first issues**, discover **contributor-friendly** repositories, and get **AI-guided** code location, briefings, and pull request drafts.
+
+[![Live demo](https://img.shields.io/badge/demo-live-22C55E?style=flat-square)](https://open-source-scout.up.railway.app/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-agents-8B5CF6?style=flat-square)](https://langchain-ai.github.io/langgraph/)
+
+**Live app:** [https://open-source-scout.up.railway.app](https://open-source-scout.up.railway.app)
+
+An AI-powered **multi-agent** platform for **first-time open source contributors** — from **repository discovery** and **beginner-friendly issue ranking** through **code location**, **fix planning**, **QA validation**, **in-editor review**, and **PR drafting**.
 
 Built with **FastAPI**, **React (Vite)**, **LangGraph**, **Groq**, optional **Hindsight** memory, and **Cascadeflow** runtime intelligence.
+
+### Who is this for?
+
+- Developers searching for **open source help** to make their **first contribution**
+- Students and beginners looking for **good first issues** matched to their **tech stack**
+- Teams demoing **AI agents** for **open source contribution** workflows (Hacktoberfest, campus projects, OSS onboarding)
+
+### Keywords
+
+`open source help` · `beginner open source` · `good first issue` · `first contribution` · `contributor-friendly` · `open source contribution tool` · `AI coding assistant` · `issue ranking` · `pull request draft`
 
 ---
 
@@ -324,6 +344,55 @@ See [`.env.example`](.env.example) for all variables. Summary:
 - **Public repos only** — works with public GitHub repositories
 - **Rate limits** — add `GITHUB_TOKEN` for production use
 - **Windows + OneDrive** — set `OSS_REPO_CACHE` to a path outside OneDrive if git clone fails; use `.\run-backend.ps1` (port 8003)
+
+---
+
+## FAQ
+
+### What is Open Source Scout?
+
+Open Source Scout is a free web app that helps **beginners contribute to open source**. It uses AI agents to find repositories, rank **good first issues**, locate relevant code, generate a **contributor briefing**, and help you draft a **pull request**.
+
+### How is this different from GitHub’s good-first-issues search?
+
+GitHub lists issues; Scout **ranks** them for beginners (labels, clarity, activity, size), then runs a full pipeline: **code locator**, **implementation plan**, **QA validation**, and an **in-browser editor** with educational review — not just a list of links.
+
+### Do I need experience to use it?
+
+No. The product is designed for **first-time contributors**. Sign in with GitHub, pick a repo or search by tech stack, choose an issue, and follow the guided flow.
+
+### Is it free?
+
+Yes. The live demo runs on Railway; you bring your own API keys when self-hosting (see [Quick start](#quick-start-local-development)).
+
+### How do I get started?
+
+1. Open the [live app](https://open-source-scout.up.railway.app)
+2. Sign in with GitHub
+3. Search by tech stack or paste a public repo URL
+4. Select a ranked issue and follow **Code Locator → Briefing → Editor**
+
+---
+
+## SEO & discoverability
+
+This repo includes technical SEO for the web app and GitHub:
+
+| Asset | Purpose |
+|-------|---------|
+| `frontend/index.html` | Title, description, Open Graph, Twitter Card, JSON-LD |
+| `frontend/public/robots.txt` | Crawler rules + sitemap URL |
+| `frontend/public/sitemap.xml` | Public routes for search engines |
+| `frontend/public/manifest.json` | PWA metadata |
+| `frontend/src/utils/usePageTitle.js` | Per-route document titles |
+
+**GitHub repo metadata** (description, homepage, topics) can be applied with:
+
+```powershell
+.\scripts\set_github_seo.ps1
+```
+
+Requires [GitHub CLI](https://cli.github.com/) (`gh auth login`). Ranking on Google for competitive terms takes time; these changes make the site **indexable** and **shareable** with correct previews.
 
 ---
 

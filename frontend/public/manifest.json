@@ -1,0 +1,18 @@
+{
+  "name": "Open Source Scout",
+  "short_name": "OSS Scout",
+  "description": "Open source help for beginners — find good first issues and get AI-guided contributions.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0F14",
+  "theme_color": "#22C55E",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/Opensource_Scout-Logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
