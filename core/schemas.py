@@ -192,6 +192,53 @@ class TestingAgentOutput(BaseModel):
     iterations_used: int = Field(default=1, description="Number of QA iterations completed")
 
 
+# ==================== Repository Health Audit ====================
+
+class AuditFinding(BaseModel):
+    """A single technical-debt or debug-artifact finding in the codebase."""
+    file_path: str = Field(description="File path relative to repo root")
+    line_number: int = Field(ge=1, description="1-indexed line number of the finding")
+    severity: str = Field(description="Severity level: high, medium, or low")
+    category: str = Field(description="Finding category, e.g. FIXME, TODO, debug-artifact")
+    marker: str = Field(description="The matched marker keyword")
+    snippet: str = Field(description="Trimmed line content where the finding occurred")
+
+
+class AuditSeverityCounts(BaseModel):
+    """Aggregate finding counts grouped by severity."""
+    high: int = Field(default=0, ge=0, description="High severity count")
+    medium: int = Field(default=0, ge=0, description="Medium severity count")
+    low: int = Field(default=0, ge=0, description="Low severity count")
+
+
+class AuditFileSummary(BaseModel):
+    """Per-file rollup of findings, used to surface the noisiest files."""
+    file_path: str = Field(description="File path relative to repo root")
+    issue_count: int = Field(ge=0, description="Total findings in the file")
+    high: int = Field(default=0, ge=0, description="High severity count in file")
+    medium: int = Field(default=0, ge=0, description="Medium severity count in file")
+    low: int = Field(default=0, ge=0, description="Low severity count in file")
+
+
+class RepoAuditReport(BaseModel):
+    """Deterministic repository health audit report."""
+    repo_url: str = Field(description="Audited repository URL")
+    repo_full_name: str = Field(description="Repository full name (owner/repo)")
+    readiness_score: int = Field(ge=0, le=100, description="Overall readiness score (0-100)")
+    gate_passed: bool = Field(description="Whether the repo passes the readiness gate")
+    readiness_threshold: int = Field(ge=0, le=100, description="Score required to pass the gate")
+    technical_debt: int = Field(ge=0, description="Total number of findings across all severities")
+    files_scanned: int = Field(ge=0, description="Number of files scanned")
+    lines_scanned: int = Field(ge=0, description="Number of lines scanned")
+    severity_counts: AuditSeverityCounts = Field(description="Findings grouped by severity")
+    top_files: List[AuditFileSummary] = Field(default_factory=list, description="Files with the most findings")
+    findings: List[AuditFinding] = Field(default_factory=list, description="Individual findings (capped)")
+    findings_truncated: bool = Field(default=False, description="True when findings list was capped")
+    summary: str = Field(description="Human-readable summary of the audit")
+    report_markdown: str = Field(description="Full audit report rendered as Markdown")
+    scanned_at: str = Field(description="ISO-8601 UTC timestamp when the audit completed")
+
+
 # ==================== GitHub API Models ====================
 
 class GitHubIssue(BaseModel):

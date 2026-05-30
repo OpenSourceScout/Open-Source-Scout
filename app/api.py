@@ -75,6 +75,7 @@ from integrations.groq_client import GroqClient, MODEL_LLAMA_4_SCOUT_17B, MODEL_
 _readme_summary_cache: dict[str, tuple[str, float]] = {}
 README_SUMMARY_CACHE_TTL_SEC = 86400.0
 from core.orchestrator import ScoutOrchestrator, MAX_QA_RETRIES
+from core.audit import audit_repository
 from core.agents.pathfinder import PathfinderAgent
 from core.terminal_manager import (
     SessionNotFoundError,
@@ -236,6 +237,12 @@ class ExportPdfRequest(BaseModel):
     """Request body for PDF export."""
 
     content: str
+
+
+class AuditRepoRequest(BaseModel):
+    """Request body for a repository health audit."""
+
+    repo_url: str
 
 
 class ReAnalyzeRequest(BaseModel):
@@ -1267,6 +1274,44 @@ def admin_memory_graph(
         payload["user_id"] = user_id
         payload["hindsight_enabled"] = hx.enabled
     return payload
+
+
+@app.post("/api/audit-repo")
+def audit_repo(
+    body: AuditRepoRequest,
+    request: Request,
+    user_ctx: UserContext = Depends(get_current_user),
+):
+    """
+    Run a deterministic health audit over an entire repository.
+
+    Clones the repo, scans for technical-debt markers and debug artifacts, and
+    returns a readiness score, pass/fail gate, severity breakdown, and findings.
+    No LLM calls are made.
+    """
+    repo_url = (body.repo_url or "").strip()
+    if not repo_url:
+        raise HTTPException(status_code=400, detail="repo_url is required")
+
+    try:
+        github_client = GitHubClient(token=_get_github_token_for_user(request))
+        owner, repo = github_client.parse_repo_url(repo_url)
+        repo_path = github_client.clone_repo(repo_url)
+        file_tree = github_client.get_file_tree(repo_path)
+        report = audit_repository(
+            repo_url=repo_url,
+            repo_full_name=f"{owner}/{repo}",
+            repo_path=repo_path,
+            file_tree=file_tree,
+        )
+        return _to_jsonable(report)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid repository URL: {e}")
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        logger.exception("Repository audit failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/api/export/pdf")

@@ -256,6 +256,17 @@ export async function reviewAndPushCode(owner, repo, payload) {
   return res.json();
 }
 
+export async function auditRepo(repoUrl) {
+  const res = await apiFetch(`/audit-repo`, {
+    method: 'POST',
+    body: JSON.stringify({ repo_url: repoUrl }),
+  }, TIMEOUTS.analysis)
+  if (!res.ok) {
+    throw new Error((await responseErrorDetail(res)) || 'Repository audit failed')
+  }
+  return res.json()
+}
+
 export async function exportPdf(content) {
   const res = await apiFetch(`/export/pdf`, {
     method: 'POST',
