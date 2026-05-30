@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate, Link } from 'react-router-dom'
-import { Search, Rocket, User, Github, ExternalLink, FolderKanban, Gauge, Brain } from 'lucide-react'
+import { Search, Rocket, User, Github, ExternalLink, FolderKanban, Gauge, Brain, ShieldCheck } from 'lucide-react'
 import { searchReposByTechStack, runAnalyze, createProject, getMe, feedbackRepoSelection } from '../api'
 import ScoutLogo from './ScoutLogo'
 import PathfinderSearchLoader from './PathfinderSearchLoader'
@@ -557,6 +557,17 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+
+        <div className="p-4 border-t border-app-border bg-app-surface/40 shrink-0">
+          <p className="text-[11px] uppercase tracking-wide text-app-muted mb-2">Tools</p>
+          <Link
+            to="/audit"
+            className="flex items-center gap-2 rounded-lg border border-app-border px-3 py-2 text-sm text-app-muted hover:text-app-text hover:border-primary-500/40 hover:bg-app-elevated transition-colors"
+          >
+            <ShieldCheck className="w-4 h-4" />
+            Repository Health Audit
+          </Link>
+        </div>
 
         {/* Profile Sidebar Footer */}
         <div className="p-4 border-t border-app-border bg-app-surface/50 shrink-0">

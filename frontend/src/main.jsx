@@ -16,6 +16,7 @@ import QaReport from './pages/QaReport.jsx'
 import EditorWindow from './pages/EditorWindow.jsx'
 import Profile from './pages/Profile.jsx'
 import Projects from './pages/Projects.jsx'
+import RepoAudit from './pages/RepoAudit.jsx'
 import AnalysisDashboard from './pages/AnalysisDashboard.jsx'
 import AdminDecisionTrace from './pages/AdminDecisionTrace.jsx'
 import AdminAgentMemory from './pages/AdminAgentMemory.jsx'
@@ -218,6 +219,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/editor" element={<RequireAuth><EditorWindow /></RequireAuth>} />
         <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
         <Route path="/projects" element={<RequireAuth><Projects /></RequireAuth>} />
+        <Route path="/audit" element={<RequireAuth><RepoAudit /></RequireAuth>} />
         <Route path="/admin/decision-trace" element={<RequireAdmin><AdminDecisionTrace /></RequireAdmin>} />
         <Route path="/admin/agent-memory" element={<RequireAdmin><AdminAgentMemory /></RequireAdmin>} />
       </Routes>
